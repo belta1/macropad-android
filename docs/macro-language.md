@@ -23,6 +23,7 @@ Every key has an **action**: one step per line. Lines starting with `#` are comm
 | `{time}` | `14:05` |
 | `{date:dd/MM/yyyy}`, `{time:HH:mm:ss}` | any [SimpleDateFormat](https://developer.android.com/reference/java/text/SimpleDateFormat) pattern |
 | `{clipboard}` | the **tablet's** clipboard text (the tablet can't read the computer's clipboard) |
+| `{secret:name}` | a saved value (⚙ → **Saved values**), e.g. a login; encrypted on the tablet, never in backups or exports. The key does nothing until every value it uses is set |
 | `{{` | a literal `{` |
 
 Dates and times come from the tablet's clock, so keep its date and time correct.

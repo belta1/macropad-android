@@ -29,4 +29,11 @@ class TextVariablesTest {
         assertEquals("Next page", Macro.describe("page:next"))
         assertEquals("Page Teams", Macro.describe("page:Teams"))
     }
+
+    @Test
+    fun `secret values are filled in and listed`() {
+        val text = "{secret:work_user} / {secret: work_password}"
+        assertEquals(listOf("work_user", "work_password"), TextVariables.secretNames(text))
+        assertEquals("me / ", TextVariables.expand(text, secret = { if (it == "work_user") "me" else null }))
+    }
 }

@@ -18,6 +18,8 @@ Windows laptops/desktops.
   **Phrases** (ready-to-type replies, date, signature), a **Trackpad**, and an empty **Custom** page.
   Teams and Outlook keys work even while a Citrix / Remote Desktop window has focus — see
   [docs/citrix.md](docs/citrix.md).
+- **Sidebar** on every page: status, Record, Edit, Settings, ⇄, and action keys (Away, Lock PC, Work
+  Citrix — a login filled in from encrypted **saved values**, see ⚙ → Saved values).
 - **App icons on the tabs** (long-press a tab to rename it or change its icon).
 - **Dock** on every page: media keys as icons (Previous · Play/Pause · Next · Volume − · Volume +)
   and virtual-desktop switching (Prev desktop · Task view · Next desktop).

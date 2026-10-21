@@ -46,7 +46,7 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
     fun build(
         page: Page, index: Int, button: MacroButton?,
         compact: Boolean, editing: Boolean, toggledOn: Boolean = false, emphasize: Boolean = false,
-        iconOnly: Boolean = false,
+        iconOnly: Boolean = false, showHint: Boolean = true,
     ): View {
         val key = LinearLayout(ui.context).apply {
             orientation = if (compact) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
@@ -91,7 +91,7 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
                     key.addView(badge, LinearLayout.LayoutParams(ui.dp(46), ui.dp(46)).apply { bottomMargin = ui.dp(8) })
                 }
                 key.addView(label(button.label, 13f, if (iconRes != null) 18f else 24f))
-                key.addView(TextView(ui.context).apply {
+                if (showHint || button.toggle) key.addView(TextView(ui.context).apply {
                     val hint = Macro.describe(button.action) + if (button.longAction.isNullOrBlank()) "" else " · +hold"
                     text = when {
                         // A hint that only repeats the label (numpad digits, "Tab") adds nothing.

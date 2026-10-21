@@ -27,10 +27,14 @@ class Page(
 
 /**
  * [dock] is a row of keys (media controls and desktop switching by default) shown below every page.
+ * [sidebar] is a column of keys (Away, Lock PC, …) beside every page, under the app controls.
  * [hardware] holds the actions of the tablet's volume up / volume down buttons; an empty slot
  * leaves that button controlling the tablet volume as usual.
  */
-class Layout(var rows: Int, var cols: Int, val pages: MutableList<Page>, val dock: Page, val hardware: Page) {
+class Layout(
+    var rows: Int, var cols: Int, val pages: MutableList<Page>, val dock: Page, val hardware: Page,
+    val sidebar: Page = DefaultLayout.sidebar(),
+) {
     val cells get() = rows * cols
 
     /** Cells keep their slot index, so shrinking the grid hides buttons instead of deleting them. */
@@ -45,6 +49,7 @@ class Layout(var rows: Int, var cols: Int, val pages: MutableList<Page>, val doc
         const val HW_VOLUME_UP = 0
         const val HW_VOLUME_DOWN = 1
         const val DOCK_SIZE = 8
+        const val SIDEBAR_SIZE = 4
     }
 }
 
@@ -68,6 +73,7 @@ object LayoutJson {
         put("pages", JSONArray().apply { for (page in layout.pages) put(pageToJson(page)) })
         put("dock", pageToJson(layout.dock))
         put("hardware", pageToJson(layout.hardware))
+        put("sidebar", pageToJson(layout.sidebar))
     }
 
     /** Throws [org.json.JSONException] / [IllegalArgumentException] on malformed input. */
@@ -83,6 +89,7 @@ object LayoutJson {
             pages,
             json.optJSONObject("dock")?.let { pageFromJson(it) } ?: DefaultLayout.dock(),
             json.optJSONObject("hardware")?.let { pageFromJson(it) } ?: DefaultLayout.hardware(),
+            json.optJSONObject("sidebar")?.let { pageFromJson(it) } ?: DefaultLayout.sidebar(),
         )
     }
 

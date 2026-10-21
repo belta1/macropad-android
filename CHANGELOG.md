@@ -2,6 +2,13 @@
 
 ## 1.3.0
 
+- **Sidebar on every page** (right side): connection status, Record, Edit, Settings and the ⇄
+  switch button (moved from the top bar, which now holds only the tabs), plus four action keys:
+  **Away**, **Lock PC**, **Work Citrix** and a free slot (editable in edit mode).
+- **Work Citrix** opens the Citrix portal in Chrome and fills in user and password. The address,
+  user and password are **saved values** (⚙ → Saved values), used as `{secret:work_url}`,
+  `{secret:work_user}`, `{secret:work_password}`: encrypted with an Android Keystore key, kept out of
+  the layout, backups and exports. A key whose values aren't set does nothing and says which are missing.
 - **Desktop switching on every page**: the dock now holds Prev desktop (Win+Ctrl+←), Task view
   (Win+Tab) and Next desktop (Win+Ctrl+→) next to the media keys. Existing layouts get them once,
   in empty dock slots.

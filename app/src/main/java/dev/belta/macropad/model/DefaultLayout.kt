@@ -105,6 +105,25 @@ object DefaultLayout {
         b("Next desktop", "win+ctrl+right", TEAL, "desktop_next"),
     )
 
+    /**
+     * Beside every page. "Work Citrix" opens the Citrix portal in Chrome and fills in the login; the
+     * address, user and password are saved values on the tablet (⚙ → Saved values), not part of the
+     * layout, so they never end up in backups or exports.
+     */
+    fun sidebar() = Page("Sidebar", mutableListOf(
+        MacroButton("Away", AWAY, RED, "lock", longAction = AWAY_MUTED),
+        b("Lock PC", "win+l", ORANGE, "lock"),
+        b("Work Citrix", WORK_CITRIX, BLUE, "desktop"),
+        null,
+    ))
+
+    /** Lock the PC, then dim the tablet; [AWAY_MUTED] mutes the Teams call first. */
+    private const val AWAY = "win+l\ntablet:dim"
+    private const val AWAY_MUTED = "win+alt+k\ndelay:300\n$AWAY"
+
+    private const val WORK_CITRIX = "win+r\ndelay:400\ntext:chrome {secret:work_url}\\n\ndelay:5000\n" +
+        "text:{secret:work_user}\ntab\ntext:{secret:work_password}\ntab"
+
     fun hardware() = Page("Tablet buttons", mutableListOf(
         b("Volume +", "media:volup", GRAY, "volume_up"),
         b("Volume −", "media:voldown", GRAY, "volume_down"),
@@ -149,8 +168,7 @@ object DefaultLayout {
             b("Task manager", "ctrl+shift+esc", ORANGE, "tune"),
             b("Remote desktop", "win+$REMOTE_SLOT", BLUE, "desktop"),
             // Tap: lock the PC and dim the tablet. Hold: also mute the Teams call first.
-            MacroButton("Away", "win+l\ntablet:dim", RED, "lock",
-                longAction = "win+alt+k\ndelay:300\nwin+l\ntablet:dim"),
+            MacroButton("Away", AWAY, RED, "lock", longAction = AWAY_MUTED),
         )),
         Page("VS Code", mutableListOf(
             b("Command palette", "ctrl+shift+p", BLUE, "command"),

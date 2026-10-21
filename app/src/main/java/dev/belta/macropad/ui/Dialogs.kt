@@ -30,6 +30,8 @@ import dev.belta.macropad.model.Macro
 import dev.belta.macropad.model.MacroStore
 import dev.belta.macropad.model.Page
 import dev.belta.macropad.model.PageKind
+import dev.belta.macropad.model.SecretStore
+import dev.belta.macropad.model.TextVariables
 import dev.belta.macropad.ui.Ui.Companion.GREEN
 import dev.belta.macropad.ui.Ui.Companion.MUTED
 import dev.belta.macropad.ui.Ui.Companion.RED
@@ -42,6 +44,7 @@ interface MacropadHost {
     var layout: Layout
     val settings: AppSettings
     val store: MacroStore
+    val secrets: SecretStore
     val service: MacropadService?
     val pageIndex: Int
     fun saveAndRender()
@@ -72,6 +75,7 @@ class Dialogs(private val host: MacropadHost) {
             "Default key timing: ${host.settings.keyTiming.label}" to ::keyTiming,
             "Computers…" to ::computers,
             "Tablet volume buttons…" to ::tabletButtons,
+            "Saved values (logins)…" to ::savedValues,
             "Pages…" to ::pages,
             "Backup and restore…" to ::backup,
             "Startup…" to ::startup,
@@ -507,6 +511,68 @@ class Dialogs(private val host: MacropadHost) {
             host.selectPage(host.pageIndex.coerceAtMost(pages.lastIndex))
             host.saveAndRender()
         }
+    }
+
+    // ---------------------------------------------------------------- saved values
+
+    /** `{secret:name}` values: the ones the keys use plus any others already saved. */
+    private fun savedValues() {
+        val l = host.layout
+        val used = (l.pages + l.dock + l.sidebar + l.hardware).flatMap { it.buttons }.filterNotNull()
+            .flatMap { listOf(it.action) + listOfNotNull(it.longAction) }
+            .flatMap { TextVariables.secretNames(it) }
+        val names = (used + host.secrets.names).filter { it.isNotEmpty() }.distinct().sorted()
+        val items = names.map { name ->
+            val value = host.secrets[name]
+            "$name: " + when {
+                value == null -> "not set"
+                looksSecret(name) -> "••••••"
+                else -> value
+            }
+        } + "Add a value…"
+        ui.dialog()
+            .setTitle("Saved values")
+            .setMessage("Used in typed text as {secret:name}. Stored encrypted on this tablet only; " +
+                "not included in backups or exports.")
+            .setItems(items.toTypedArray()) { _, which ->
+                if (which < names.size) editSavedValue(names[which])
+                else promptText("Name (letters, digits, _)", "") { name ->
+                    val clean = name.replace(Regex("[^A-Za-z0-9_]"), "_")
+                    editSavedValue(clean)
+                }
+            }
+            .setPositiveButton("Close", null)
+            .show()
+    }
+
+    private fun looksSecret(name: String) = Regex("pass|pin|secret|token|key", RegexOption.IGNORE_CASE).containsMatchIn(name)
+
+    private fun editSavedValue(name: String) {
+        val hidden = looksSecret(name)
+        val input = EditText(ui.context).apply {
+            setSingleLine()
+            if (hidden) {
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                transformationMethod = PasswordTransformationMethod.getInstance()
+            } else {
+                setText(host.secrets[name].orEmpty())
+            }
+            hint = if (hidden && host.secrets[name] != null) "(unchanged)" else name
+        }
+        val dialog = ui.dialog()
+            .setTitle(name)
+            .setView(FrameLayout(ui.context).apply { setPadding(ui.dp(20), ui.dp(8), ui.dp(20), 0); addView(input) })
+            .setPositiveButton("Save") { _, _ ->
+                val value = input.text.toString()
+                if (value.isNotEmpty()) host.secrets[name] = value
+                savedValues()
+            }
+            .setNeutralButton("Clear") { _, _ -> host.secrets[name] = null; savedValues() }
+            .setNegativeButton("Cancel") { _, _ -> savedValues() }
+            .create()
+        dialog.setOnShowListener { input.requestFocus() }
+        dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+        dialog.show()
     }
 
     private fun dimLabel(minutes: Int) = if (minutes == 0) "never" else "after $minutes min"

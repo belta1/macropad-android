@@ -46,6 +46,7 @@ import dev.belta.macropad.model.MacroStore
 import dev.belta.macropad.model.Page
 import dev.belta.macropad.model.PageKind
 import dev.belta.macropad.model.Palette
+import dev.belta.macropad.model.SecretStore
 import dev.belta.macropad.model.Step
 import dev.belta.macropad.model.TextVariables
 import dev.belta.macropad.ui.AppIcons
@@ -62,6 +63,7 @@ import dev.belta.macropad.ui.Ui.Companion.BG_TOP
 import dev.belta.macropad.ui.Ui.Companion.MUTED
 import dev.belta.macropad.ui.Ui.Companion.RED
 import dev.belta.macropad.ui.Ui.Companion.STROKE
+import dev.belta.macropad.ui.Ui.Companion.SURFACE_HI
 import dev.belta.macropad.ui.Ui.Companion.STROKE_STRONG
 import dev.belta.macropad.ui.Ui.Companion.SURFACE
 import dev.belta.macropad.ui.Ui.Companion.SURFACE_ACTIVE
@@ -95,6 +97,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private lateinit var recordBar: LinearLayout
     private lateinit var recordStatus: TextView
     private lateinit var dockRow: LinearLayout
+    private lateinit var sideKeys: LinearLayout
+    override val secrets by lazy { SecretStore(this) }
 
     private var editing = false
     private var pendingResetPairing = false
@@ -379,13 +383,26 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     // ---------------------------------------------------------------- UI construction
 
     private fun buildUi(): View {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        // Main column (tabs, keys, dock) and, on the right, the sidebar shown on every page: status,
+        // app controls and the sidebar's action keys.
+        val outer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(BG_TOP, BG_BOTTOM))
             setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(12))
         }
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        outer.addView(root, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+        val sidebar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6))
+            background = ui.roundRect(SURFACE, ui.dp(24).toFloat()).apply { setStroke(ui.dp(1), STROKE) }
+            isMotionEventSplittingEnabled = true
+        }
+        outer.addView(sidebar, LinearLayout.LayoutParams(ui.dp(SIDEBAR_WIDTH_DP), ViewGroup.LayoutParams.MATCH_PARENT).apply {
+            marginStart = ui.dp(10)
+        })
 
-        // Top bar: page tabs · status chip · action buttons
+        // Top bar: page tabs
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -407,8 +424,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         statusChip = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(ui.dp(14), 0, ui.dp(16), 0)
-            background = ui.pressable(SURFACE, ui.dp(22).toFloat())
+            setPadding(ui.dp(12), ui.dp(8), ui.dp(10), ui.dp(8))
+            background = ui.pressable(SURFACE_HI, ui.dp(18).toFloat())
             setOnClickListener { onStatusTapped() }
         }
         statusDot = View(this)
@@ -416,27 +433,41 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         statusText = TextView(this).apply {
             setTextColor(TEXT)
             typeface = ui.fontMedium
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setPadding(ui.dp(10), 0, 0, 0)
-            maxLines = 1
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            setPadding(ui.dp(8), 0, 0, 0)
+            maxLines = 3
             ellipsize = TextUtils.TruncateAt.END
-            maxWidth = ui.dp(260)
             text = "Starting…"
         }
-        statusChip.addView(statusText)
-        switchButton = ui.iconButton("swap") { switchComputer() }.apply { visibility = View.GONE }
-        bar.addView(switchButton)
-        bar.addView(statusChip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ui.dp(44)).apply {
-            marginStart = ui.dp(10)
-        })
+        statusChip.addView(statusText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        sidebar.addView(statusChip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = ui.dp(6) })
 
+        // App controls, two per row: record · edit / settings · switch computer
+        switchButton = ui.iconButton("swap") { switchComputer() }.apply { visibility = View.GONE }
         recordButton = ui.iconButton("record") {
             if (recorder.isRecording) stopRecording() else withUnlock { startRecording() }
         }
         editButton = ui.iconButton("edit") { if (editing) toggleEdit() else withUnlock { toggleEdit() } }
-        bar.addView(recordButton)
-        bar.addView(editButton)
-        bar.addView(ui.iconButton("settings") { withUnlock { dialogs.settings() } })
+        val settingsButton = ui.iconButton("settings") { withUnlock { dialogs.settings() } }
+        for (pair in listOf(listOf(recordButton, editButton), listOf(settingsButton, switchButton))) {
+            sidebar.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                for (button in pair) addView(button, LinearLayout.LayoutParams(0, ui.dp(44), 1f).apply {
+                    setMargins(ui.dp(3), ui.dp(3), ui.dp(3), ui.dp(3))
+                })
+            })
+        }
+
+        // The sidebar's keys (Away, Lock PC, …), sharing the remaining height
+        sideKeys = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            isMotionEventSplittingEnabled = true
+        }
+        sidebar.addView(sideKeys, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+            topMargin = ui.dp(6)
+        })
         root.addView(bar)
 
         // Takes the media dock's place while no computer is connected (the dock does nothing then),
@@ -497,7 +528,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(76)).apply {
             setMargins(ui.dp(5), ui.dp(10), ui.dp(5), 0)
         })
-        return root
+        return outer
     }
 
     private fun renderTabs() {
@@ -585,6 +616,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         content.removeAllViews()
         content.addView(if (page.kind == PageKind.TRACKPAD) buildTrackpad(page) else buildGrid(page))
 
+        renderSidebar()
+
         // Icon-only keys (media) take one share of the width, labelled keys two; a divider
         // separates the two groups.
         dockRow.removeAllViews()
@@ -601,6 +634,16 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             dockRow.addView(keyView(layout.dock, index, compact = true),
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, if (iconOnly) 1f else 2f).apply {
                     setMargins(ui.dp(3), 0, ui.dp(3), 0)
+                })
+        }
+    }
+
+    private fun renderSidebar() {
+        sideKeys.removeAllViews()
+        for (index in 0 until Layout.SIDEBAR_SIZE) {
+            sideKeys.addView(keyView(layout.sidebar, index, compact = false),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                    setMargins(0, ui.dp(3), 0, ui.dp(3))
                 })
         }
     }
@@ -653,6 +696,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         toggledOn = toggleKey(page, index) in toggledOn,
         emphasize = page === layout.dock && index == 1,
         iconOnly = page === layout.dock && dockIconOnly(layout.button(page, index)),
+        showHint = page !== layout.sidebar,
     )
 
     private fun toggleKey(page: Page, index: Int) = "${page.name}#$index"
@@ -672,7 +716,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     override fun onKeyReleased(view: View, page: Page, index: Int, button: MacroButton, cancelled: Boolean) {
         releaseKey(view, tapped = !cancelled)
         // Toggle keys flip on press; redraw them once the finger lifts.
-        if (button.toggle) keyViews.replace(view, keyView(page, index, compact = page === layout.dock))
+        if (button.toggle) {
+            keyViews.replace(view, keyView(page, index, compact = page === layout.dock || page.kind == PageKind.TRACKPAD))
+        }
     }
 
     override fun onEditKey(page: Page, index: Int) = editKey(page, index)
@@ -724,13 +770,16 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             return
         }
         view?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+        val missing = steps.filterIsInstance<Step.Text>().flatMap { TextVariables.secretNames(it.text) }
+            .distinct().filter { secrets[it] == null }
+        if (missing.isNotEmpty()) return ui.toast("${button.label}: set ${missing.joinToString()} in ⚙ → Saved values")
         recorder.record(action)
         steps.filterIsInstance<Step.Page>().lastOrNull()?.let { goToPage(it.target) }
         // Dim after the keys have gone out (e.g. "lock PC, then dim"), so the idle overlay doesn't
         // block them.
         if (steps.any { it is Step.Tablet && it.command == "dim" }) handler.postDelayed({ dim() }, 600)
         val remote = steps.filterNot { it is Step.Page || it is Step.Tablet }.map { step ->
-            if (step is Step.Text) Step.Text(TextVariables.expand(step.text, clipboard = ::clipboardText)) else step
+            if (step is Step.Text) Step.Text(TextVariables.expand(step.text, secret = { secrets[it] }, clipboard = ::clipboardText)) else step
         }
         if (remote.isEmpty()) return
         val hid = hid
@@ -979,6 +1028,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         private const val REQUEST_EXPORT = 2
         private const val REQUEST_IMPORT = 3
         private const val TRACKPAD_KEYS = 5
+        private const val SIDEBAR_WIDTH_DP = 128
         private const val LONG_PRESS_MS = 450L
 
         fun bringToFront(context: Context) {
