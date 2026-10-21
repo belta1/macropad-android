@@ -1,6 +1,9 @@
-package dev.belta.macropad
+package dev.belta.macropad.hid
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
@@ -23,6 +26,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.HandlerThread
@@ -30,15 +34,23 @@ import android.os.Looper
 import android.os.ParcelUuid
 import android.provider.Settings
 import android.util.Log
+import dev.belta.macropad.BuildConfig
+import dev.belta.macropad.model.Step
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Makes the tablet a Bluetooth LE keyboard (HID over GATT profile).
+ * Makes the tablet a Bluetooth LE keyboard + mouse (HID over GATT profile).
  *
  * Fire OS ships with the classic HID Device profile disabled, but BLE peripheral mode works,
  * and every desktop OS supports BLE keyboards natively — no software on the computer.
+ * See docs/bluetooth-troubleshooting.md for the Fire OS / Windows workarounds in here.
  */
 @SuppressLint("MissingPermission")
 class HidPeripheral(private val context: Context) {
@@ -49,7 +61,24 @@ class HidPeripheral(private val context: Context) {
         fun onStateChanged(state: State, detail: String)
     }
 
+    data class Host(val address: String, val name: String)
+
+    data class Diagnostics(
+        val state: State,
+        val detail: String,
+        val host: Host?,
+        val bonded: Boolean?,
+        val preferredHost: Host?,
+        val classicConnectable: Boolean?,
+        val secureSettingsGranted: Boolean,
+        val audioProfilesBlocked: Boolean?,
+        val events: List<String>,
+    )
+
     var listener: Listener? = null
+
+    /** Layout of the computer's keyboard; used for `text:` steps. */
+    @Volatile var keyboardLayout = KeyboardLayout.US
 
     private val manager = context.getSystemService(BluetoothManager::class.java)
     private val adapter get() = manager?.adapter
@@ -69,16 +98,29 @@ class HidPeripheral(private val context: Context) {
 
     private lateinit var keyboardInput: BluetoothGattCharacteristic
     private lateinit var consumerInput: BluetoothGattCharacteristic
-    private lateinit var batteryLevel: BluetoothGattCharacteristic
+    private lateinit var mouseInput: BluetoothGattCharacteristic
 
     // Per-host CCCD values. Bonded hosts (Windows in particular) expect them to survive reconnects.
     private val cccdStore = context.getSharedPreferences("hid_cccd", Context.MODE_PRIVATE)
+    // Computers served so far: address -> name.
     private val knownHosts = context.getSharedPreferences("hid_hosts", Context.MODE_PRIVATE)
+    private val hostSettings = context.getSharedPreferences("hid_settings", Context.MODE_PRIVATE)
     private var reenableBluetooth = false
     private var receiverRegistered = false
 
-    // Keys currently held down by touched buttons (worker thread only).
+    // Keys / mouse buttons currently held down by touched keys (worker thread only).
     private val held = LinkedHashMap<Any, Step.Combo>()
+    private var mouseButtons = 0
+
+    // Mouse motion accumulated between reports.
+    private val pendingDx = AtomicInteger()
+    private val pendingDy = AtomicInteger()
+    private val pendingWheel = AtomicInteger()
+    private val pendingPan = AtomicInteger()
+    private val mouseFlushQueued = AtomicBoolean(false)
+
+    private val events = ArrayDeque<String>()
+    private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.US)
 
     // ---------------------------------------------------------------- lifecycle
 
@@ -119,12 +161,18 @@ class HidPeripheral(private val context: Context) {
         setState(State.OFF, "Bluetooth is off — tap to turn on")
     }
 
+    fun restart() {
+        event("Restarting Bluetooth server")
+        stop()
+        main.postDelayed({ start() }, 300)
+    }
+
     private fun closeServer() {
         stopAdvertising()
         server?.let { s -> host?.let { s.cancelConnection(it) }; s.close() }
         server = null
         host = null
-        sender.post { held.clear() }
+        sender.post { held.clear(); mouseButtons = 0 }
     }
 
     /**
@@ -147,10 +195,10 @@ class HidPeripheral(private val context: Context) {
     private fun setClassicConnectable(connectable: Boolean) {
         val mode = if (connectable) SCAN_MODE_CONNECTABLE else SCAN_MODE_NONE
         try {
-            val ok = adapter?.javaClass?.getMethod("setScanMode", Int::class.javaPrimitiveType)?.invoke(adapter, mode)
-            Log.i(TAG, "classic scan mode -> $mode ($ok)")
+            adapter?.javaClass?.getMethod("setScanMode", Int::class.javaPrimitiveType)?.invoke(adapter, mode)
+            debug("classic scan mode -> $mode")
         } catch (e: Exception) {
-            Log.w(TAG, "could not change classic scan mode: $e")
+            event("Could not change Classic Bluetooth mode: ${e.cause ?: e}")
         }
     }
 
@@ -164,19 +212,12 @@ class HidPeripheral(private val context: Context) {
     fun resetPairing() {
         val adapter = adapter ?: return
         val computers = knownHosts.all.keys.map { adapter.getRemoteDevice(it) } +
-            adapter.bondedDevices.filter {
-                it.bluetoothClass?.majorDeviceClass == android.bluetooth.BluetoothClass.Device.Major.COMPUTER
-            }
-        for (device in computers.distinct()) {
-            try {
-                val removed = device.javaClass.getMethod("removeBond").invoke(device)
-                Log.i(TAG, "removeBond ${device.address}: $removed")
-            } catch (e: Exception) {
-                Log.w(TAG, "removeBond ${device.address} failed: $e")
-            }
-        }
+            adapter.bondedDevices.filter { it.bluetoothClass?.majorDeviceClass == BluetoothClass.Device.Major.COMPUTER }
+        for (device in computers.distinct()) removeBond(device)
         knownHosts.edit().clear().apply()
         cccdStore.edit().clear().apply()
+        hostSettings.edit().remove(PREFERRED_HOST).apply()
+        event("Reset pairing: forgot ${computers.distinct().size} computer(s), restarting Bluetooth")
         stop()
         setState(State.STARTING, "Restarting Bluetooth…")
         reenableBluetooth = true
@@ -194,9 +235,13 @@ class HidPeripheral(private val context: Context) {
         }
     }
 
-    fun restart() {
-        stop()
-        main.postDelayed({ start() }, 300)
+    private fun removeBond(device: BluetoothDevice) {
+        try {
+            device.javaClass.getMethod("removeBond").invoke(device)
+            event("Unpaired ${device.address}")
+        } catch (e: Exception) {
+            event("Could not unpair ${device.address}: ${e.cause ?: e}")
+        }
     }
 
     private fun addNextService() {
@@ -241,12 +286,13 @@ class HidPeripheral(private val context: Context) {
 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-            Log.i(TAG, "advertising started")
-            setState(State.ADVERTISING, "Waiting for a computer — pair with \"$DEVICE_NAME\"")
+            debug("advertising started")
+            showAdvertising()
         }
 
         override fun onStartFailure(errorCode: Int) {
             advertising = false
+            event("Advertising failed (error $errorCode)")
             setState(State.UNAVAILABLE, "Advertising failed (error $errorCode)")
         }
     }
@@ -259,13 +305,94 @@ class HidPeripheral(private val context: Context) {
 
     fun refreshListener() = main.post { listener?.onStateChanged(state, detail) }
 
+    // ---------------------------------------------------------------- computers
+
+    fun knownHosts(): List<Host> =
+        knownHosts.all.map { (address, name) -> Host(address, name as? String ?: address) }.sortedBy { it.name }
+
+    fun preferredHost(): Host? = hostSettings.getString(PREFERRED_HOST, null)?.let { address ->
+        knownHosts().firstOrNull { it.address == address } ?: Host(address, address)
+    }
+
+    /**
+     * Restricts the macropad to one computer (null = whichever connects first). A BLE peripheral
+     * can't choose whom to connect to, so other computers are disconnected as soon as they connect.
+     */
+    fun setPreferredHost(address: String?) {
+        hostSettings.edit().putString(PREFERRED_HOST, address).apply()
+        event("Computer selection: ${address?.let { a -> knownHosts().firstOrNull { it.address == a }?.name ?: a } ?: "any"}")
+        val current = host
+        if (current != null && address != null && current.address != address) {
+            server?.cancelConnection(current)
+        } else if (current == null) {
+            refreshAdvertisingState()
+        }
+    }
+
+    fun forgetHost(address: String) {
+        adapter?.getRemoteDevice(address)?.let { removeBond(it) }
+        knownHosts.edit().remove(address).apply()
+        val editor = cccdStore.edit()
+        cccdStore.all.keys.filter { it.startsWith("$address|") }.forEach { editor.remove(it) }
+        editor.apply()
+        if (hostSettings.getString(PREFERRED_HOST, null) == address) hostSettings.edit().remove(PREFERRED_HOST).apply()
+        host?.let { if (it.address == address) server?.cancelConnection(it) }
+    }
+
+    private fun refreshAdvertisingState() {
+        if (state == State.ADVERTISING) showAdvertising()
+    }
+
+    private fun showAdvertising() {
+        val waitingFor = preferredHost()?.let { "Waiting for ${it.name}" }
+            ?: "Waiting for a computer — pair with \"$DEVICE_NAME\""
+        setState(State.ADVERTISING, waitingFor)
+    }
+
+    // ---------------------------------------------------------------- diagnostics
+
+    private fun event(message: String) {
+        Log.i(TAG, message)
+        synchronized(events) {
+            events.addLast("${timeFormat.format(Date())}  $message")
+            while (events.size > 60) events.removeFirst()
+        }
+    }
+
+    private fun debug(message: String) {
+        if (BuildConfig.DEBUG) Log.d(TAG, message)
+    }
+
+    fun diagnostics(): Diagnostics {
+        val current = host
+        val secure = context.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) ==
+            PackageManager.PERMISSION_GRANTED
+        val audioBlocked = current?.let { d ->
+            listOf("bluetooth_a2dp_sink_priority_", "bluetooth_headset_priority_").all {
+                Settings.Global.getInt(context.contentResolver, it + d.address, -1) == 0
+            }
+        }
+        return Diagnostics(
+            state = state,
+            detail = detail,
+            host = current?.let { Host(it.address, it.name ?: it.address) },
+            bonded = current?.let { it.bondState == BluetoothDevice.BOND_BONDED },
+            preferredHost = preferredHost(),
+            classicConnectable = adapter?.let { it.scanMode != BluetoothAdapter.SCAN_MODE_NONE },
+            secureSettingsGranted = secure,
+            audioProfilesBlocked = audioBlocked,
+            events = synchronized(events) { events.toList().asReversed() },
+        )
+    }
+
     // ---------------------------------------------------------------- sending
 
-    /** Button touched: hold the combo/media key down until [release]. */
+    /** Key touched: hold the combo / media key / mouse button down until [release]. */
     fun press(token: Any, step: Step) = sender.post {
         when (step) {
             is Step.Combo -> { held[token] = step; sendKeyboard(currentKeys()) }
             is Step.Media -> sendConsumer(step.usage)
+            is Step.Click -> { mouseButtons = mouseButtons or step.buttons; sendMouse(0, 0) }
             else -> {}
         }
     }
@@ -274,6 +401,7 @@ class HidPeripheral(private val context: Context) {
         when (step) {
             is Step.Combo -> { held.remove(token); sendKeyboard(currentKeys()) }
             is Step.Media -> sendConsumer(0)
+            is Step.Click -> { mouseButtons = mouseButtons and step.buttons.inv(); sendMouse(0, 0) }
             else -> {}
         }
     }
@@ -287,11 +415,57 @@ class HidPeripheral(private val context: Context) {
                 is Step.Media -> { sendConsumer(step.usage); sendConsumer(0) }
                 is Step.Delay -> Thread.sleep(step.ms)
                 is Step.Text -> for (c in step.text) {
-                    val (mods, key) = HidKeys.charToKey(c) ?: continue
-                    tap(mods, listOf(key))
+                    val strokes = keyboardLayout.strokes(c) ?: continue
+                    for (s in strokes) tap(s.mods, listOf(s.key))
                 }
+                is Step.Click -> {
+                    sendMouse(0, 0, buttons = mouseButtons or step.buttons)
+                    sendMouse(0, 0)
+                }
+                is Step.Scroll -> sendMouse(0, 0, wheel = step.amount)
             }
         }
+    }
+
+    /** Relative pointer motion from the trackpad; coalesced into as few reports as the link allows. */
+    fun moveMouse(dx: Int, dy: Int) {
+        pendingDx.addAndGet(dx)
+        pendingDy.addAndGet(dy)
+        queueMouseFlush()
+    }
+
+    fun scroll(vertical: Int, horizontal: Int = 0) {
+        pendingWheel.addAndGet(vertical)
+        pendingPan.addAndGet(horizontal)
+        queueMouseFlush()
+    }
+
+    fun setMouseButton(button: Int, down: Boolean) = sender.post {
+        mouseButtons = if (down) mouseButtons or button else mouseButtons and button.inv()
+        sendMouse(0, 0)
+    }
+
+    private fun queueMouseFlush() {
+        if (!mouseFlushQueued.compareAndSet(false, true)) return
+        sender.post {
+            mouseFlushQueued.set(false)
+            while (true) {
+                val dx = take(pendingDx)
+                val dy = take(pendingDy)
+                val wheel = take(pendingWheel)
+                val pan = take(pendingPan)
+                if (dx == 0 && dy == 0 && wheel == 0 && pan == 0) break
+                if (!sendMouse(dx, dy, wheel = wheel, pan = pan)) break
+            }
+        }
+    }
+
+    /** Takes up to one report's worth (±127) from [counter], leaving the rest for the next report. */
+    private fun take(counter: AtomicInteger): Int {
+        val all = counter.getAndSet(0)
+        val now = all.coerceIn(-127, 127)
+        if (all != now) counter.addAndGet(all - now)
+        return now
     }
 
     private fun tap(mods: Int, keys: List<Int>) {
@@ -310,15 +484,12 @@ class HidPeripheral(private val context: Context) {
         return Step.Combo(mods, keys.distinct())
     }
 
-    private fun sendKeyboard(combo: Step.Combo) {
-        val report = ByteArray(8)
-        report[0] = combo.mods.toByte()
-        combo.keys.take(6).forEachIndexed { i, k -> report[2 + i] = k.toByte() }
-        notify(keyboardInput, report)
-    }
+    private fun sendKeyboard(combo: Step.Combo) = notify(keyboardInput, HidReports.keyboard(combo.mods, combo.keys))
 
-    private fun sendConsumer(usage: Int) =
-        notify(consumerInput, byteArrayOf((usage and 0xFF).toByte(), (usage shr 8 and 0xFF).toByte()))
+    private fun sendConsumer(usage: Int) = notify(consumerInput, HidReports.consumer(usage))
+
+    private fun sendMouse(dx: Int, dy: Int, buttons: Int = mouseButtons, wheel: Int = 0, pan: Int = 0) =
+        notify(mouseInput, HidReports.mouse(buttons, dx, dy, wheel, pan))
 
     /** Sends one notification and waits until the stack has queued it (worker thread only). */
     private fun notify(characteristic: BluetoothGattCharacteristic, value: ByteArray): Boolean {
@@ -347,23 +518,34 @@ class HidPeripheral(private val context: Context) {
         }
 
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
-            Log.i(TAG, "connection ${device.address} status=$status state=$newState bond=${device.bondState}")
+            val name = device.name ?: device.address
+            debug("connection ${device.address} status=$status state=$newState bond=${device.bondState}")
             if (newState == BluetoothProfile.STATE_CONNECTED) {
+                val preferred = hostSettings.getString(PREFERRED_HOST, null)
+                if (preferred != null && preferred != device.address) {
+                    event("Ignored $name (macropad is set to another computer)")
+                    server?.cancelConnection(device)
+                    return
+                }
                 host = device
-                knownHosts.edit().putBoolean(device.address, true).apply()
+                knownHosts.edit().putString(device.address, name).apply()
                 stopAdvertising()
                 // Keeps the link up instead of letting Android drop an "idle" peripheral connection.
                 server?.connect(device, false)
                 disableAudioProfiles(device)
-                setState(State.CONNECTED, "Connected to ${device.name ?: device.address}")
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED && device == host) {
-                rebuildAfterDisconnect()
+                event("Connected to $name (bond ${bondName(device.bondState)})")
+                setState(State.CONNECTED, "Connected to $name")
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                if (device == host) {
+                    event("Disconnected from $name (status $status, bond ${bondName(device.bondState)})")
+                    rebuildAfterDisconnect()
+                } else if (host == null) {
+                    rebuildAfterDisconnect() // advertising stops when anyone connects, even an ignored host
+                }
             }
         }
 
-        override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
-            Log.i(TAG, "mtu $mtu")
-        }
+        override fun onMtuChanged(device: BluetoothDevice, mtu: Int) = debug("mtu $mtu")
 
         override fun onNotificationSent(device: BluetoothDevice, status: Int) {
             notificationSent.release()
@@ -372,7 +554,7 @@ class HidPeripheral(private val context: Context) {
         override fun onCharacteristicReadRequest(
             device: BluetoothDevice, requestId: Int, offset: Int, characteristic: BluetoothGattCharacteristic,
         ) {
-            Log.i(TAG, "read ${name(characteristic)} offset=$offset")
+            debug("read ${name(characteristic)} offset=$offset")
             if (characteristic.uuid == BATTERY_LEVEL) characteristic.value = byteArrayOf(batteryPercent().toByte())
             respondRead(device, requestId, offset, characteristic.value ?: ByteArray(0))
         }
@@ -380,7 +562,7 @@ class HidPeripheral(private val context: Context) {
         override fun onDescriptorReadRequest(
             device: BluetoothDevice, requestId: Int, offset: Int, descriptor: BluetoothGattDescriptor,
         ) {
-            Log.i(TAG, "read descriptor ${descriptor.uuid.short()} of ${name(descriptor.characteristic)} offset=$offset")
+            debug("read descriptor ${descriptor.uuid.short()} of ${name(descriptor.characteristic)} offset=$offset")
             val value = if (descriptor.uuid == CCCD) loadCccd(device, descriptor) else descriptor.value
             respondRead(device, requestId, offset, value ?: byteArrayOf(0, 0))
         }
@@ -389,7 +571,7 @@ class HidPeripheral(private val context: Context) {
             device: BluetoothDevice, requestId: Int, characteristic: BluetoothGattCharacteristic,
             preparedWrite: Boolean, responseNeeded: Boolean, offset: Int, value: ByteArray?,
         ) {
-            Log.i(TAG, "write ${name(characteristic)} value=${value?.hex()} response=$responseNeeded")
+            debug("write ${name(characteristic)} value=${value?.hex()} response=$responseNeeded")
             // Output report = keyboard LEDs (caps/num lock); protocol mode / control point = suspend etc.
             if (characteristic.uuid != HID_CONTROL_POINT) characteristic.value = value
             if (responseNeeded) server?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
@@ -399,10 +581,16 @@ class HidPeripheral(private val context: Context) {
             device: BluetoothDevice, requestId: Int, descriptor: BluetoothGattDescriptor,
             preparedWrite: Boolean, responseNeeded: Boolean, offset: Int, value: ByteArray?,
         ) {
-            Log.i(TAG, "write descriptor ${descriptor.uuid.short()} of ${name(descriptor.characteristic)} value=${value?.hex()}")
+            debug("write descriptor ${descriptor.uuid.short()} of ${name(descriptor.characteristic)} value=${value?.hex()}")
             if (descriptor.uuid == CCCD) saveCccd(device, descriptor, value) else descriptor.value = value
             if (responseNeeded) server?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
         }
+    }
+
+    private fun bondName(state: Int) = when (state) {
+        BluetoothDevice.BOND_BONDED -> "paired"
+        BluetoothDevice.BOND_BONDING -> "pairing"
+        else -> "none"
     }
 
     private fun cccdKey(device: BluetoothDevice, descriptor: BluetoothGattDescriptor) =
@@ -439,7 +627,7 @@ class HidPeripheral(private val context: Context) {
             try {
                 Settings.Global.putInt(context.contentResolver, key + device.address, 0)
             } catch (e: SecurityException) {
-                Log.w(TAG, "WRITE_SECURE_SETTINGS not granted; run: adb shell pm grant ${context.packageName} " +
+                event("WRITE_SECURE_SETTINGS not granted — run: adb shell pm grant ${context.packageName} " +
                     "android.permission.WRITE_SECURE_SETTINGS")
                 break
             }
@@ -451,9 +639,9 @@ class HidPeripheral(private val context: Context) {
                     try {
                         // Drops an audio connection Fire OS may already have opened (hidden API, best effort).
                         proxy.javaClass.getMethod("disconnect", BluetoothDevice::class.java).invoke(proxy, device)
-                        Log.i(TAG, "audio profile $p disconnected for ${device.address}")
+                        debug("audio profile $p disconnected for ${device.address}")
                     } catch (e: Exception) {
-                        Log.w(TAG, "could not disconnect audio profile $p: $e")
+                        debug("could not disconnect audio profile $p: $e")
                     } finally {
                         adapter.closeProfileProxy(p, proxy)
                     }
@@ -491,28 +679,29 @@ class HidPeripheral(private val context: Context) {
     private fun hidService() = BluetoothGattService(HID_SERVICE, BluetoothGattService.SERVICE_TYPE_PRIMARY).apply {
         addCharacteristic(characteristic(HID_INFORMATION, PROPERTY_READ, PERMISSION_READ_ENCRYPTED,
             byteArrayOf(0x11, 0x01, 0x00, 0x02))) // HID 1.11, no country, normally connectable
-        addCharacteristic(characteristic(REPORT_MAP, PROPERTY_READ, PERMISSION_READ_ENCRYPTED, REPORT_DESCRIPTOR))
+        addCharacteristic(characteristic(REPORT_MAP, PROPERTY_READ, PERMISSION_READ_ENCRYPTED, HidReports.DESCRIPTOR))
         addCharacteristic(characteristic(HID_CONTROL_POINT, PROPERTY_WRITE_NO_RESPONSE, PERMISSION_WRITE_ENCRYPTED,
             byteArrayOf(0)))
         addCharacteristic(characteristic(PROTOCOL_MODE, PROPERTY_READ or PROPERTY_WRITE_NO_RESPONSE,
             PERMISSION_READ_ENCRYPTED or PERMISSION_WRITE_ENCRYPTED, byteArrayOf(1)))
 
-        keyboardInput = inputReport(REPORT_ID_KEYBOARD, ByteArray(8))
+        keyboardInput = inputReport(HidReports.ID_KEYBOARD, ByteArray(8))
         addCharacteristic(keyboardInput)
         addCharacteristic(
             characteristic(REPORT, PROPERTY_READ or PROPERTY_WRITE or PROPERTY_WRITE_NO_RESPONSE,
                 PERMISSION_READ_ENCRYPTED or PERMISSION_WRITE_ENCRYPTED, byteArrayOf(0)).apply {
                 addDescriptor(descriptor(REPORT_REFERENCE, PERMISSION_READ_ENCRYPTED,
-                    byteArrayOf(REPORT_ID_KEYBOARD, REPORT_TYPE_OUTPUT)))
+                    byteArrayOf(HidReports.ID_KEYBOARD, REPORT_TYPE_OUTPUT)))
             })
-        consumerInput = inputReport(REPORT_ID_CONSUMER, ByteArray(2))
+        consumerInput = inputReport(HidReports.ID_CONSUMER, ByteArray(2))
         addCharacteristic(consumerInput)
+        mouseInput = inputReport(HidReports.ID_MOUSE, ByteArray(5))
+        addCharacteristic(mouseInput)
     }
 
     private fun batteryService() = BluetoothGattService(BATTERY_SERVICE, BluetoothGattService.SERVICE_TYPE_PRIMARY).apply {
-        batteryLevel = characteristic(BATTERY_LEVEL, PROPERTY_READ or PROPERTY_NOTIFY, PERMISSION_READ_ENCRYPTED,
-            byteArrayOf(100)).apply { addDescriptor(cccd()) }
-        addCharacteristic(batteryLevel)
+        addCharacteristic(characteristic(BATTERY_LEVEL, PROPERTY_READ or PROPERTY_NOTIFY, PERMISSION_READ_ENCRYPTED,
+            byteArrayOf(100)).apply { addDescriptor(cccd()) })
     }
 
     private fun deviceInfoService() = BluetoothGattService(DEVICE_INFO_SERVICE, BluetoothGattService.SERVICE_TYPE_PRIMARY).apply {
@@ -544,6 +733,7 @@ class HidPeripheral(private val context: Context) {
         const val DEVICE_NAME = "Fire Macropad"
         private const val SCAN_MODE_NONE = 20
         private const val SCAN_MODE_CONNECTABLE = 21
+        private const val PREFERRED_HOST = "preferred_host"
 
         private fun uuid16(short: Int): UUID =
             UUID.fromString(String.format("%08x-0000-1000-8000-00805f9b34fb", short))
@@ -562,24 +752,7 @@ class HidPeripheral(private val context: Context) {
         val CCCD = uuid16(0x2902)
         val REPORT_REFERENCE = uuid16(0x2908)
 
-        const val REPORT_ID_KEYBOARD: Byte = 1
-        const val REPORT_ID_CONSUMER: Byte = 2
         const val REPORT_TYPE_INPUT: Byte = 1
         const val REPORT_TYPE_OUTPUT: Byte = 2
-
-        private val REPORT_DESCRIPTOR = intArrayOf(
-            // Keyboard, report ID 1: [modifiers, reserved, key1..key6]; output = LEDs
-            0x05, 0x01, 0x09, 0x06, 0xA1, 0x01, 0x85, 0x01,
-            0x05, 0x07, 0x19, 0xE0, 0x29, 0xE7, 0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x08, 0x81, 0x02,
-            0x95, 0x01, 0x75, 0x08, 0x81, 0x01,
-            0x95, 0x05, 0x75, 0x01, 0x05, 0x08, 0x19, 0x01, 0x29, 0x05, 0x91, 0x02,
-            0x95, 0x01, 0x75, 0x03, 0x91, 0x01,
-            0x95, 0x06, 0x75, 0x08, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x05, 0x07, 0x19, 0x00, 0x29, 0xFF, 0x81, 0x00,
-            0xC0,
-            // Consumer control, report ID 2: one 16-bit usage
-            0x05, 0x0C, 0x09, 0x01, 0xA1, 0x01, 0x85, 0x02,
-            0x15, 0x00, 0x26, 0xFF, 0x03, 0x19, 0x00, 0x2A, 0xFF, 0x03, 0x75, 0x10, 0x95, 0x01, 0x81, 0x00,
-            0xC0,
-        ).map { it.toByte() }.toByteArray()
     }
 }

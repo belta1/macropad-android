@@ -99,6 +99,7 @@ icons = {
  "task_view": "M3,4h8v7H3zm10,0h8v7h-8zM3,13h8v7H3zm10,0h8v7h-8z",
  "desktop_add": "M19,3H5c-1.11,0 -2,0.9 -2,2v14c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2V5c0,-1.1 -0.9,-2 -2,-2zm-2,10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z",
  "desktop_close": "M19,3H5c-1.11,0 -2,0.9 -2,2v14c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2V5c0,-1.1 -0.9,-2 -2,-2zm-3.59,13L12,12.59 8.59,16 7,14.41 10.59,11 7,7.59 8.59,6 12,9.41 15.41,6 17,7.59 13.41,11 17,14.41z",
+ "mouse": "M13,1.07V9h7c0,-4.08 -3.05,-7.44 -7,-7.93zM4,15c0,4.42 3.58,8 8,8s8,-3.58 8,-8v-4H4v4zm7,-13.93C7.05,1.56 4,4.92 4,9h7V1.07z",
  # system
  "desktop": "M21,2H3c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h7v2H8v2h8v-2h-2v-2h7c1.1,0 2,-0.9 2,-2V4c0,-1.1 -0.9,-2 -2,-2zm0,14H3V4h18v12z",
  "lock": "M18,8h-1V6c0,-2.76 -2.24,-5 -5,-5S7,3.24 7,6v2H6c-1.1,0 -2,0.9 -2,2v10c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V10c0,-1.1 -0.9,-2 -2,-2zm-6,9c-1.1,0 -2,-0.9 -2,-2s0.9,-2 2,-2 2,0.9 2,2 -0.9,2 -2,2zm3.1,-9H8.9V6c0,-1.71 1.39,-3.1 3.1,-3.1 1.71,0 3.1,1.39 3.1,3.1v2z",
@@ -125,7 +126,9 @@ for name,path in icons.items():
 </vector>
 ''')
 entries=",\n".join(f'        "{n}" to R.drawable.ic_k_{n}' for n in icons)
-open(f"{R}/java/dev/belta/macropad/Icons.kt","w").write(f'''package dev.belta.macropad
+open(f"{R}/java/dev/belta/macropad/ui/Icons.kt","w").write(f'''package dev.belta.macropad.ui
+
+import dev.belta.macropad.R
 
 // Generated: key icons (24dp vectors in res/drawable/ic_k_*.xml, Material Icons style).
 object Icons {{

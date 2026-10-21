@@ -1,4 +1,6 @@
-package dev.belta.macropad
+package dev.belta.macropad.ui
+
+import dev.belta.macropad.R
 
 // Generated: key icons (24dp vectors in res/drawable/ic_k_*.xml, Material Icons style).
 object Icons {
@@ -86,6 +88,7 @@ object Icons {
         "task_view" to R.drawable.ic_k_task_view,
         "desktop_add" to R.drawable.ic_k_desktop_add,
         "desktop_close" to R.drawable.ic_k_desktop_close,
+        "mouse" to R.drawable.ic_k_mouse,
         "desktop" to R.drawable.ic_k_desktop,
         "lock" to R.drawable.ic_k_lock,
         "camera" to R.drawable.ic_k_camera,
