@@ -29,6 +29,11 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("open_on_charge", true)
         set(value) = prefs.edit().putBoolean("open_on_charge", value).apply()
 
+    /** Sidebar on the left of the keys instead of the right. */
+    var sidebarLeft: Boolean
+        get() = prefs.getBoolean("sidebar_left", false)
+        set(value) = prefs.edit().putBoolean("sidebar_left", value).apply()
+
     /** Minutes without a touch before the screen dims to a clock; 0 = never. */
     var idleDimMinutes: Int
         get() = prefs.getInt("idle_dim_minutes", 5)

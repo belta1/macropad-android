@@ -56,6 +56,8 @@ interface MacropadHost {
     /** Number of toggle keys currently shown as ON. */
     val toggledKeys: Int
     fun resetToggles()
+    /** Moves the sidebar to the side in [AppSettings.sidebarLeft]. */
+    fun placeSidebar()
     /** A computer's name or settings changed. */
     fun profilesChanged()
     /** Runs [action] once the PIN (if any) has been entered. */
@@ -71,6 +73,10 @@ class Dialogs(private val host: MacropadHost) {
         val items = listOfNotNull(
             if (host.toggledKeys > 0) "Reset ON/OFF keys (${host.toggledKeys} on)" to host::resetToggles else null,
             "Grid size (${host.layout.rows} × ${host.layout.cols})" to ::gridSize,
+            "Sidebar: ${if (host.settings.sidebarLeft) "left" else "right"}" to {
+                host.settings.sidebarLeft = !host.settings.sidebarLeft
+                host.placeSidebar()
+            },
             "Default keyboard layout: ${host.settings.keyboardLayout.label}" to ::keyboardLayout,
             "Default key timing: ${host.settings.keyTiming.label}" to ::keyTiming,
             "Computers…" to ::computers,

@@ -2,7 +2,7 @@
 
 ## 1.3.0
 
-- **Sidebar on every page** (right side): connection status, Record, Edit, Settings and the ⇄
+- **Sidebar on every page** (right or left: ⚙ → Sidebar): connection status, Record, Edit, Settings and the ⇄
   switch button (moved from the top bar, which now holds only the tabs), plus four action keys:
   **Away**, **Lock PC**, **Work Citrix** and a free slot (editable in edit mode).
 - **Work Citrix** opens the Citrix portal in Chrome and fills in user and password. The address,

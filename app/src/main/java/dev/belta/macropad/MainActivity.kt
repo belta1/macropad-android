@@ -98,6 +98,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private lateinit var recordStatus: TextView
     private lateinit var dockRow: LinearLayout
     private lateinit var sideKeys: LinearLayout
+    private lateinit var sidebarView: LinearLayout
     override val secrets by lazy { SecretStore(this) }
 
     private var editing = false
@@ -398,9 +399,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             background = ui.roundRect(SURFACE, ui.dp(24).toFloat()).apply { setStroke(ui.dp(1), STROKE) }
             isMotionEventSplittingEnabled = true
         }
-        outer.addView(sidebar, LinearLayout.LayoutParams(ui.dp(SIDEBAR_WIDTH_DP), ViewGroup.LayoutParams.MATCH_PARENT).apply {
-            marginStart = ui.dp(10)
-        })
+        sidebarView = sidebar
+        outer.addView(sidebar)
+        placeSidebar()
 
         // Top bar: page tabs
         val bar = LinearLayout(this).apply {
@@ -529,6 +530,17 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             setMargins(ui.dp(5), ui.dp(10), ui.dp(5), 0)
         })
         return outer
+    }
+
+    /** Puts the sidebar on the side chosen in ⚙ (right by default). */
+    override fun placeSidebar() {
+        val outer = sidebarView.parent as? LinearLayout ?: return
+        outer.removeView(sidebarView)
+        val left = settings.sidebarLeft
+        outer.addView(sidebarView, if (left) 0 else outer.childCount,
+            LinearLayout.LayoutParams(ui.dp(SIDEBAR_WIDTH_DP), ViewGroup.LayoutParams.MATCH_PARENT).apply {
+                if (left) marginEnd = ui.dp(10) else marginStart = ui.dp(10)
+            })
     }
 
     private fun renderTabs() {
