@@ -1,0 +1,60 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create releases for tags
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Debug APK
+        run: ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macropad-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      # Tags only. Signs with the release key when these repository secrets are set:
+      # MACROPAD_KEYSTORE_BASE64 (base64 of the .jks), MACROPAD_KEYSTORE_PASSWORD,
+      # MACROPAD_KEY_ALIAS, MACROPAD_KEY_PASSWORD. Without them it falls back to a debug key.
+      - name: Release APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          KEYSTORE_BASE64: ${{ secrets.MACROPAD_KEYSTORE_BASE64 }}
+          MACROPAD_KEYSTORE_PASSWORD: ${{ secrets.MACROPAD_KEYSTORE_PASSWORD }}
+          MACROPAD_KEY_ALIAS: ${{ secrets.MACROPAD_KEY_ALIAS }}
+          MACROPAD_KEY_PASSWORD: ${{ secrets.MACROPAD_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            export MACROPAD_KEYSTORE="$RUNNER_TEMP/release.jks"
+          else
+            echo "::warning::No release keystore secrets; the APK is signed with a debug key."
+          fi
+          ./gradlew assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "macropad-${GITHUB_REF_NAME}.apk"
+
+      - name: GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: macropad-*.apk
+          generate_release_notes: true
