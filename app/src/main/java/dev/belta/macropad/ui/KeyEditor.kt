@@ -1,10 +1,12 @@
 package dev.belta.macropad.ui
 
-import android.app.AlertDialog
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.text.InputType
+import android.util.TypedValue
+import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -14,6 +16,7 @@ import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.TextView
 import dev.belta.macropad.R
 import dev.belta.macropad.model.Macro
 import dev.belta.macropad.model.MacroButton
@@ -47,9 +50,11 @@ object KeyEditor {
             hint = "Label"
             setText(initial?.label ?: "")
             setSingleLine()
+            imeOptions = NO_FULLSCREEN_IME
         }
         val action = EditText(context).apply {
             hint = "Action, e.g. ctrl+shift+t"
+            imeOptions = NO_FULLSCREEN_IME
             setText(initial?.action ?: "")
             typeface = Typeface.MONOSPACE
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
@@ -63,6 +68,7 @@ object KeyEditor {
         }
         val longAction = EditText(context).apply {
             hint = "Long-press action (optional), e.g. ctrl+space"
+            imeOptions = NO_FULLSCREEN_IME
             setText(initial?.longAction ?: "")
             typeface = Typeface.MONOSPACE
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
@@ -120,39 +126,58 @@ object KeyEditor {
         content.addView(ui.sectionTitle("Action syntax"))
         content.addView(ui.bodyText(HELP, 12f, MUTED).apply { typeface = Typeface.MONOSPACE })
 
-        val dialog = ui.dialog()
-            .setTitle(title)
-            .setView(ScrollView(context).apply { addView(content) })
-            .setPositiveButton("Save", null)
-            .setNegativeButton("Cancel", null)
-            .apply { if (canDelete) setNeutralButton("Delete") { _, _ -> onDelete() } }
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val actionText = action.text.toString().trim()
-                try {
-                    Macro.parse(actionText)
-                } catch (e: MacroException) {
-                    action.error = e.message
-                    return@setOnClickListener
-                }
-                val longText = longAction.text.toString().trim().ifEmpty { null }
-                if (longText != null) {
-                    try {
-                        Macro.parse(longText)
-                    } catch (e: MacroException) {
-                        longAction.error = e.message
-                        return@setOnClickListener
-                    }
-                }
-                val labelText = label.text.toString().trim().ifEmpty { actionText.lines().first() }
-                onSave(MacroButton(labelText, actionText, color, iconName, toggle.isChecked, longText))
-                dialog.dismiss()
-            }
+        // Title and Save / Cancel / Delete sit in a header above the scrolling form, so the
+        // on-screen keyboard can't cover them (the dialog's own buttons are at the bottom).
+        val header = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(ui.dp(20), ui.dp(14), ui.dp(14), ui.dp(8))
+            addView(TextView(context).apply {
+                text = title
+                setTextColor(TEXT)
+                typeface = ui.fontBold
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                maxLines = 1
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
+        val root = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(header)
+            addView(ScrollView(context).apply { addView(content) })
+        }
+        val dialog = ui.dialog().setView(root).create()
+        fun save() {
+            val actionText = action.text.toString().trim()
+            try {
+                Macro.parse(actionText)
+            } catch (e: MacroException) {
+                action.error = e.message
+                action.requestFocus()
+                return
+            }
+            val longText = longAction.text.toString().trim().ifEmpty { null }
+            if (longText != null) {
+                try {
+                    Macro.parse(longText)
+                } catch (e: MacroException) {
+                    longAction.error = e.message
+                    longAction.requestFocus()
+                    return
+                }
+            }
+            val labelText = label.text.toString().trim().ifEmpty { actionText.lines().first() }
+            onSave(MacroButton(labelText, actionText, color, iconName, toggle.isChecked, longText))
+            dialog.dismiss()
+        }
+        if (canDelete) header.addView(ui.chip("Delete", "delete") { dialog.dismiss(); onDelete() })
+        header.addView(ui.chip("Cancel", "close") { dialog.dismiss() })
+        header.addView(ui.chip("Save", "check", Palette.colors[0]) { save() })
         dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         dialog.show()
     }
+
+    /** Keeps the landscape keyboard from taking the whole screen (Fire OS does that by default). */
+    const val NO_FULLSCREEN_IME = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
 
     private const val HELP = """One step per line:
   ctrl+shift+t     key combo (US key names)

@@ -72,6 +72,7 @@ class Recorder(private val ui: Ui, private val send: (String) -> Unit, private v
 
     fun typeTextDialog() {
         val input = EditText(ui.context).apply {
+            imeOptions = KeyEditor.NO_FULLSCREEN_IME
             hint = "Text to type on the computer"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
             minLines = 2
@@ -95,6 +96,7 @@ class Recorder(private val ui: Ui, private val send: (String) -> Unit, private v
 
     fun keyComboDialog() {
         val input = EditText(ui.context).apply {
+            imeOptions = KeyEditor.NO_FULLSCREEN_IME
             hint = "e.g. win+r, ctrl+shift+esc, alt+f4"
             setSingleLine()
             typeface = Typeface.MONOSPACE
