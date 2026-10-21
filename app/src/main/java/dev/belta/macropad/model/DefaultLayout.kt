@@ -114,14 +114,8 @@ object DefaultLayout {
         MacroButton("Away", AWAY, RED, "lock", longAction = AWAY_MUTED),
         b("Lock PC", "win+l", ORANGE, "lock"),
         b("Work Citrix", WORK_CITRIX, BLUE, "desktop"),
-        TYPE_CLIPBOARD,
+        null,
     ))
-
-    /**
-     * Types the tablet's clipboard character by character (text copied on the tablet; it can't read
-     * the computer's). Added to existing sidebars once by [MacroStore].
-     */
-    val TYPE_CLIPBOARD get() = b("Type clipboard", "text:{clipboard}", TEAL, "paste")
 
     /** Lock the PC, then dim the tablet; [AWAY_MUTED] mutes the Teams call first. */
     private const val AWAY = "win+l\ntablet:dim"

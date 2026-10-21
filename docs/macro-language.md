@@ -30,8 +30,8 @@ Dates and times come from the tablet's clock, so keep its date and time correct.
 
 ### Typing code and long texts
 
-`text:{clipboard}` (the sidebar's **Type clipboard** key) types exactly what was copied on the tablet:
-backslashes, quotes, braces and `{...}` inside the copied text are typed as they are; line breaks
+`text:` steps (including `{clipboard}`, the tablet's clipboard) type characters as they are:
+backslashes, quotes and braces inside a variable's value are typed as they are; line breaks
 press Enter and tabs press Tab. Smart quotes, long dashes and non-breaking spaces are typed as
 their ASCII forms; other characters the layout lacks are skipped (a message lists them). While a
 text of 60+ characters is typed, the dock shows **Typing N characters… tap here to stop**.
