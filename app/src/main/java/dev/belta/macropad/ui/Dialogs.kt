@@ -8,9 +8,12 @@ import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.text.InputType
 import android.text.method.PasswordTransformationMethod
+import android.util.TypedValue
 import android.view.WindowManager
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.GridLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.NumberPicker
 import android.widget.ScrollView
@@ -30,6 +33,8 @@ import dev.belta.macropad.model.PageKind
 import dev.belta.macropad.ui.Ui.Companion.GREEN
 import dev.belta.macropad.ui.Ui.Companion.MUTED
 import dev.belta.macropad.ui.Ui.Companion.RED
+import dev.belta.macropad.ui.Ui.Companion.STROKE_STRONG
+import dev.belta.macropad.ui.Ui.Companion.SURFACE_HI
 
 /** What the dialogs need from the activity. */
 interface MacropadHost {
@@ -336,6 +341,7 @@ class Dialogs(private val host: MacropadHost) {
             "Add keys page" to { addPage(PageKind.KEYS) },
             "Add trackpad page" to { addPage(PageKind.TRACKPAD) },
             "Rename \"${page.name}\"" to { renamePage(host.pageIndex) },
+            "Change icon of \"${page.name}\"" to { pageIcon(host.pageIndex) },
             "Move \"${page.name}\" left" to { movePage(-1) },
             "Move \"${page.name}\" right" to { movePage(1) },
             "Delete \"${page.name}\"" to ::deletePage,
@@ -420,6 +426,57 @@ class Dialogs(private val host: MacropadHost) {
             host.selectPage(host.layout.pages.lastIndex)
             host.saveAndRender()
         }
+    }
+
+    /** Long-press on a tab. */
+    fun pageMenu(index: Int) {
+        val page = host.layout.pages[index]
+        ui.dialog()
+            .setTitle(page.name)
+            .setItems(arrayOf("Rename", "Change icon")) { _, which ->
+                if (which == 0) renamePage(index) else pageIcon(index)
+            }
+            .show()
+    }
+
+    private fun pageIcon(index: Int) {
+        val page = host.layout.pages[index]
+        val grid = GridLayout(ui.context).apply {
+            columnCount = 5
+            setPadding(ui.dp(16), ui.dp(12), ui.dp(16), 0)
+        }
+        val dialog = ui.dialog()
+            .setTitle("Icon for \"${page.name}\"")
+            .setView(grid)
+            .setNegativeButton("Cancel", null)
+            .create()
+        for (key in DefaultLayout.APP_ICONS) {
+            val current = (page.icon ?: DefaultLayout.iconFor(page.name)) == key
+            grid.addView(LinearLayout(ui.context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(ui.dp(4), ui.dp(8), ui.dp(4), ui.dp(8))
+                background = if (current) ui.roundRect(SURFACE_HI, ui.dp(14).toFloat()).apply {
+                    setStroke(ui.dp(2), STROKE_STRONG)
+                } else ui.pressable(Color.TRANSPARENT, ui.dp(14).toFloat())
+                addView(ImageView(context).apply { setImageDrawable(AppIcons.drawable(ui, key, page.name)) },
+                    LinearLayout.LayoutParams(ui.dp(36), ui.dp(36)))
+                addView(TextView(context).apply {
+                    text = AppIcons.names[key]
+                    setTextColor(MUTED)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                    gravity = Gravity.CENTER
+                    maxLines = 2
+                    setPadding(0, ui.dp(4), 0, 0)
+                })
+                setOnClickListener {
+                    page.icon = key
+                    host.saveAndRender()
+                    dialog.dismiss()
+                }
+            }, GridLayout.LayoutParams().apply { width = ui.dp(96); setMargins(ui.dp(2), ui.dp(2), ui.dp(2), ui.dp(2)) })
+        }
+        dialog.show()
     }
 
     fun renamePage(index: Int) {

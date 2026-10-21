@@ -13,6 +13,7 @@ import dev.belta.macropad.hid.KeyboardLayout
  *   click:left          mouse button (left, right, middle)
  *   scroll:3            mouse wheel; positive = up, negative = down
  *   page:next           switches the tablet's page (next, prev or a page name); not sent
+ *   tablet:dim          dims the tablet to its idle clock; not sent
  *
  * Text may contain {date}, {time}, {date:<pattern>} and {clipboard}, filled in when the key runs
  * ([TextVariables]).
@@ -29,6 +30,8 @@ sealed class Step {
     data class Scroll(val amount: Int) : Step()
     /** Handled on the tablet: "next", "prev" or a page name. */
     data class Page(val target: String) : Step()
+    /** Handled on the tablet: "dim". */
+    data class Tablet(val command: String) : Step()
 }
 
 class MacroException(message: String) : Exception(message)
@@ -45,6 +48,10 @@ object Macro {
                 lower.startsWith("text:") -> Step.Text(unescape(raw.trimStart().substring(5)))
                 lower.startsWith("page:") -> Step.Page(
                     line.substring(5).trim().ifEmpty { throw MacroException("Page step needs next, prev or a page name") })
+                lower.startsWith("tablet:") -> when (val command = lower.substring(7).trim()) {
+                    in TABLET_COMMANDS -> Step.Tablet(command)
+                    else -> throw MacroException("Unknown tablet command '$command' (use ${TABLET_COMMANDS.joinToString()})")
+                }
                 lower.startsWith("media:") -> {
                     val name = lower.substring(6).trim()
                     Step.Media(HidKeys.media[name] ?: throw MacroException("Unknown media key '$name'"))
@@ -77,7 +84,12 @@ object Macro {
     /** Short human-readable hint shown under a key's label, e.g. "Ctrl+Shift+P". */
     fun describe(action: String): String {
         val lines = action.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
-        val actions = lines.filterNot { it.lowercase().startsWith("delay:") || it.lowercase().startsWith("wait:") }
+        val dims = lines.any { it.lowercase().startsWith("tablet:") }
+        val actions = lines.filterNot {
+            val lower = it.lowercase()
+            lower.startsWith("delay:") || lower.startsWith("wait:") || lower.startsWith("tablet:")
+        }
+        if (dims) return if (actions.isEmpty()) "Dims tablet" else describe(actions.joinToString("\n")) + " + dim"
         // Win+R followed by typed text: an app launcher.
         if (actions.size == 2 && actions[0].lowercase() == "win+r" && actions[1].lowercase().startsWith("text:")) {
             return "Opens " + actions[1].substring(5).removeSuffix("\\n").trim()
@@ -106,6 +118,8 @@ object Macro {
             else -> describeCombo(line)
         }.let { if (lines.size > actions.size) "$it · timed" else it }
     }
+
+    private val TABLET_COMMANDS = listOf("dim")
 
     private val FOCUS_APP = Regex("""(win|super|gui|meta)\+[0-9]""")
 

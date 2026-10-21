@@ -12,10 +12,13 @@ Windows laptops/desktops.
 
 ## Features
 
-- **Pages (tabs)** with ready-made shortcuts: **Desktop** (open apps, virtual desktops),
-  **VS Code**, **Chrome**, **Excel**, **Word**, **Teams**, **Citrix**, a **Trackpad**, and an empty
-  **Custom** page. Teams keys work even while a Citrix / Remote Desktop window has focus — see
+- **Pages (tabs)** with ready-made shortcuts: **Desktop** (open apps, snip, clipboard history, emoji,
+  Copilot, lock), **Monitors** (snap and move windows between screens, virtual desktops, *Away*),
+  **VS Code**, **Chrome**, **Excel**, **Numpad**, **Word**, **Outlook**, **Teams**, **Citrix**,
+  **Phrases** (ready-to-type replies, date, signature), a **Trackpad**, and an empty **Custom** page.
+  Teams and Outlook keys work even while a Citrix / Remote Desktop window has focus — see
   [docs/citrix.md](docs/citrix.md).
+- **App icons on the tabs** (long-press a tab to rename it or change its icon).
 - **Dock** on every page: media keys as icons (Previous · Play/Pause · Next · Volume − · Volume +)
   and virtual-desktop switching (Prev desktop · Task view · Next desktop).
 - **Trackpad page**: pointer with acceleration, tap / two-finger tap to click / right-click,
@@ -23,8 +26,9 @@ Windows laptops/desktops.
 - **Toggle keys** (Teams mute, camera, hand, blur) show their ON/OFF state; any key can also have a
   **long-press action** (e.g. tap = toggle mute, hold = push to talk).
 - **Text variables** in typed text: `{date}`, `{time}`, custom date formats and `{clipboard}`.
-- **Numpad page**, and `page:` actions to change page from a key or the tablet's volume buttons.
-- **Idle clock**: dims to a clock when not used; the waking touch never presses a key.
+- `page:` actions to change page from a key or the tablet's volume buttons.
+- **Idle clock**: dims to a clock when not used; the waking touch never presses a key. The
+  **Away** key locks the PC and dims the tablet (hold: also mutes the Teams call).
 - **PIN lock** for editing and settings.
 - **Tablet volume buttons** act as macropad keys (PC volume by default; assignable to any action).
 - **Edit mode** (✏️): tap any key to change its label, action, accent color, icon (96 icons) and

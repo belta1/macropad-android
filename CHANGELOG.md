@@ -7,6 +7,20 @@
   in empty dock slots.
 - **Cleaner dock**: media keys show only a larger icon; a divider separates them from the desktop
   keys. Dock keys stay editable in edit mode.
+- **App icons on the tabs**: Windows, Chrome, VS Code and Office-style tiles; the selected tab also
+  shows its name. Long-press a tab to rename it or pick another icon (⚙ → Pages also has it).
+- **Monitors page**: snap left/right, maximize, minimize, snap layouts, move the window to the
+  left/right screen, show desktop, minimize others, previous window, new/close desktop, Task
+  manager, jump to the remote desktop, and **Away**.
+- **Away** key: locks the PC and dims the tablet; hold it to mute the Teams call first. New macro
+  step `tablet:dim`.
+- **Outlook page**: open Outlook, new mail, new meeting, mail, calendar and search focus Outlook
+  first (Win+2) so they work from a Citrix window; reply, reply all, forward, send, read/unread,
+  flag, archive and delete act on the selected mail.
+- **Phrases page**: Spanish replies, signature, date, time and the tablet's clipboard, typed with
+  the computer's layout (works inside Citrix too). No trailing Enter, so nothing is sent by accident.
+- **Desktop page**: its desktop-switching row (now in the dock) becomes Snip, Clipboard history,
+  Emoji, Copilot (Win+3) and Lock PC. Existing layouts change once, only keys still at their defaults.
 
 ## 1.2.0
 

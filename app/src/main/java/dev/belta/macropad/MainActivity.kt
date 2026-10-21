@@ -48,6 +48,7 @@ import dev.belta.macropad.model.PageKind
 import dev.belta.macropad.model.Palette
 import dev.belta.macropad.model.Step
 import dev.belta.macropad.model.TextVariables
+import dev.belta.macropad.ui.AppIcons
 import dev.belta.macropad.ui.Dialogs
 import dev.belta.macropad.ui.Icons
 import dev.belta.macropad.ui.KeyEditor
@@ -505,21 +506,35 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         layout.pages.forEachIndexed { i, p ->
             if (p.name in hidden) return@forEachIndexed
             val active = i == pageIndex
-            tabs.addView(TextView(this).apply {
-                text = p.name
-                typeface = if (active) ui.fontBold else ui.fontSemiBold
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-                setTextColor(if (active) Color.WHITE else MUTED)
-                gravity = Gravity.CENTER
-                setPadding(ui.dp(18), 0, ui.dp(18), 0)
+            // App icon on every tab; the selected one also shows its name.
+            tabs.addView(LinearLayout(this).apply {
+                tag = p.name
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                contentDescription = p.name
+                setPadding(ui.dp(if (active) 8 else 9), 0, ui.dp(if (active) 16 else 9), 0)
+                addView(ImageView(context).apply {
+                    setImageDrawable(AppIcons.drawable(ui, p.icon ?: DefaultLayout.iconFor(p.name), p.name))
+                    alpha = if (active) 1f else 0.72f
+                }, LinearLayout.LayoutParams(ui.dp(if (active) 28 else 26), ui.dp(if (active) 28 else 26)))
+                if (active) addView(TextView(context).apply {
+                    text = p.name
+                    typeface = ui.fontBold
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                    setTextColor(Color.WHITE)
+                    maxLines = 1
+                    setPadding(ui.dp(9), 0, 0, 0)
+                })
                 background = if (active) {
                     ui.roundRect(SURFACE_ACTIVE, ui.dp(20).toFloat()).apply { setStroke(ui.dp(1), STROKE_STRONG) }
                 } else {
                     ui.pressable(Color.TRANSPARENT, ui.dp(20).toFloat())
                 }
                 setOnClickListener { selectPage(i); renderPage() }
-                setOnLongClickListener { withUnlock { dialogs.renamePage(i) }; true }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ui.dp(36)))
+                setOnLongClickListener { withUnlock { dialogs.pageMenu(i) }; true }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ui.dp(40)).apply {
+                marginEnd = ui.dp(2)
+            })
         }
         // Keep the selected tab fully visible (once the new tabs are laid out).
         tabs.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
@@ -534,7 +549,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private fun scrollToActiveTab() {
         tabScroller.post {
             val active = (0 until tabs.childCount).map { tabs.getChildAt(it) }
-                .firstOrNull { (it as TextView).text == page.name } ?: return@post
+                .firstOrNull { it.tag == page.name } ?: return@post
             val left = active.left - ui.dp(8)
             val right = active.right + ui.dp(8) - tabScroller.width
             when {
@@ -711,7 +726,10 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         view?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
         recorder.record(action)
         steps.filterIsInstance<Step.Page>().lastOrNull()?.let { goToPage(it.target) }
-        val remote = steps.filterNot { it is Step.Page }.map { step ->
+        // Dim after the keys have gone out (e.g. "lock PC, then dim"), so the idle overlay doesn't
+        // block them.
+        if (steps.any { it is Step.Tablet && it.command == "dim" }) handler.postDelayed({ dim() }, 600)
+        val remote = steps.filterNot { it is Step.Page || it is Step.Tablet }.map { step ->
             if (step is Step.Text) Step.Text(TextVariables.expand(step.text, clipboard = ::clipboardText)) else step
         }
         if (remote.isEmpty()) return
@@ -725,7 +743,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             val key = toggleKey(page, index)
             if (!toggledOn.remove(key)) toggledOn += key
         }
-        if (hold && Macro.isHoldable(remote)) {
+        if (hold && Macro.isHoldable(remote) && steps.none { it is Step.Tablet }) {
             heldSteps[token] = remote[0]
             hid.press(token, remote[0])
         } else {

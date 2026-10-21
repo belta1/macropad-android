@@ -29,6 +29,28 @@ Teams shortcuts only work when Teams has focus, so the keys bring it to the fron
 taskbar changes, edit the keys (✏️). ON/OFF on toggle keys is the macropad's guess; ⚙ → **Reset
 ON/OFF keys** when it drifts.
 
+One caveat to check: on some PCs, Win+number on an app that is **already in front** minimizes it
+instead of keeping it. If a Teams or Outlook key hides the app when you're already in it, use the
+plain shortcut on the keyboard (or edit the key to drop the `win+…` line).
+
+## Outlook page
+
+Keys that start something focus Outlook first (`win+2`) and leave it in front: Open Outlook,
+New mail (Ctrl+Shift+M), New meeting (Ctrl+Shift+Q), Mail (Ctrl+1), Calendar (Ctrl+2), Search (Ctrl+E).
+The others act on the selected mail and expect Outlook in front: Reply, Reply all, Forward, Send
+(Ctrl+Enter; classic Outlook asks once to enable it), Mark read / unread, Flag (Insert), Archive
+(Backspace), Delete.
+
+## Monitors page
+
+Window management on the local PC (a windowed Citrix session is a window like any other): snap
+left / right (Win+←/→), maximize, restore / minimize, snap layouts (Win+Z), move the window to the
+left / right screen (Win+Shift+←/→), show desktop, minimize others (Win+Home), previous window
+(Alt+Tab), new / close virtual desktop, Task manager, Remote desktop (Win+4).
+
+**Away** locks the PC (Win+L) and dims the tablet; holding it first mutes the Teams call
+(Win+Alt+K, a toggle — don't use the hold version when you're already muted).
+
 ## Citrix page
 
 | Row | Keys |

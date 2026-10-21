@@ -23,6 +23,8 @@ class MacroStore(private val context: Context) {
         addNewDefaultPages(layout)
         upgradeTeamsKeys(layout)
         addDesktopDockKeys(layout)
+        upgradeDesktopRow(layout)
+        addPageIcons(layout)
         if (backupFile?.exists() == false) writeBackup(export(layout))
         return layout
     }
@@ -98,9 +100,31 @@ class MacroStore(private val context: Context) {
         if (changed) save(layout)
     }
 
+    /** 1.3: the Desktop page's desktop-switching row (now in the dock) becomes Snip, Clipboard, …. */
+    private fun upgradeDesktopRow(layout: Layout) {
+        if (prefs.getBoolean(DESKTOP_ROW_FLAG, false)) return
+        var changed = false
+        val desktop = layout.pages.firstOrNull { it.name == "Desktop" }
+        desktop?.buttons?.forEachIndexed { i, b ->
+            DefaultLayout.DESKTOP_ROW_UPGRADE[b?.action]?.let { desktop.buttons[i] = it.copy(); changed = true }
+        }
+        prefs.edit().putBoolean(DESKTOP_ROW_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
+    /** Stores a tab icon for pages without one, so it survives renaming. */
+    private fun addPageIcons(layout: Layout) {
+        var changed = false
+        for (page in layout.pages) if (page.icon == null) {
+            DefaultLayout.iconFor(page.name)?.let { page.icon = it; changed = true }
+        }
+        if (changed) save(layout)
+    }
+
     private companion object {
         const val TEAMS_UPGRADE_FLAG = "upgraded_teams_focus"
         const val DOCK_UPGRADE_FLAG = "upgraded_desktop_dock"
+        const val DESKTOP_ROW_FLAG = "upgraded_desktop_row"
         const val KEY = "layout_v3"
         const val BACKUP_NAME = "macropad-layout.json"
     }

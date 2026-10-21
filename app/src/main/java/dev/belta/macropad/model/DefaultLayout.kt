@@ -7,13 +7,41 @@ object DefaultLayout {
     const val TEAMS_PAGE = "Teams"
     const val CITRIX_PAGE = "Citrix"
     const val NUMPAD_PAGE = "Numpad"
+    const val MONITORS_PAGE = "Monitors"
+    const val OUTLOOK_PAGE = "Outlook"
+    const val PHRASES_PAGE = "Phrases"
 
     /** Pages added in later versions; inserted once into existing layouts at their default position. */
-    val ADDED_PAGES = listOf("Desktop", NUMPAD_PAGE, TEAMS_PAGE, CITRIX_PAGE, TRACKPAD_PAGE)
+    val ADDED_PAGES = listOf("Desktop", NUMPAD_PAGE, TEAMS_PAGE, CITRIX_PAGE, TRACKPAD_PAGE,
+        MONITORS_PAGE, OUTLOOK_PAGE, PHRASES_PAGE)
+
+    /** Tab icons (drawn by ui.AppIcons), in the order the page menu offers them. */
+    val APP_ICONS = listOf("windows", "monitors", "vscode", "chrome", "edge", "excel", "word", "outlook",
+        "teams", "citrix", "phrases", "numpad", "trackpad", "custom")
+
+    /** Icon for a page that has none stored (layouts from before 1.3, renamed or new pages). */
+    fun iconFor(name: String): String? = when (name.lowercase()) {
+        "desktop", "windows", "escritorio" -> "windows"
+        "monitors", "screens", "pantallas", "ventanas" -> "monitors"
+        "vs code", "vscode", "code" -> "vscode"
+        "chrome" -> "chrome"
+        "edge" -> "edge"
+        "excel" -> "excel"
+        "word" -> "word"
+        "outlook", "mail", "correo" -> "outlook"
+        "teams" -> "teams"
+        "citrix", "remote", "rdp" -> "citrix"
+        "phrases", "snippets", "frases", "textos" -> "phrases"
+        "numpad", "números", "numeros" -> "numpad"
+        "trackpad", "mouse" -> "trackpad"
+        "custom" -> "custom"
+        else -> null
+    }
 
     // Taskbar positions (Win+1…9, counting pinned apps after Start/Search) on the work PC. Win+number
     // focuses an app even while a Citrix / Remote Desktop window has the keyboard.
     private const val OUTLOOK_SLOT = 2
+    private const val COPILOT_SLOT = 3
     private const val REMOTE_SLOT = 4
     private const val EXPLORER_SLOT = 6
     private const val EDGE_SLOT = 7
@@ -24,6 +52,18 @@ object DefaultLayout {
 
     /** Focuses Teams and sends a shortcut that should leave Teams in front (navigation). */
     private fun toTeams(shortcut: String) = "win+$TEAMS_SLOT\ndelay:300\n$shortcut"
+
+    /** Focuses Outlook and sends a shortcut, leaving Outlook in front. */
+    private fun toOutlook(shortcut: String) = "win+$OUTLOOK_SLOT\ndelay:300\n$shortcut"
+
+    /**
+     * 1.3: the Desktop page's desktop-switching row (now in the dock) -> new keys; applied once to
+     * existing layouts by [MacroStore], only to keys still set to the old defaults.
+     */
+    val DESKTOP_ROW_UPGRADE: Map<String, MacroButton> by lazy {
+        val old = listOf("win+ctrl+left", "win+tab", "win+ctrl+d", "win+ctrl+f4", "win+ctrl+right")
+        old.zip(layout().pages.first { it.name == "Desktop" }.buttons.takeLast(old.size).map { it!! }).toMap()
+    }
 
     /**
      * Teams keys of 1.0/1.1 (which only worked with Teams focused) -> their replacements; applied
@@ -84,11 +124,33 @@ object DefaultLayout {
             b("Outlook", run("outlook"), BLUE, "mail"),
             b("Calculator", "media:calc", ORANGE, "calculator"),
             b("Settings", "win+i", GRAY, "settings"),
-            b("Prev desktop", "win+ctrl+left", TEAL, "chevron_left"),
-            b("Task view", "win+tab", PURPLE, "task_view"),
+            // Desktop switching lives in the dock (1.3).
+            b("Snip", "win+shift+s", GREEN, "cut"),
+            b("Clipboard history", "win+v", TEAL, "paste"),
+            b("Emoji", "win+period", YELLOW, "star"),
+            b("Copilot", "win+$COPILOT_SLOT", PURPLE, "chat"),
+            b("Lock PC", "win+l", RED, "lock"),
+        )),
+        // Windows 11 window management: snapping and moving windows between screens (a Citrix /
+        // remote desktop usually has a screen of its own), plus virtual desktops.
+        Page(MONITORS_PAGE, mutableListOf(
+            b("Snap left", "win+left", BLUE, "align_left"),
+            b("Maximize", "win+up", GREEN, "arrow_up"),
+            b("Snap right", "win+right", BLUE, "align_right"),
+            b("Restore / minimize", "win+down", GRAY, "arrow_down"),
+            b("Snap layouts", "win+z", PURPLE, "task_view"),
+            b("Window to left screen", "win+shift+left", TEAL, "chevron_left"),
+            b("Window to right screen", "win+shift+right", TEAL, "chevron_right"),
+            b("Show desktop", "win+d", YELLOW, "desktop"),
+            b("Minimize others", "win+home", GRAY, "sidebar"),
+            b("Previous window", "alt+tab", ORANGE, "swap"),
             b("New desktop", "win+ctrl+d", GREEN, "desktop_add"),
             b("Close desktop", "win+ctrl+f4", RED, "desktop_close"),
-            b("Next desktop", "win+ctrl+right", TEAL, "chevron_right"),
+            b("Task manager", "ctrl+shift+esc", ORANGE, "tune"),
+            b("Remote desktop", "win+$REMOTE_SLOT", BLUE, "desktop"),
+            // Tap: lock the PC and dim the tablet. Hold: also mute the Teams call first.
+            MacroButton("Away", "win+l\ntablet:dim", RED, "lock",
+                longAction = "win+alt+k\ndelay:300\nwin+l\ntablet:dim"),
         )),
         Page("VS Code", mutableListOf(
             b("Command palette", "ctrl+shift+p", BLUE, "command"),
@@ -168,6 +230,26 @@ object DefaultLayout {
             b("Word count", "ctrl+shift+g", GREEN, "hash"),
             b("Clear formatting", "ctrl+space", RED, "format_clear"),
         )),
+        // Outlook runs on the PC. Keys that start something (new mail, calendar, search) focus it
+        // first (Win+number), so they work from a Citrix window; the others act on the selected mail
+        // and expect Outlook in front. Shortcuts work in classic and new Outlook.
+        Page(OUTLOOK_PAGE, mutableListOf(
+            b("Open Outlook", "win+$OUTLOOK_SLOT", BLUE, "mail"),
+            b("New mail", toOutlook("ctrl+shift+m"), BLUE, "edit"),
+            b("New meeting", toOutlook("ctrl+shift+q"), PURPLE, "calendar"),
+            b("Mail", toOutlook("ctrl+1"), TEAL, "mail"),
+            b("Calendar", toOutlook("ctrl+2"), PURPLE, "calendar"),
+            b("Reply", "ctrl+r", GREEN, "back"),
+            b("Reply all", "ctrl+shift+r", GREEN, "group"),
+            b("Forward", "ctrl+f", TEAL, "forward"),
+            b("Send", "ctrl+enter", BLUE, "check"),
+            b("Search", toOutlook("ctrl+e"), YELLOW, "search"),
+            b("Mark read", "ctrl+q", GRAY, "check"),
+            b("Mark unread", "ctrl+u", GRAY, "mail"),
+            b("Flag", "insert", ORANGE, "bookmark"),
+            b("Archive", "backspace", TEAL, "download"),
+            b("Delete", "delete", RED, "delete"),
+        )),
         // New Microsoft Teams on Windows. Teams runs on the PC itself, so every key first focuses it
         // (Win+number) — they work while a Citrix session has the keyboard. Mute uses Windows 11's
         // call mute (Win+Alt+K), which works from any window. Push to talk needs Teams in front.
@@ -207,6 +289,25 @@ object DefaultLayout {
             b("Paste", "ctrl+v", GRAY, "paste"),
             b("Snip (local)", "win+shift+s", GREEN, "camera"),
             b("Lock PC", "win+l", RED, "lock"),
+        )),
+        // Text typed with the computer's layout, so it also works inside Citrix. No trailing Enter:
+        // in Teams chat it would send the message. Edit them to taste.
+        Page(PHRASES_PAGE, mutableListOf(
+            b("Buenos días", "text:Buenos días, ", YELLOW, "chat"),
+            b("Buenas tardes", "text:Buenas tardes, ", ORANGE, "chat"),
+            b("Gracias", "text:¡Muchas gracias!", GREEN, "star"),
+            b("Recibido", "text:Recibido, gracias.", GREEN, "check"),
+            b("Te confirmo", "text:Te confirmo en un momento.", BLUE, "history"),
+            b("Lo reviso", "text:Lo reviso y te comento.", BLUE, "search"),
+            b("En reunión", "text:Estoy en reunión, te respondo apenas termine.", PURPLE, "group"),
+            b("¿5 minutos?", "text:¿Tienes 5 minutos para conversar?", PURPLE, "call"),
+            b("Adjunto", "text:Adjunto lo solicitado.", TEAL, "document"),
+            b("Quedo atento", "text:Quedo atento a tus comentarios.", TEAL, "comment"),
+            b("Firma", "text:Saludos cordiales,\\n[Tu nombre]", GRAY, "edit"),
+            b("Fecha", "text:{date:dd/MM/yyyy}", GRAY, "calendar"),
+            b("Hora", "text:{time}", GRAY, "history"),
+            b("Fecha y hora", "text:{date:dd/MM/yyyy HH:mm}", GRAY, "calendar"),
+            b("Tablet clipboard", "text:{clipboard}", GRAY, "paste"),
         )),
         // Touchpad surface with click and scroll keys.
         // The keys are the row under the touchpad (editable like any other keys).

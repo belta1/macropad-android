@@ -11,6 +11,7 @@ Every key has an **action**: one step per line. Lines starting with `#` are comm
 | Mouse click | `click:left` | `left`, `right` or `middle` |
 | Scroll | `scroll:3` | Mouse wheel notches; positive = up, negative = down (max ±50) |
 | Page | `page:next` | Switches the tablet's page: `next`, `prev` or a page name. Runs on the tablet, even when no computer is connected |
+| Tablet | `tablet:dim` | Dims the tablet to its idle clock (after the other steps have been sent). Runs on the tablet |
 
 ### Text variables
 

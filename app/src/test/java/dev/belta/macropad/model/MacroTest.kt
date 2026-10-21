@@ -92,7 +92,29 @@ class MacroTest {
     fun `default layout actions all parse`() {
         val layout = DefaultLayout.layout()
         val all = layout.pages.flatMap { it.buttons } + layout.dock.buttons + layout.hardware.buttons
-        for (button in all.filterNotNull()) Macro.parse(button.action)
+        for (button in all.filterNotNull()) {
+            Macro.parse(button.action)
+            button.longAction?.let { Macro.parse(it) }
+        }
+    }
+
+    @Test
+    fun `tablet dim step runs on the tablet and shows in the hint`() {
+        assertEquals(listOf(Step.Combo(HidKeys.GUI, listOf(HidKeys.keys.getValue("l"))), Step.Tablet("dim")),
+            Macro.parse("win+l\ntablet:dim"))
+        assertEquals("Win+L + dim", Macro.describe("win+l\ntablet:dim"))
+        assertEquals("Dims tablet", Macro.describe("tablet:dim"))
+        assertThrows("tablet:explode")
+    }
+
+    @Test
+    fun `every default page has a tab icon and the desktop row upgrade covers the old row`() {
+        for (page in DefaultLayout.layout().pages) {
+            val icon = DefaultLayout.iconFor(page.name)
+            assertTrue("${page.name} has no icon", icon in DefaultLayout.APP_ICONS)
+        }
+        assertEquals("win+shift+s", DefaultLayout.DESKTOP_ROW_UPGRADE["win+ctrl+left"]?.action)
+        assertEquals(5, DefaultLayout.DESKTOP_ROW_UPGRADE.size)
     }
 
     private fun assertThrows(action: String) {

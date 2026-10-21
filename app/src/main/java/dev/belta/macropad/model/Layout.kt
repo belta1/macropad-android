@@ -19,7 +19,11 @@ data class MacroButton(
 
 enum class PageKind { KEYS, TRACKPAD }
 
-class Page(var name: String, val buttons: MutableList<MacroButton?>, val kind: PageKind = PageKind.KEYS)
+/** [icon] is the tab's app icon (see [DefaultLayout.APP_ICONS]); null picks one from the name. */
+class Page(
+    var name: String, val buttons: MutableList<MacroButton?>, val kind: PageKind = PageKind.KEYS,
+    var icon: String? = null,
+)
 
 /**
  * [dock] is a row of keys (media controls and desktop switching by default) shown below every page.
@@ -85,6 +89,7 @@ object LayoutJson {
     private fun pageToJson(page: Page) = JSONObject().apply {
         put("name", page.name)
         if (page.kind != PageKind.KEYS) put("kind", page.kind.name)
+        page.icon?.let { put("icon", it) }
         put("buttons", JSONArray().apply {
             for (b in page.buttons) put(b?.let {
                 JSONObject().put("label", it.label).put("action", it.action).put("color", it.color)
@@ -108,6 +113,6 @@ object LayoutJson {
             }
         }
         val kind = PageKind.values().firstOrNull { it.name == p.optString("kind") } ?: PageKind.KEYS
-        return Page(p.getString("name"), buttons, kind)
+        return Page(p.getString("name"), buttons, kind, p.optString("icon").ifBlank { null })
     }
 }
