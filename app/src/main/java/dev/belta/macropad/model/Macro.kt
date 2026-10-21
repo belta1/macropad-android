@@ -74,6 +74,14 @@ object Macro {
         if (actions.size == 2 && actions[0].lowercase() == "win+r" && actions[1].lowercase().startsWith("text:")) {
             return "Opens " + actions[1].substring(5).removeSuffix("\\n").trim()
         }
+        // Win+number (focus a taskbar app) and a shortcut: "Win+8 → Ctrl+2"; with Alt+Tab back
+        // to the previous window just the shortcut and ↩ ("Ctrl+Shift+O ↩"), which fits on a key.
+        if (actions.size in 2..3 && FOCUS_APP.matches(actions[0].lowercase()) && !actions[1].contains(':') &&
+            (actions.size == 2 || actions[2].lowercase() == "alt+tab")
+        ) {
+            return if (actions.size == 3) describeCombo(actions[1]) + " ↩"
+            else describeCombo(actions[0]) + " → " + describeCombo(actions[1])
+        }
         if (actions.size != 1) return "Macro · ${actions.size} steps"
         val line = actions[0]
         val lower = line.lowercase()
@@ -82,9 +90,13 @@ object Macro {
             lower.startsWith("media:") -> "Media key"
             lower.startsWith("click:") -> lower.substring(6).trim().replaceFirstChar { it.uppercase() } + " click"
             lower.startsWith("scroll:") -> "Scroll " + lower.substring(7).trim()
-            else -> lower.split('+').joinToString("+") { prettyKey(it.trim()) }
+            else -> describeCombo(line)
         }.let { if (lines.size > actions.size) "$it · timed" else it }
     }
+
+    private val FOCUS_APP = Regex("""(win|super|gui|meta)\+[0-9]""")
+
+    private fun describeCombo(line: String) = line.lowercase().split('+').joinToString("+") { prettyKey(it.trim()) }
 
     private fun prettyKey(k: String) = when (k) {
         "ctrl", "control", "lctrl" -> "Ctrl"

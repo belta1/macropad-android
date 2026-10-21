@@ -76,6 +76,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private lateinit var recorder: Recorder
 
     private lateinit var tabs: LinearLayout
+    private lateinit var tabScroller: HorizontalScrollView
+    private lateinit var offlineBanner: TextView
     private lateinit var content: FrameLayout
     private lateinit var statusChip: LinearLayout
     private lateinit var statusDot: View
@@ -252,10 +254,13 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             setPadding(ui.dp(4), ui.dp(4), ui.dp(4), ui.dp(4))
             background = ui.roundRect(SURFACE, ui.dp(24).toFloat())
         }
-        bar.addView(HorizontalScrollView(this).apply {
+        tabScroller = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             addView(tabs)
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            // The strip narrows when the switch button appears; keep the selected tab in view.
+            addOnLayoutChangeListener { _, l, _, r, _, ol, _, or, _ -> if (r - l != or - ol) scrollToActiveTab() }
+        }
+        bar.addView(tabScroller, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
         statusChip = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -289,6 +294,21 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         bar.addView(editButton)
         bar.addView(ui.iconButton("settings") { dialogs.settings() })
         root.addView(bar)
+
+        // Takes the media dock's place while no computer is connected (the dock does nothing then),
+        // so key presses that go nowhere are obvious without moving the keys.
+        offlineBanner = TextView(this).apply {
+            setTextColor(0xFFFF8FA3.toInt())
+            typeface = ui.fontSemiBold
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            gravity = Gravity.CENTER
+            setPadding(ui.dp(16), 0, ui.dp(16), 0)
+            visibility = View.GONE
+            background = ui.roundRect(0xFF2A1219.toInt(), ui.dp(26).toFloat()).apply {
+                setStroke(ui.dp(1), withAlpha(RED, 0.45f))
+            }
+            setOnClickListener { onStatusTapped() }
+        }
 
         content = FrameLayout(this).apply { clipChildren = false }
         root.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
@@ -327,7 +347,10 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             background = ui.roundRect(SURFACE, ui.dp(26).toFloat()).apply { setStroke(ui.dp(1), STROKE) }
             isMotionEventSplittingEnabled = true
         }
-        root.addView(dockRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(76)).apply {
+        root.addView(FrameLayout(this).apply {
+            addView(dockRow, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(offlineBanner, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(76)).apply {
             setMargins(ui.dp(5), ui.dp(10), ui.dp(5), 0)
         })
         return root
@@ -354,6 +377,27 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
                 setOnClickListener { selectPage(i); renderPage() }
                 setOnLongClickListener { dialogs.renamePage(i); true }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ui.dp(36)))
+        }
+        // Keep the selected tab fully visible (once the new tabs are laid out).
+        tabs.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
+            override fun onLayoutChange(v: View, l: Int, t: Int, r: Int, b: Int, ol: Int, ot: Int, or: Int, ob: Int) {
+                v.removeOnLayoutChangeListener(this)
+                scrollToActiveTab()
+            }
+        })
+        tabs.requestLayout()
+    }
+
+    private fun scrollToActiveTab() {
+        tabScroller.post {
+            val active = (0 until tabs.childCount).map { tabs.getChildAt(it) }
+                .firstOrNull { (it as TextView).text == page.name } ?: return@post
+            val left = active.left - ui.dp(8)
+            val right = active.right + ui.dp(8) - tabScroller.width
+            when {
+                tabScroller.scrollX > left -> tabScroller.smoothScrollTo(left, 0)
+                tabScroller.scrollX < right -> tabScroller.smoothScrollTo(right, 0)
+            }
         }
     }
 
@@ -471,7 +515,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         recorder.record(button.action)
         val hid = hid
         if (hid == null || !connected) {
-            if (!recorder.isRecording) ui.toast("Not connected to a computer yet")
+            if (!recorder.isRecording) offlineBanner.animate().alpha(0.3f).setDuration(120)
+                .withEndAction { offlineBanner.animate().alpha(1f).setDuration(120) }
             return
         }
         if (button.toggle) {
@@ -501,6 +546,16 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             HidPeripheral.State.OFF, HidPeripheral.State.UNAVAILABLE -> RED
         }
         statusDot.background = ui.roundRect(color, ui.dp(5).toFloat())
+        val offline = state != HidPeripheral.State.CONNECTED
+        offlineBanner.visibility = if (offline) View.VISIBLE else View.GONE
+        dockRow.visibility = if (offline) View.INVISIBLE else View.VISIBLE
+        offlineBanner.text = when (state) {
+            HidPeripheral.State.ADVERTISING ->
+                "Not connected — keys won't reach a computer. " +
+                    (hid?.preferredHost()?.let { "Waiting for ${it.name}." } ?: "Waiting for any paired computer.")
+            HidPeripheral.State.OFF -> "Bluetooth is off — tap to turn it on"
+            else -> "Not connected — $detail"
+        }
         statusText.text = when (state) {
             HidPeripheral.State.ADVERTISING -> if (hid?.preferredHost() != null) detail else "Ready to pair"
             HidPeripheral.State.CONNECTED -> detail.removePrefix("Connected to ")

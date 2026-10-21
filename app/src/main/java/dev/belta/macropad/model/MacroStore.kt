@@ -21,6 +21,7 @@ class MacroStore(private val context: Context) {
             try { LayoutJson.fromJson(JSONObject(it)) } catch (e: Exception) { null }
         } ?: DefaultLayout.layout()
         addNewDefaultPages(layout)
+        upgradeTeamsKeys(layout)
         if (backupFile?.exists() == false) writeBackup(export(layout))
         return layout
     }
@@ -70,7 +71,19 @@ class MacroStore(private val context: Context) {
         if (changed) save(layout)
     }
 
+    /** 1.2: Teams keys focus Teams first, so they work from a Citrix window. Only untouched keys change. */
+    private fun upgradeTeamsKeys(layout: Layout) {
+        if (prefs.getBoolean(TEAMS_UPGRADE_FLAG, false)) return
+        var changed = false
+        layout.pages.firstOrNull { it.name == DefaultLayout.TEAMS_PAGE }?.buttons?.forEach { b ->
+            DefaultLayout.TEAMS_FOCUS_UPGRADE[b?.action]?.let { b!!.action = it; changed = true }
+        }
+        prefs.edit().putBoolean(TEAMS_UPGRADE_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
     private companion object {
+        const val TEAMS_UPGRADE_FLAG = "upgraded_teams_focus"
         const val KEY = "layout_v3"
         const val BACKUP_NAME = "macropad-layout.json"
     }

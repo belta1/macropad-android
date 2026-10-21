@@ -14,6 +14,15 @@
 - **⇄ switch button** next to the status chip (2+ computers): hands the macropad to the other
   computer in one tap.
 - Export/backup files (format version 2) also carry the computer settings; version 1 files still import.
+- **Teams keys work from any window** (e.g. while a Citrix session has focus): Mute uses Windows 11's
+  call mute (Win+Alt+K); the others focus Teams (Win+8), send the shortcut and Alt+Tab back.
+  Existing layouts are upgraded once (only keys still set to the old defaults).
+- **Citrix page**: jump between the remote desktop and local apps (Win+number), Citrix session
+  hotkeys (Ctrl+Alt+Del, Task manager, Start, switch apps), window/full screen. See
+  [docs/citrix.md](docs/citrix.md).
+- **Not connected banner** in place of the media dock while no computer is connected.
+- Macro hints for "focus app + shortcut" keys (`Win+8 → Ctrl+2`, `Ctrl+Shift+O ↩`); the selected
+  tab is kept in view.
 
 ## 1.1.0
 

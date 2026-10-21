@@ -4,9 +4,37 @@ package dev.belta.macropad.model
 object DefaultLayout {
     const val CUSTOM_PAGE = "Custom"
     const val TRACKPAD_PAGE = "Trackpad"
+    const val TEAMS_PAGE = "Teams"
+    const val CITRIX_PAGE = "Citrix"
 
     /** Pages added in later versions; inserted once into existing layouts at their default position. */
-    val ADDED_PAGES = listOf("Desktop", "Teams", TRACKPAD_PAGE)
+    val ADDED_PAGES = listOf("Desktop", TEAMS_PAGE, CITRIX_PAGE, TRACKPAD_PAGE)
+
+    // Taskbar positions (Win+1…9, counting pinned apps after Start/Search) on the work PC. Win+number
+    // focuses an app even while a Citrix / Remote Desktop window has the keyboard.
+    private const val OUTLOOK_SLOT = 2
+    private const val REMOTE_SLOT = 4
+    private const val EXPLORER_SLOT = 6
+    private const val EDGE_SLOT = 7
+    private const val TEAMS_SLOT = 8
+
+    /** Sends a Teams shortcut from any window: focus Teams, send it, return to the previous window. */
+    private fun inTeams(shortcut: String) = "win+$TEAMS_SLOT\ndelay:300\n$shortcut\ndelay:150\nalt+tab"
+
+    /** Focuses Teams and sends a shortcut that should leave Teams in front (navigation). */
+    private fun toTeams(shortcut: String) = "win+$TEAMS_SLOT\ndelay:300\n$shortcut"
+
+    /**
+     * Teams keys of 1.0/1.1 (which only worked with Teams focused) -> their replacements; applied
+     * once to existing layouts by [MacroStore].
+     */
+    val TEAMS_FOCUS_UPGRADE: Map<String, String> by lazy {
+        val old = listOf("ctrl+shift+m", "ctrl+shift+o", "ctrl+shift+k", "ctrl+shift+e", "ctrl+shift+h",
+            "ctrl+space", "ctrl+shift+p", "ctrl+shift+y", "ctrl+shift+a", "ctrl+shift+d",
+            "ctrl+1", "ctrl+2", "ctrl+4", "ctrl+e", "ctrl+n")
+        val new = layout().pages.first { it.name == TEAMS_PAGE }.buttons.map { it!!.action }
+        old.zip(new).filter { (a, b) -> a != b }.toMap()
+    }
 
     private val c = Palette.colors
     private val BLUE = c[0]; private val GREEN = c[1]; private val ORANGE = c[2]; private val RED = c[3]
@@ -119,23 +147,45 @@ object DefaultLayout {
             b("Word count", "ctrl+shift+g", GREEN, "hash"),
             b("Clear formatting", "ctrl+space", RED, "format_clear"),
         )),
-        // Shortcuts for the new Microsoft Teams on Windows.
-        Page("Teams", mutableListOf(
-            b("Mute / Unmute", "ctrl+shift+m", RED, "mic_off", toggle = true),
-            b("Camera on / off", "ctrl+shift+o", BLUE, "videocam", toggle = true),
-            b("Raise hand", "ctrl+shift+k", YELLOW, "hand", toggle = true),
-            b("Share screen", "ctrl+shift+e", TEAL, "screen_share"),
-            b("Leave call", "ctrl+shift+h", RED, "call_end"),
+        // New Microsoft Teams on Windows. Teams runs on the PC itself, so every key first focuses it
+        // (Win+number) — they work while a Citrix session has the keyboard. Mute uses Windows 11's
+        // call mute (Win+Alt+K), which works from any window. Push to talk needs Teams in front.
+        Page(TEAMS_PAGE, mutableListOf(
+            b("Mute / Unmute", "win+alt+k", RED, "mic_off", toggle = true),
+            b("Camera on / off", inTeams("ctrl+shift+o"), BLUE, "videocam", toggle = true),
+            b("Raise hand", inTeams("ctrl+shift+k"), YELLOW, "hand", toggle = true),
+            b("Share screen", toTeams("ctrl+shift+e"), TEAL, "screen_share"),
+            b("Leave call", inTeams("ctrl+shift+h"), RED, "call_end"),
             b("Push to talk", "ctrl+space", GREEN, "mic"),
-            b("Blur background", "ctrl+shift+p", PURPLE, "blur", toggle = true),
-            b("Admit from lobby", "ctrl+shift+y", ORANGE, "group"),
-            b("Accept call", "ctrl+shift+a", GREEN, "call"),
-            b("Decline call", "ctrl+shift+d", RED, "call_end"),
-            b("Activity", "ctrl+1", GRAY, "bell"),
-            b("Chat", "ctrl+2", BLUE, "chat"),
-            b("Calendar", "ctrl+4", PURPLE, "calendar"),
-            b("Search", "ctrl+e", TEAL, "search"),
-            b("New chat", "ctrl+n", BLUE, "edit"),
+            b("Blur background", inTeams("ctrl+shift+p"), PURPLE, "blur", toggle = true),
+            b("Admit from lobby", inTeams("ctrl+shift+y"), ORANGE, "group"),
+            b("Accept call", inTeams("ctrl+shift+a"), GREEN, "call"),
+            b("Decline call", inTeams("ctrl+shift+d"), RED, "call_end"),
+            b("Activity", toTeams("ctrl+1"), GRAY, "bell"),
+            b("Chat", toTeams("ctrl+2"), BLUE, "chat"),
+            b("Calendar", toTeams("ctrl+4"), PURPLE, "calendar"),
+            b("Search", toTeams("ctrl+e"), TEAL, "search"),
+            b("New chat", toTeams("ctrl+n"), BLUE, "edit"),
+        )),
+        // Citrix / remote desktops on one screen, local apps on the others. Win+… goes to the local PC
+        // while the session is in a window; the Ctrl/Alt+F-key hotkeys are Citrix Workspace defaults
+        // that it translates into the key inside the session.
+        Page(CITRIX_PAGE, mutableListOf(
+            b("Remote desktop", "win+$REMOTE_SLOT", BLUE, "desktop"),
+            b("Teams", "win+$TEAMS_SLOT", PURPLE, "group"),
+            b("Outlook", "win+$OUTLOOK_SLOT", BLUE, "mail"),
+            b("Edge", "win+$EDGE_SLOT", TEAL, "globe"),
+            b("Explorer (local)", "win+$EXPLORER_SLOT", YELLOW, "folder"),
+            b("Ctrl+Alt+Del (session)", "ctrl+f1", RED, "lock"),
+            b("Task manager (session)", "ctrl+f3", ORANGE, "tune"),
+            b("Start (session)", "ctrl+f2", GRAY, "task_view"),
+            b("Next app (session)", "alt+f3", TEAL, "chevron_right"),
+            b("Prev app (session)", "alt+shift+f3", TEAL, "chevron_left"),
+            b("Window / full screen", "shift+f2", GRAY, "open_in_new"),
+            b("Copy", "ctrl+c", GRAY, "copy"),
+            b("Paste", "ctrl+v", GRAY, "paste"),
+            b("Snip (local)", "win+shift+s", GREEN, "camera"),
+            b("Lock PC", "win+l", RED, "lock"),
         )),
         // Touchpad surface with click and scroll keys.
         // The keys are the row under the touchpad (editable like any other keys).

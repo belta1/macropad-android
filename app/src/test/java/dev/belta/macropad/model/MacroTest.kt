@@ -103,4 +103,19 @@ class MacroTest {
         }
         throw AssertionError("expected '$action' to be rejected")
     }
+
+    @Test
+    fun `focus-app macros are described by their shortcut`() {
+        assertEquals("Ctrl+Shift+O ↩", Macro.describe("win+8\ndelay:300\nctrl+shift+o\ndelay:150\nalt+tab"))
+        assertEquals("Win+8 → Ctrl+2", Macro.describe("win+8\ndelay:300\nctrl+2"))
+        assertEquals("Macro · 3 steps", Macro.describe("win+8\nctrl+2\nctrl+3"))
+    }
+
+    @Test
+    fun `old Teams keys upgrade to focus-safe ones`() {
+        val upgrade = DefaultLayout.TEAMS_FOCUS_UPGRADE
+        assertEquals("win+alt+k", upgrade["ctrl+shift+m"])
+        assertEquals("win+8\ndelay:300\nctrl+shift+o\ndelay:150\nalt+tab", upgrade["ctrl+shift+o"])
+        assertEquals(null, upgrade["ctrl+space"]) // push to talk stays a held key
+    }
 }

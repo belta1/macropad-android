@@ -13,7 +13,9 @@ Windows laptops/desktops.
 ## Features
 
 - **Pages (tabs)** with ready-made shortcuts: **Desktop** (open apps, virtual desktops),
-  **VS Code**, **Chrome**, **Excel**, **Word**, **Teams**, a **Trackpad**, and an empty **Custom** page.
+  **VS Code**, **Chrome**, **Excel**, **Word**, **Teams**, **Citrix**, a **Trackpad**, and an empty
+  **Custom** page. Teams keys work even while a Citrix / Remote Desktop window has focus — see
+  [docs/citrix.md](docs/citrix.md).
 - **Media dock** on every page: Previous · Play/Pause · Next · Volume − · Volume +.
 - **Trackpad page**: pointer with acceleration, tap / two-finger tap to click / right-click,
   two-finger or edge-strip scrolling, long-press to drag, plus editable click/scroll keys.
