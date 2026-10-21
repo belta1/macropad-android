@@ -439,7 +439,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             typeface = ui.fontMedium
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
             setPadding(ui.dp(8), 0, 0, 0)
-            maxLines = 3
+            // Always two lines, so the chip (and the sidebar under it) keeps its size as the status
+            // changes; the full text is in Diagnostics (tap the chip).
+            setLines(2)
             ellipsize = TextUtils.TruncateAt.END
             text = "Starting…"
         }
