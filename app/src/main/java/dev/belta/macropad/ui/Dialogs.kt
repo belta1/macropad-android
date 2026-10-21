@@ -537,9 +537,8 @@ class Dialogs(private val host: MacropadHost) {
             }
         } + "Add a value…"
         ui.dialog()
-            .setTitle("Saved values")
-            .setMessage("Used in typed text as {secret:name}. Stored encrypted on this tablet only; " +
-                "not included in backups or exports.")
+            // An AlertDialog shows either a message or a list, so the note lives in the title.
+            .setTitle("Saved values · encrypted, this tablet only")
             .setItems(items.toTypedArray()) { _, which ->
                 if (which < names.size) editSavedValue(names[which])
                 else promptText("Name (letters, digits, _)", "") { name ->
