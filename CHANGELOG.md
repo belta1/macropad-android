@@ -3,7 +3,7 @@
 ## 1.3.0
 
 - **Key editor**: Save, Cancel and Delete moved to a header above the form, so the on-screen
-  keyboard can no longer hide them; text fields no longer open the full-screen landscape keyboard.
+  keyboard can no longer hide them.
 - **Sidebar on every page** (right or left: ⚙ → Sidebar): connection status, Record, Edit, Settings and the ⇄
   switch button (moved from the top bar, which now holds only the tabs), plus four action keys:
   **Away**, **Lock PC**, **Work Citrix** and a free slot (editable in edit mode).

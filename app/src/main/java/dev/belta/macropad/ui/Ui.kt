@@ -10,6 +10,8 @@ import android.graphics.drawable.StateListDrawable
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -26,6 +28,18 @@ class Ui(val context: Context) {
     fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
 
     fun dialog(): AlertDialog.Builder = AlertDialog.Builder(context, R.style.Theme_Macropad_Dialog)
+
+    /**
+     * Opens the on-screen keyboard when [field] is focused. Fire OS sometimes leaves it closed for
+     * fields inside dialogs.
+     */
+    fun showKeyboardOnFocus(field: EditText) {
+        field.setOnFocusChangeListener { v, focused ->
+            if (focused) v.post {
+                context.getSystemService(InputMethodManager::class.java)?.showSoftInput(v, InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
+    }
 
     fun toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
 

@@ -555,7 +555,6 @@ class Dialogs(private val host: MacropadHost) {
     private fun editSavedValue(name: String) {
         val hidden = looksSecret(name)
         val input = EditText(ui.context).apply {
-            imeOptions = KeyEditor.NO_FULLSCREEN_IME
             setSingleLine()
             if (hidden) {
                 inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -619,7 +618,6 @@ class Dialogs(private val host: MacropadHost) {
 
     fun askPin(title: String, onPin: (String) -> Unit) {
         val input = EditText(ui.context).apply {
-            imeOptions = KeyEditor.NO_FULLSCREEN_IME
             setSingleLine() // before the input type: it would replace the password masking
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
             transformationMethod = PasswordTransformationMethod.getInstance()
@@ -640,7 +638,6 @@ class Dialogs(private val host: MacropadHost) {
 
     fun promptText(title: String, initial: String, allowEmpty: Boolean = false, hint: String? = null, onOk: (String) -> Unit) {
         val input = EditText(ui.context).apply {
-            imeOptions = KeyEditor.NO_FULLSCREEN_IME
             setText(initial); setSingleLine(); selectAll(); this.hint = hint
         }
         ui.dialog()

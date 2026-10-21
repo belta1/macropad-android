@@ -6,7 +6,6 @@ import android.graphics.Typeface
 import android.text.InputType
 import android.util.TypedValue
 import android.view.ViewGroup
-import android.view.inputmethod.EditorInfo
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -50,11 +49,9 @@ object KeyEditor {
             hint = "Label"
             setText(initial?.label ?: "")
             setSingleLine()
-            imeOptions = NO_FULLSCREEN_IME
         }
         val action = EditText(context).apply {
             hint = "Action, e.g. ctrl+shift+t"
-            imeOptions = NO_FULLSCREEN_IME
             setText(initial?.action ?: "")
             typeface = Typeface.MONOSPACE
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
@@ -68,7 +65,6 @@ object KeyEditor {
         }
         val longAction = EditText(context).apply {
             hint = "Long-press action (optional), e.g. ctrl+space"
-            imeOptions = NO_FULLSCREEN_IME
             setText(initial?.longAction ?: "")
             typeface = Typeface.MONOSPACE
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
@@ -172,12 +168,11 @@ object KeyEditor {
         if (canDelete) header.addView(ui.chip("Delete", "delete") { dialog.dismiss(); onDelete() })
         header.addView(ui.chip("Cancel", "close") { dialog.dismiss() })
         header.addView(ui.chip("Save", "check", Palette.colors[0]) { save() })
+        for (field in listOf(label, action, longAction)) ui.showKeyboardOnFocus(field)
         dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         dialog.show()
     }
 
-    /** Keeps the landscape keyboard from taking the whole screen (Fire OS does that by default). */
-    const val NO_FULLSCREEN_IME = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
 
     private const val HELP = """One step per line:
   ctrl+shift+t     key combo (US key names)

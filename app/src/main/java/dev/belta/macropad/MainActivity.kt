@@ -442,6 +442,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             // Always two lines, so the chip (and the sidebar under it) keeps its size as the status
             // changes; the full text is in Diagnostics (tap the chip).
             setLines(2)
+            gravity = Gravity.CENTER_VERTICAL // one-line names sit level with the dot
             ellipsize = TextUtils.TruncateAt.END
             text = "Starting…"
         }
