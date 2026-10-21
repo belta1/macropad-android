@@ -38,6 +38,14 @@ class LayoutJsonTest {
         assertEquals(DefaultLayout.dock().buttons.size, layout.dock.buttons.size)
     }
 
+    @Test
+    fun `default dock fills every dock slot, desktop keys last`() {
+        val dock = DefaultLayout.dock().buttons
+        assertEquals(Layout.DOCK_SIZE, dock.size)
+        assertEquals(DefaultLayout.DESKTOP_DOCK.map { it.action },
+            dock.takeLast(DefaultLayout.DESKTOP_DOCK.size).map { it!!.action })
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun `rejects other files`() {
         LayoutJson.fromJson(JSONObject("""{"format":"something-else","rows":1,"cols":1,"pages":[]}"""))

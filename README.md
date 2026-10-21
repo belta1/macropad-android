@@ -16,7 +16,8 @@ Windows laptops/desktops.
   **VS Code**, **Chrome**, **Excel**, **Word**, **Teams**, **Citrix**, a **Trackpad**, and an empty
   **Custom** page. Teams keys work even while a Citrix / Remote Desktop window has focus — see
   [docs/citrix.md](docs/citrix.md).
-- **Media dock** on every page: Previous · Play/Pause · Next · Volume − · Volume +.
+- **Dock** on every page: media keys as icons (Previous · Play/Pause · Next · Volume − · Volume +)
+  and virtual-desktop switching (Prev desktop · Task view · Next desktop).
 - **Trackpad page**: pointer with acceleration, tap / two-finger tap to click / right-click,
   two-finger or edge-strip scrolling, long-press to drag, plus editable click/scroll keys.
 - **Toggle keys** (Teams mute, camera, hand, blur) show their ON/OFF state; any key can also have a

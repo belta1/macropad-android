@@ -22,7 +22,7 @@ enum class PageKind { KEYS, TRACKPAD }
 class Page(var name: String, val buttons: MutableList<MacroButton?>, val kind: PageKind = PageKind.KEYS)
 
 /**
- * [dock] is a row of keys (media controls by default) shown below every page.
+ * [dock] is a row of keys (media controls and desktop switching by default) shown below every page.
  * [hardware] holds the actions of the tablet's volume up / volume down buttons; an empty slot
  * leaves that button controlling the tablet volume as usual.
  */
@@ -40,7 +40,7 @@ class Layout(var rows: Int, var cols: Int, val pages: MutableList<Page>, val doc
     companion object {
         const val HW_VOLUME_UP = 0
         const val HW_VOLUME_DOWN = 1
-        const val DOCK_SIZE = 5
+        const val DOCK_SIZE = 8
     }
 }
 

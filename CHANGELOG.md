@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0
+
+- **Desktop switching on every page**: the dock now holds Prev desktop (Win+Ctrl+←), Task view
+  (Win+Tab) and Next desktop (Win+Ctrl+→) next to the media keys. Existing layouts get them once,
+  in empty dock slots.
+- **Cleaner dock**: media keys show only a larger icon; a divider separates them from the desktop
+  keys. Dock keys stay editable in edit mode.
+
 ## 1.2.0
 
 - **Toggle keys fixed**: they are now held while touched like other keys (Teams missed the

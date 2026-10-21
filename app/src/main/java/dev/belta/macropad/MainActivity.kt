@@ -49,6 +49,7 @@ import dev.belta.macropad.model.Palette
 import dev.belta.macropad.model.Step
 import dev.belta.macropad.model.TextVariables
 import dev.belta.macropad.ui.Dialogs
+import dev.belta.macropad.ui.Icons
 import dev.belta.macropad.ui.KeyEditor
 import dev.belta.macropad.ui.KeyViews
 import dev.belta.macropad.ui.MacropadHost
@@ -569,14 +570,29 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         content.removeAllViews()
         content.addView(if (page.kind == PageKind.TRACKPAD) buildTrackpad(page) else buildGrid(page))
 
+        // Icon-only keys (media) take one share of the width, labelled keys two; a divider
+        // separates the two groups.
         dockRow.removeAllViews()
+        var previousIconOnly: Boolean? = null
         for (index in 0 until Layout.DOCK_SIZE) {
+            val iconOnly = dockIconOnly(layout.button(layout.dock, index))
+            if (previousIconOnly != null && iconOnly != previousIconOnly) {
+                dockRow.addView(View(this).apply { setBackgroundColor(STROKE) },
+                    LinearLayout.LayoutParams(ui.dp(1), ViewGroup.LayoutParams.MATCH_PARENT).apply {
+                        setMargins(ui.dp(6), ui.dp(12), ui.dp(6), ui.dp(12))
+                    })
+            }
+            previousIconOnly = iconOnly
             dockRow.addView(keyView(layout.dock, index, compact = true),
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, if (iconOnly) 1f else 2f).apply {
                     setMargins(ui.dp(3), 0, ui.dp(3), 0)
                 })
         }
     }
+
+    /** Dock keys that only send a media key show just their icon. Empty slots count as icon-only. */
+    private fun dockIconOnly(button: MacroButton?) = button == null ||
+        (Icons.get(button.icon) != null && runCatching { Macro.parse(button.action) }.getOrNull()?.singleOrNull() is Step.Media)
 
     private fun buildGrid(page: Page) = GridLayout(this).apply {
         isMotionEventSplittingEnabled = true
@@ -621,6 +637,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         page, index, layout.button(page, index), compact, editing,
         toggledOn = toggleKey(page, index) in toggledOn,
         emphasize = page === layout.dock && index == 1,
+        iconOnly = page === layout.dock && dockIconOnly(layout.button(page, index)),
     )
 
     private fun toggleKey(page: Page, index: Int) = "${page.name}#$index"

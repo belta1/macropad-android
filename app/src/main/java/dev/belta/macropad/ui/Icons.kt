@@ -90,6 +90,8 @@ object Icons {
         "desktop_close" to R.drawable.ic_k_desktop_close,
         "mouse" to R.drawable.ic_k_mouse,
         "desktop" to R.drawable.ic_k_desktop,
+        "desktop_prev" to R.drawable.ic_k_desktop_prev,
+        "desktop_next" to R.drawable.ic_k_desktop_next,
         "lock" to R.drawable.ic_k_lock,
         "camera" to R.drawable.ic_k_camera,
         "folder" to R.drawable.ic_k_folder,

@@ -22,6 +22,7 @@ class MacroStore(private val context: Context) {
         } ?: DefaultLayout.layout()
         addNewDefaultPages(layout)
         upgradeTeamsKeys(layout)
+        addDesktopDockKeys(layout)
         if (backupFile?.exists() == false) writeBackup(export(layout))
         return layout
     }
@@ -82,8 +83,24 @@ class MacroStore(private val context: Context) {
         if (changed) save(layout)
     }
 
+    /** 1.3: desktop switching joins the dock, in the free slots after the media keys. */
+    private fun addDesktopDockKeys(layout: Layout) {
+        if (prefs.getBoolean(DOCK_UPGRADE_FLAG, false)) return
+        val start = Layout.DOCK_SIZE - DefaultLayout.DESKTOP_DOCK.size
+        var changed = false
+        DefaultLayout.DESKTOP_DOCK.forEachIndexed { i, button ->
+            if (layout.button(layout.dock, start + i) == null) {
+                layout.setButton(layout.dock, start + i, button)
+                changed = true
+            }
+        }
+        prefs.edit().putBoolean(DOCK_UPGRADE_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
     private companion object {
         const val TEAMS_UPGRADE_FLAG = "upgraded_teams_focus"
+        const val DOCK_UPGRADE_FLAG = "upgraded_desktop_dock"
         const val KEY = "layout_v3"
         const val BACKUP_NAME = "macropad-layout.json"
     }

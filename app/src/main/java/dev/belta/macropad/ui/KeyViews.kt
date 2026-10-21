@@ -31,7 +31,8 @@ import dev.belta.macropad.ui.Ui.Companion.withAlpha
 
 /**
  * Builds key views: tinted icon badge, label and a muted shortcut hint on a dark surface washed
- * with the key's accent color. Compact keys (the dock) lay the icon and label side by side.
+ * with the key's accent color. Compact keys (the dock) lay the icon and label side by side, or
+ * show just a larger icon when [build]'s `iconOnly` is set (media keys).
  */
 class KeyViews(private val ui: Ui, private val listener: Listener) {
 
@@ -45,6 +46,7 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
     fun build(
         page: Page, index: Int, button: MacroButton?,
         compact: Boolean, editing: Boolean, toggledOn: Boolean = false, emphasize: Boolean = false,
+        iconOnly: Boolean = false,
     ): View {
         val key = LinearLayout(ui.context).apply {
             orientation = if (compact) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
@@ -67,11 +69,16 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
             val filled = emphasize || toggledOn
             key.background = keyBackground(accent, radius, filled)
             val iconRes = Icons.get(button.icon)
-            if (compact) {
+            if (compact && iconOnly && iconRes != null) {
+                key.contentDescription = button.label
+                key.addView(ui.icon(button.icon!!, if (filled) Color.WHITE else lighten(accent, 0.35f)),
+                    LinearLayout.LayoutParams(ui.dp(32), ui.dp(32)))
+            } else if (compact) {
                 if (iconRes != null) key.addView(ui.icon(button.icon!!, if (filled) Color.WHITE else accent),
                     LinearLayout.LayoutParams(ui.dp(26), ui.dp(26)))
                 key.addView(label(button.label, 14f, 15f).apply {
                     maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
                     setPadding(if (iconRes != null) ui.dp(10) else 0, 0, 0, 0)
                 })
             } else {

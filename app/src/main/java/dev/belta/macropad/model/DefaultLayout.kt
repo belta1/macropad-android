@@ -47,13 +47,23 @@ object DefaultLayout {
     /** Opens an app through the Windows Run box (Win+R), so it works for anything on the PATH. */
     private fun run(command: String) = "win+r\ndelay:400\ntext:$command\\n"
 
-    fun dock() = Page("Media", mutableListOf(
+    /** Media keys (shown as icons only) plus virtual-desktop navigation, below every page. */
+    fun dock() = Page("Media", (MEDIA_DOCK + DESKTOP_DOCK).toMutableList())
+
+    private val MEDIA_DOCK get() = listOf(
         b("Previous", "media:prev", GRAY, "prev"),
         b("Play / Pause", "media:playpause", BLUE, "play_pause"),
         b("Next", "media:next", GRAY, "next"),
         b("Volume −", "media:voldown", GRAY, "volume_down"),
         b("Volume +", "media:volup", GRAY, "volume_up"),
-    ))
+    )
+
+    /** Added to existing docks once by [MacroStore] (1.3). */
+    val DESKTOP_DOCK get() = listOf(
+        b("Prev desktop", "win+ctrl+left", TEAL, "desktop_prev"),
+        b("Task view", "win+tab", PURPLE, "task_view"),
+        b("Next desktop", "win+ctrl+right", TEAL, "desktop_next"),
+    )
 
     fun hardware() = Page("Tablet buttons", mutableListOf(
         b("Volume +", "media:volup", GRAY, "volume_up"),
