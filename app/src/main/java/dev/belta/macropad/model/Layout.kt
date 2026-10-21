@@ -49,7 +49,7 @@ object Palette {
 /** JSON form of a [Layout]; used for storage and for export/import files. */
 object LayoutJson {
     const val FORMAT = "macropad-layout"
-    const val VERSION = 1
+    const val VERSION = 2 // 2: export files also carry "computers" (ComputerProfiles)
 
     fun toJson(layout: Layout) = JSONObject().apply {
         put("format", FORMAT)

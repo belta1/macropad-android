@@ -105,7 +105,7 @@ class HidPeripheral(private val context: Context) {
 
     // Per-host CCCD values. Bonded hosts (Windows in particular) expect them to survive reconnects.
     private val cccdStore = context.getSharedPreferences("hid_cccd", Context.MODE_PRIVATE)
-    // Computers served so far: address -> name.
+    // Computers served so far: address -> Bluetooth name.
     private val knownHosts = context.getSharedPreferences("hid_hosts", Context.MODE_PRIVATE)
     private val hostSettings = context.getSharedPreferences("hid_settings", Context.MODE_PRIVATE)
     private var reenableBluetooth = false
@@ -311,11 +311,34 @@ class HidPeripheral(private val context: Context) {
     // ---------------------------------------------------------------- computers
 
     fun knownHosts(): List<Host> =
-        knownHosts.all.map { (address, name) -> Host(address, name as? String ?: address) }.sortedBy { it.name }
+        knownHosts.all.keys.map { Host(it, hostName(it)) }.sortedBy { it.name }
 
-    fun preferredHost(): Host? = hostSettings.getString(PREFERRED_HOST, null)?.let { address ->
-        knownHosts().firstOrNull { it.address == address } ?: Host(address, address)
+    /** The connected computer, if any. */
+    fun currentHost(): Host? = host?.let { Host(it.address, hostName(it.address)) }
+
+    /** Names the user gave computers (address -> name or null). */
+    @Volatile var customName: (String) -> String? = { null }
+
+    /** The user's name for a computer, else its Bluetooth name, else its address. */
+    fun hostName(address: String): String =
+        customName(address) ?: knownHosts.getString(address, null) ?: address
+
+    /** Bluetooth name of a computer as last seen, if known. */
+    fun bluetoothName(address: String): String? = knownHosts.getString(address, null)
+
+    /** Call after [customName] results changed, so the status text shows the new names. */
+    fun namesChanged() {
+        host?.let { if (state == State.CONNECTED) setState(State.CONNECTED, "Connected to ${hostName(it.address)}") }
+        refreshAdvertisingState()
     }
+
+    /**
+     * Hands the macropad over to [address]: the current computer is disconnected and ignored from
+     * now on, and the other one reconnects as soon as it sees the macropad advertising again.
+     */
+    fun switchTo(address: String) = setPreferredHost(address)
+
+    fun preferredHost(): Host? = hostSettings.getString(PREFERRED_HOST, null)?.let { Host(it, hostName(it)) }
 
     /**
      * Restricts the macropad to one computer (null = whichever connects first). A BLE peripheral
@@ -323,7 +346,7 @@ class HidPeripheral(private val context: Context) {
      */
     fun setPreferredHost(address: String?) {
         hostSettings.edit().putString(PREFERRED_HOST, address).apply()
-        event("Computer selection: ${address?.let { a -> knownHosts().firstOrNull { it.address == a }?.name ?: a } ?: "any"}")
+        event("Computer selection: ${address?.let { hostName(it) } ?: "any"}")
         val current = host
         if (current != null && address != null && current.address != address) {
             server?.cancelConnection(current)
@@ -378,7 +401,7 @@ class HidPeripheral(private val context: Context) {
         return Diagnostics(
             state = state,
             detail = detail,
-            host = current?.let { Host(it.address, it.name ?: it.address) },
+            host = currentHost(),
             bonded = current?.let { it.bondState == BluetoothDevice.BOND_BONDED },
             preferredHost = preferredHost(),
             classicConnectable = adapter?.let { it.scanMode != BluetoothAdapter.SCAN_MODE_NONE },
@@ -539,7 +562,8 @@ class HidPeripheral(private val context: Context) {
         }
 
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
-            val name = device.name ?: device.address
+            device.name?.let { if (newState == BluetoothProfile.STATE_CONNECTED) knownHosts.edit().putString(device.address, it).apply() }
+            val name = hostName(device.address)
             debug("connection ${device.address} status=$status state=$newState bond=${device.bondState}")
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 val preferred = hostSettings.getString(PREFERRED_HOST, null)
@@ -549,7 +573,7 @@ class HidPeripheral(private val context: Context) {
                     return
                 }
                 host = device
-                knownHosts.edit().putString(device.address, name).apply()
+                if (!knownHosts.contains(device.address)) knownHosts.edit().putString(device.address, name).apply()
                 stopAdvertising()
                 // Keeps the link up instead of letting Android drop an "idle" peripheral connection.
                 server?.connect(device, false)

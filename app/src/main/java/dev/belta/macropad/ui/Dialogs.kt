@@ -17,6 +17,7 @@ import dev.belta.macropad.hid.HidPeripheral
 import dev.belta.macropad.hid.KeyTiming
 import dev.belta.macropad.hid.KeyboardLayout
 import dev.belta.macropad.model.AppSettings
+import dev.belta.macropad.model.ComputerProfile
 import dev.belta.macropad.model.DefaultLayout
 import dev.belta.macropad.model.Layout
 import dev.belta.macropad.model.Macro
@@ -44,6 +45,8 @@ interface MacropadHost {
     /** Number of toggle keys currently shown as ON. */
     val toggledKeys: Int
     fun resetToggles()
+    /** A computer's name or settings changed. */
+    fun profilesChanged()
 }
 
 /** Settings menu and the dialogs behind it. */
@@ -55,8 +58,8 @@ class Dialogs(private val host: MacropadHost) {
         val items = listOfNotNull(
             if (host.toggledKeys > 0) "Reset ON/OFF keys (${host.toggledKeys} on)" to host::resetToggles else null,
             "Grid size (${host.layout.rows} × ${host.layout.cols})" to ::gridSize,
-            "Computer keyboard layout: ${host.settings.keyboardLayout.label}" to ::keyboardLayout,
-            "Key timing: ${host.settings.keyTiming.label}" to ::keyTiming,
+            "Default keyboard layout: ${host.settings.keyboardLayout.label}" to ::keyboardLayout,
+            "Default key timing: ${host.settings.keyTiming.label}" to ::keyTiming,
             "Computers…" to ::computers,
             "Tablet volume buttons…" to ::tabletButtons,
             "Pages…" to ::pages,
@@ -99,6 +102,7 @@ class Dialogs(private val host: MacropadHost) {
         }
     }
 
+    /** Known computers; tap one for its settings. */
     fun computers() {
         val hid = hid ?: return
         val hosts = hid.knownHosts()
@@ -106,26 +110,117 @@ class Dialogs(private val host: MacropadHost) {
             ui.toast("No computers yet — pair one first")
             return
         }
-        val names = listOf("Any computer (first to connect)") + hosts.map { it.name }
-        val selected = hid.preferredHost()?.let { p -> hosts.indexOfFirst { it.address == p.address } + 1 } ?: 0
+        val current = hid.currentHost()?.address
+        val preferred = hid.preferredHost()?.address
+        val labels = hosts.map { h ->
+            val status = when {
+                h.address == current -> "connected"
+                preferred == null || h.address == preferred -> "waiting"
+                else -> "ignored"
+            }
+            "${h.name}  ·  $status"
+        }
         ui.dialog()
-            .setTitle("Use the macropad with")
-            .setSingleChoiceItems(names.toTypedArray(), selected) { d, which ->
-                hid.setPreferredHost(if (which == 0) null else hosts[which - 1].address)
+            .setTitle(if (preferred == null) "Computers (any can connect)" else "Computers")
+            .setItems(labels.toTypedArray()) { _, i -> computer(hosts[i]) }
+            .setNegativeButton("Close", null)
+            .apply {
+                if (preferred != null) setNeutralButton("Allow any computer") { _, _ -> hid.setPreferredHost(null) }
+            }
+            .show()
+    }
+
+    private fun computer(computer: HidPeripheral.Host) {
+        val hid = hid ?: return
+        val profiles = host.service?.profiles ?: return
+        val address = computer.address
+        val profile = profiles[address]
+        val defaults = host.settings
+        val pagesShown = host.layout.pages.count { it.name !in profile.hiddenPages }
+        val items = listOfNotNull(
+            if (hid.preferredHost()?.address != address) "Use the macropad with this computer" to {
+                hid.switchTo(address)
+                ui.toast("Switching to ${computer.name}…")
+            } else null,
+            "Rename…" to { renameComputer(computer) },
+            "Keyboard layout: ${profile.keyboardLayout?.label ?: "default (${defaults.keyboardLayout.label})"}" to {
+                choose("Keyboard layout for ${computer.name}", KeyboardLayout.values().toList(), profile.keyboardLayout,
+                    "Default (${defaults.keyboardLayout.label})", { it.label }) { choice ->
+                    updateProfile(address) { it.keyboardLayout = choice }
+                }
+            },
+            "Key timing: ${profile.keyTiming?.label ?: "default (${defaults.keyTiming.label})"}" to {
+                choose("Key timing for ${computer.name}", KeyTiming.values().toList(), profile.keyTiming,
+                    "Default (${defaults.keyTiming.label})", { "${it.label} — held ${it.holdMs} ms" }) { choice ->
+                    updateProfile(address) { it.keyTiming = choice }
+                }
+            },
+            "Pages shown: $pagesShown of ${host.layout.pages.size}" to { computerPages(computer) },
+            "Start page: ${profile.startPage ?: "last used"}" to {
+                val pages = host.layout.pages.map { it.name }
+                choose("Start page for ${computer.name}", pages, profile.startPage, "Last used", { it }) { choice ->
+                    updateProfile(address) { it.startPage = choice }
+                }
+            },
+            "Forget this computer…" to {
+                confirm("Forget ${computer.name}?",
+                    "The tablet unpairs it. Remove \"${HidPeripheral.DEVICE_NAME}\" on that computer too.") {
+                    hid.forgetHost(address)
+                    profiles.remove(address)
+                    host.profilesChanged()
+                }
+            },
+        )
+        ui.dialog()
+            .setTitle(computer.name)
+            .setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }
+            .setNegativeButton("Back") { _, _ -> computers() }
+            .show()
+    }
+
+    private fun renameComputer(computer: HidPeripheral.Host) {
+        val bluetoothName = hid?.bluetoothName(computer.address) ?: computer.address
+        promptText("Rename computer", computer.name, allowEmpty = true,
+            hint = "Empty = Bluetooth name ($bluetoothName)") { name ->
+            updateProfile(computer.address) { it.name = name.ifBlank { null } }
+        }
+    }
+
+    private fun computerPages(computer: HidPeripheral.Host) {
+        val pages = host.layout.pages.map { it.name }
+        val hidden = host.service?.profiles?.get(computer.address)?.hiddenPages ?: return
+        val shown = BooleanArray(pages.size) { pages[it] !in hidden }
+        ui.dialog()
+            .setTitle("Pages for ${computer.name}")
+            .setMultiChoiceItems(pages.toTypedArray(), shown) { _, i, checked -> shown[i] = checked }
+            .setPositiveButton("Save") { _, _ ->
+                if (shown.none { it }) return@setPositiveButton ui.toast("Keep at least one page")
+                updateProfile(computer.address) { p ->
+                    p.hiddenPages.clear()
+                    pages.filterIndexedTo(p.hiddenPages) { i, _ -> !shown[i] }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun updateProfile(address: String, change: (ComputerProfile) -> Unit) {
+        host.service?.profiles?.update(address, change) ?: return
+        host.profilesChanged()
+    }
+
+    /** Single choice among [options] plus a first "use the default" entry ([current] null). */
+    private fun <T> choose(
+        title: String, options: List<T>, current: T?, defaultLabel: String, label: (T) -> String, onPick: (T?) -> Unit,
+    ) {
+        val labels = listOf(defaultLabel) + options.map(label)
+        ui.dialog()
+            .setTitle(title)
+            .setSingleChoiceItems(labels.toTypedArray(), current?.let { options.indexOf(it) + 1 } ?: 0) { d, i ->
+                onPick(if (i == 0) null else options[i - 1])
                 d.dismiss()
             }
-            .setNegativeButton("Close", null)
-            .setNeutralButton("Forget a computer…") { _, _ ->
-                ui.dialog()
-                    .setTitle("Forget computer")
-                    .setItems(hosts.map { it.name }.toTypedArray()) { _, i ->
-                        confirm("Forget ${hosts[i].name}?",
-                            "The tablet unpairs it. Remove \"${HidPeripheral.DEVICE_NAME}\" on that computer too.") {
-                            hid.forgetHost(hosts[i].address)
-                        }
-                    }
-                    .show()
-            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
@@ -153,8 +248,8 @@ class Dialogs(private val host: MacropadHost) {
             "missing — adb shell pm grant ${ui.context.packageName} android.permission.WRITE_SECURE_SETTINGS",
             d.secureSettingsGranted)
         d.audioProfilesBlocked?.let { line("Audio profiles blocked", if (it) "yes" else "no", it) }
-        line("Computer keyboard layout", host.settings.keyboardLayout.label)
-        line("Key timing", host.settings.keyTiming.label)
+        line("Keyboard layout", hid.keyboardLayout.label)
+        line("Key timing", hid.keyTiming.label)
         text.append("\nRecent events\n")
         val eventsStart = text.length
         text.append(if (d.events.isEmpty()) "(none)" else d.events.joinToString("\n"))
@@ -188,7 +283,7 @@ class Dialogs(private val host: MacropadHost) {
     private fun keyboardLayout() {
         val layouts = KeyboardLayout.values()
         ui.dialog()
-            .setTitle("Computer keyboard layout")
+            .setTitle("Default keyboard layout")
             .setSingleChoiceItems(layouts.map { it.label }.toTypedArray(), layouts.indexOf(host.settings.keyboardLayout)) { d, i ->
                 host.settings.keyboardLayout = layouts[i]
                 host.service?.applySettings()
@@ -322,7 +417,11 @@ class Dialogs(private val host: MacropadHost) {
 
     fun renamePage(index: Int) {
         val page = host.layout.pages[index]
-        promptText("Rename page", page.name) { name -> page.name = name; host.saveAndRender() }
+        promptText("Rename page", page.name) { name ->
+            host.service?.profiles?.renamePage(page.name, name)
+            page.name = name
+            host.saveAndRender()
+        }
     }
 
     private fun movePage(delta: Int) {
@@ -348,12 +447,12 @@ class Dialogs(private val host: MacropadHost) {
 
     // ---------------------------------------------------------------- helpers
 
-    fun promptText(title: String, initial: String, onOk: (String) -> Unit) {
-        val input = EditText(ui.context).apply { setText(initial); setSingleLine(); selectAll() }
+    fun promptText(title: String, initial: String, allowEmpty: Boolean = false, hint: String? = null, onOk: (String) -> Unit) {
+        val input = EditText(ui.context).apply { setText(initial); setSingleLine(); selectAll(); this.hint = hint }
         ui.dialog()
             .setTitle(title)
             .setView(FrameLayout(ui.context).apply { setPadding(ui.dp(20), ui.dp(8), ui.dp(20), 0); addView(input) })
-            .setPositiveButton("OK") { _, _ -> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(onOk) }
+            .setPositiveButton("OK") { _, _ -> input.text.toString().trim().takeIf { allowEmpty || it.isNotEmpty() }?.let(onOk) }
             .setNegativeButton("Cancel", null)
             .show()
     }

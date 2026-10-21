@@ -12,6 +12,7 @@ import java.io.File
  */
 class MacroStore(private val context: Context) {
     private val prefs = context.getSharedPreferences("macropad", Context.MODE_PRIVATE)
+    private val computers = ComputerProfiles(context)
 
     val backupFile: File? get() = context.getExternalFilesDir(null)?.let { File(it, BACKUP_NAME) }
 
@@ -20,14 +21,13 @@ class MacroStore(private val context: Context) {
             try { LayoutJson.fromJson(JSONObject(it)) } catch (e: Exception) { null }
         } ?: DefaultLayout.layout()
         addNewDefaultPages(layout)
-        if (backupFile?.exists() == false) writeBackup(LayoutJson.toJson(layout).toString(2))
+        if (backupFile?.exists() == false) writeBackup(export(layout))
         return layout
     }
 
     fun save(layout: Layout) {
-        val json = LayoutJson.toJson(layout).toString(2)
-        prefs.edit().putString(KEY, json).apply()
-        writeBackup(json)
+        prefs.edit().putString(KEY, LayoutJson.toJson(layout).toString()).apply()
+        writeBackup(export(layout))
     }
 
     private fun writeBackup(json: String) {
@@ -38,9 +38,16 @@ class MacroStore(private val context: Context) {
         }
     }
 
-    fun export(layout: Layout): String = LayoutJson.toJson(layout).toString(2)
+    /** Layout plus per-computer settings, as written to backup and export files. */
+    fun export(layout: Layout): String =
+        LayoutJson.toJson(layout).put("computers", computers.toJson()).toString(2)
 
     fun import(text: String): Layout = LayoutJson.fromJson(JSONObject(text))
+
+    /** Restores the per-computer settings of an export file, if it has them (version 2+). */
+    fun importComputers(text: String) {
+        JSONObject(text).optJSONObject("computers")?.let { computers.replaceAll(it) }
+    }
 
     /** Adds default pages introduced after the user's layout was saved, once each, at their default position. */
     private fun addNewDefaultPages(layout: Layout) {

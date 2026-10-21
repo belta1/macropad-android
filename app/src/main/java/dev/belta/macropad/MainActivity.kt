@@ -80,6 +80,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private lateinit var statusChip: LinearLayout
     private lateinit var statusDot: View
     private lateinit var statusText: TextView
+    private lateinit var switchButton: ImageView
     private lateinit var editButton: ImageView
     private lateinit var recordButton: ImageView
     private lateinit var recordBar: LinearLayout
@@ -94,6 +95,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     // On/off state of toggle keys ("page#index"); kept for this session.
     private val toggledOn = HashSet<String>()
+
+    // Computer whose page selection is shown; kept while it briefly disconnects.
+    private var profileAddress: String? = null
 
     private val page get() = layout.pages[pageIndex.coerceIn(0, layout.pages.lastIndex)]
     private val hid get() = service?.hid
@@ -172,7 +176,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
             val s = (binder as MacropadService.LocalBinder).service
             service = s
+            profileAddress = s.hid.currentHost()?.address ?: s.hid.preferredHost()?.address
             s.addListener(stateListener)
+            renderPage()
             if (pendingResetPairing) {
                 pendingResetPairing = false
                 s.hid.resetPairing()
@@ -271,6 +277,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             text = "Starting…"
         }
         statusChip.addView(statusText)
+        switchButton = ui.iconButton("swap") { switchComputer() }.apply { visibility = View.GONE }
+        bar.addView(switchButton)
         bar.addView(statusChip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ui.dp(44)).apply {
             marginStart = ui.dp(10)
         })
@@ -327,7 +335,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     private fun renderTabs() {
         tabs.removeAllViews()
+        val hidden = hiddenPages()
         layout.pages.forEachIndexed { i, p ->
+            if (p.name in hidden) return@forEachIndexed
             val active = i == pageIndex
             tabs.addView(TextView(this).apply {
                 text = p.name
@@ -356,7 +366,16 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         recordStatus.text = recorder.status()
     }
 
+    /** Pages hidden for the current computer (never all of them). */
+    private fun hiddenPages(): Set<String> {
+        val hidden = profileAddress?.let { service?.profiles?.get(it)?.hiddenPages } ?: return emptySet()
+        return if (layout.pages.all { it.name in hidden }) emptySet() else hidden
+    }
+
     private fun renderPage() {
+        if (page.name in hiddenPages()) {
+            selectPage(layout.pages.indexOfFirst { it.name !in hiddenPages() })
+        }
         renderTabs()
         renderChrome()
         heldSteps.keys.toList().forEach { releaseKey(it) }
@@ -487,10 +506,45 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             HidPeripheral.State.CONNECTED -> detail.removePrefix("Connected to ")
             else -> detail
         }
+        switchButton.visibility = if ((hid?.knownHosts()?.size ?: 0) >= 2) View.VISIBLE else View.GONE
+        if (state == HidPeripheral.State.CONNECTED) hid?.currentHost()?.let { onComputerConnected(it.address) }
         if (state != HidPeripheral.State.CONNECTED && toggledOn.isNotEmpty()) {
             toggledOn.clear() // the computer's state is unknown after a reconnect
             renderPage()
         }
+    }
+
+    /** Shows the pages chosen for [address], opening its start page when a different computer connects. */
+    private fun onComputerConnected(address: String) {
+        if (address == profileAddress) return
+        profileAddress = address
+        service?.profiles?.get(address)?.startPage
+            ?.let { name -> layout.pages.indexOfFirst { it.name == name } }
+            ?.takeIf { it >= 0 }
+            ?.let { selectPage(it) }
+        renderPage()
+    }
+
+    /** Hands the macropad to the other computer (or lets the user pick when there are several). */
+    private fun switchComputer() {
+        val hid = hid ?: return
+        val current = hid.currentHost()?.address ?: hid.preferredHost()?.address
+        val others = hid.knownHosts().filter { it.address != current }
+        when (others.size) {
+            0 -> ui.toast("Pair another computer first")
+            1 -> {
+                hid.switchTo(others[0].address)
+                ui.toast("Switching to ${others[0].name}…")
+            }
+            else -> dialogs.computers()
+        }
+    }
+
+    override fun profilesChanged() {
+        store.save(layout) // the backup file includes computer settings
+        service?.applySettings()
+        hid?.namesChanged()
+        renderPage()
     }
 
     @SuppressLint("MissingPermission")
@@ -585,8 +639,10 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
                     dialogs.confirm("Import layout?",
                         "Replaces all pages and keys with the ${imported.pages.size} pages in the file.") {
                         layout = imported
+                        store.importComputers(text)
                         selectPage(0)
                         saveAndRender()
+                        profilesChanged()
                     }
                 }
             }

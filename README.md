@@ -25,9 +25,11 @@ Windows laptops/desktops.
   see [docs/macro-language.md](docs/macro-language.md).
 - **Recorder** (●): press keys, type text or send combos — each is sent to the computer live and
   captured with its timing — then save it as a new key on the Custom page.
-- **Keyboard layouts** for typed text: English (US), Spanish (Latin America), Spanish (Spain).
-- **Several computers**: remembers every computer it has served; pick one or let the first to
-  connect win.
+- **Keyboard layouts** for typed text: English (US), English (US International), Spanish (Latin
+  America), Spanish (Spain).
+- **Several computers**: remembers every computer it has served; switch between them with one tap
+  (⇄). Each computer can have its own name, keyboard layout, key timing (e.g. slower for Citrix),
+  pages and start page.
 - **Runs in the background** as a foreground service, so the connection survives the screen being
   closed or recreated. Can start on boot and come to the front when the charger is plugged in.
 - **Backup**: layout auto-saved to a JSON file, plus export/import through the file picker.
@@ -94,8 +96,9 @@ Use a charger of at least 2 A — with the screen always on, a weak USB port can
 4. Windows connects, disconnects and reconnects within a few seconds (normal for BLE keyboards).
    The chip turns **green** with the computer's name.
 
-The computer reconnects automatically while the macropad runs. One computer is connected at a time;
-choose which in ⚙ → **Computers…**. **Avoid opening Bluetooth settings on the tablet** — its scan
+The computer reconnects automatically while the macropad runs. One computer is connected at a time:
+tap **⇄** to hand the macropad to the other one, or pick in ⚙ → **Computers…**, where each computer
+can also be renamed and given its own layout, key timing, pages and start page. **Avoid opening Bluetooth settings on the tablet** — its scan
 re-learns the PC as a Classic device. If connections drop, open ⚙ → **Diagnostics…**, and if needed
 **Reset pairing**, then remove and re-add *Fire Macropad* on the computer.
 See [docs/bluetooth-troubleshooting.md](docs/bluetooth-troubleshooting.md).
@@ -108,6 +111,7 @@ See [docs/bluetooth-troubleshooting.md](docs/bluetooth-troubleshooting.md).
 | Control | What it does |
 |---|---|
 | Tabs | Switch page. Long-press a tab to rename it. |
+| ⇄ | Switch to the other computer (shown once two are paired). |
 | Status chip | Connection state; tap for details, switching computer and diagnostics. |
 | ● / ■ | Start / stop recording a macro. |
 | ✏️ / ✓ | Edit mode: tap a key to edit, tap an empty slot to add one. |
@@ -115,7 +119,8 @@ See [docs/bluetooth-troubleshooting.md](docs/bluetooth-troubleshooting.md).
 | Tablet volume buttons | Assigned actions (default: PC volume). Clear an assignment to give the button back to the tablet. |
 | Notification | Shows the connection; **Quit** stops the macropad completely. |
 
-**Settings (⚙):** grid size · computer keyboard layout · computers · tablet volume buttons ·
+**Settings (⚙):** reset ON/OFF keys · grid size · default keyboard layout · default key timing ·
+computers (name, layout, timing, pages, start page) · tablet volume buttons ·
 pages (add keys/trackpad page, rename, reorder, delete) · backup and restore · startup (open on
 boot / when charging) · diagnostics · quit.
 

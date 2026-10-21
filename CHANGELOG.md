@@ -8,6 +8,12 @@
 - **Key timing** (⚙): tapped keys in macros and typed text press modifiers first and are held
   briefly; a slower *Remote session (Citrix / RDP)* preset.
 - **English (US International)** keyboard layout for typed text (dead-key quotes and accents).
+- **Computers** (⚙ → Computers…): tap a computer to rename it and set its own keyboard layout,
+  key timing, pages shown and start page; they apply whenever it connects. The global layout and
+  timing become defaults.
+- **⇄ switch button** next to the status chip (2+ computers): hands the macropad to the other
+  computer in one tap.
+- Export/backup files (format version 2) also carry the computer settings; version 1 files still import.
 
 ## 1.1.0
 

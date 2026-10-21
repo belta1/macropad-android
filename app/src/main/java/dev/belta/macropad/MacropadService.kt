@@ -18,6 +18,7 @@ import android.os.Build
 import android.os.IBinder
 import dev.belta.macropad.hid.HidPeripheral
 import dev.belta.macropad.model.AppSettings
+import dev.belta.macropad.model.ComputerProfiles
 
 /**
  * Owns the Bluetooth keyboard so the connection survives the UI being recreated, backgrounded
@@ -29,6 +30,8 @@ class MacropadService : Service() {
         private set
 
     private lateinit var settings: AppSettings
+    lateinit var profiles: ComputerProfiles
+        private set
     private val listeners = LinkedHashSet<HidPeripheral.Listener>()
     private val binder = LocalBinder()
 
@@ -39,10 +42,12 @@ class MacropadService : Service() {
     override fun onCreate() {
         super.onCreate()
         settings = AppSettings(this)
+        profiles = ComputerProfiles(this)
         hid = HidPeripheral(applicationContext)
-        hid.keyboardLayout = settings.keyboardLayout
-        hid.keyTiming = settings.keyTiming
+        hid.customName = { profiles[it].name }
+        applySettings()
         hid.listener = HidPeripheral.Listener { state, detail ->
+            if (state == HidPeripheral.State.CONNECTED) applySettings()
             updateNotification(state, detail)
             listeners.toList().forEach { it.onStateChanged(state, detail) }
         }
@@ -82,9 +87,11 @@ class MacropadService : Service() {
         listeners -= listener
     }
 
+    /** App-wide defaults, overridden by the connected computer's profile. */
     fun applySettings() {
-        hid.keyboardLayout = settings.keyboardLayout
-        hid.keyTiming = settings.keyTiming
+        val profile = hid.currentHost()?.let { profiles[it.address] }
+        hid.keyboardLayout = profile?.keyboardLayout ?: settings.keyboardLayout
+        hid.keyTiming = profile?.keyTiming ?: settings.keyTiming
     }
 
     private val bluetoothReceiver = object : BroadcastReceiver() {
