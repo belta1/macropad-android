@@ -17,13 +17,31 @@ enum class KeyboardLayout(val label: String) {
     LATAM("Spanish (Latin America)"),
     SPAIN("Spanish (Spain)");
 
-    /** Strokes that type [c] with this layout, or null if the layout can't produce it. */
-    fun strokes(c: Char): List<Stroke>? = table[c]
+    /**
+     * Strokes that type [c] with this layout, or null if the layout can't produce it. Typographic
+     * characters the layout lacks (smart quotes, dashes, non-breaking spaces, …) fall back to their
+     * plain ASCII form, so copied code and text still type correctly.
+     */
+    fun strokes(c: Char): List<Stroke>? = table[c] ?: FALLBACK[c]?.let { plain ->
+        plain.flatMap { table[it] ?: return null }
+    }
+
+    /** Characters of [text] this layout can't type (they are skipped). */
+    fun unsupported(text: String): Set<Char> = text.asIterable().filterTo(LinkedHashSet()) { strokes(it) == null }
 
     private val table: Map<Char, List<Stroke>> by lazy { build(this) }
 
     private companion object {
         const val SPACE = 0x2C
+
+        val FALLBACK = mapOf(
+            '“' to "\"", '”' to "\"", '„' to "\"", '«' to "\"", '»' to "\"",
+            '‘' to "'", '’' to "'", '‚' to "'", '′' to "'", '″' to "\"",
+            '–' to "-", '—' to "-", '−' to "-", '‐' to "-", '…' to "...", '•' to "*", '×' to "x",
+            '\u00A0' to " ", '\u2007' to " ", '\u2009' to " ", '\u202F' to " ",
+            // Invisible characters copied along with text: nothing to type.
+            '\r' to "", '\u200B' to "", '\u200C' to "", '\u200D' to "", '\uFEFF' to "",
+        )
 
         fun build(layout: KeyboardLayout): Map<Char, List<Stroke>> {
             val t = HashMap<Char, List<Stroke>>()

@@ -87,6 +87,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private lateinit var tabs: LinearLayout
     private lateinit var tabScroller: HorizontalScrollView
     private lateinit var offlineBanner: TextView
+    private lateinit var typingBanner: TextView
+    /** Long texts being typed (the stop banner shows while > 0). */
+    private var typingRuns = 0
     private lateinit var content: FrameLayout
     private lateinit var statusChip: LinearLayout
     private lateinit var statusDot: View
@@ -249,7 +252,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     /** Dims the screen to a clock (saves the screen and a weak charger); the next touch only wakes it. */
     private fun dim() {
-        if (dimmed || editing || recorder.isRecording || heldSteps.isNotEmpty()) return resetIdleTimer()
+        if (dimmed || editing || recorder.isRecording || heldSteps.isNotEmpty() || typingRuns > 0) return resetIdleTimer()
         dimmed = true
         unlocked = false
         updateIdleClock()
@@ -486,6 +489,21 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             setOnClickListener { onStatusTapped() }
         }
 
+        // Shown over the dock while a long text is being typed; tapping it stops the typing.
+        typingBanner = TextView(this).apply {
+            setTextColor(TEXT)
+            typeface = ui.fontSemiBold
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            gravity = Gravity.CENTER
+            setPadding(ui.dp(16), 0, ui.dp(16), 0)
+            visibility = View.GONE
+            background = ui.pressable(0xFF15263F.toInt(), ui.dp(26).toFloat())
+            setOnClickListener {
+                hid?.stopTyping()
+                text = "Stopping…"
+            }
+        }
+
         content = FrameLayout(this).apply { clipChildren = false }
         root.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
             topMargin = ui.dp(8)
@@ -526,6 +544,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         root.addView(FrameLayout(this).apply {
             addView(dockRow, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             addView(offlineBanner, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(typingBanner, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(76)).apply {
             setMargins(ui.dp(5), ui.dp(10), ui.dp(5), 0)
         })
@@ -797,6 +816,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             if (step is Step.Text) Step.Text(TextVariables.expand(step.text, secret = { secrets[it] }, clipboard = ::clipboardText)) else step
         }
         if (remote.isEmpty()) return
+        if (action.contains("{clipboard}") && clipboardText().isNullOrEmpty()) {
+            return ui.toast("The tablet's clipboard is empty — copy something on the tablet first")
+        }
         val hid = hid
         if (hid == null || !connected) {
             if (!recorder.isRecording) offlineBanner.animate().alpha(0.3f).setDuration(120)
@@ -811,7 +833,26 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             heldSteps[token] = remote[0]
             hid.press(token, remote[0])
         } else {
-            hid.run(remote)
+            runSteps(hid, remote)
+        }
+    }
+
+    /** Runs a macro; long texts show a banner (tap to stop) and say which characters can't be typed. */
+    private fun runSteps(hid: HidPeripheral, steps: List<Step>) {
+        val text = steps.filterIsInstance<Step.Text>().joinToString("") { it.text }
+        val skipped = hid.keyboardLayout.unsupported(text)
+        if (skipped.isNotEmpty()) {
+            ui.toast("Can't type ${skipped.joinToString(" ").take(40)} with the ${hid.keyboardLayout.label} layout; skipped")
+        }
+        if (text.length < LONG_TEXT) return hid.run(steps)
+        typingRuns++
+        typingBanner.text = "Typing ${text.length} characters… tap here to stop"
+        typingBanner.visibility = View.VISIBLE
+        hid.run(steps) {
+            runOnUiThread {
+                typingRuns--
+                if (typingRuns == 0) typingBanner.visibility = View.GONE
+            }
         }
     }
 
@@ -832,6 +873,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private fun clipboardText(): String? =
         getSystemService(ClipboardManager::class.java)?.primaryClip
             ?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
+            // Windows / old Mac line endings: one Enter per line.
+            ?.replace("\r\n", "\n")?.replace('\r', '\n')
 
     // ---------------------------------------------------------------- status
 
@@ -1044,6 +1087,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         private const val REQUEST_IMPORT = 3
         private const val TRACKPAD_KEYS = 5
         private const val SIDEBAR_WIDTH_DP = 128
+        /** Texts at least this long show the "tap to stop" banner. */
+        private const val LONG_TEXT = 60
         private const val LONG_PRESS_MS = 450L
 
         fun bringToFront(context: Context) {

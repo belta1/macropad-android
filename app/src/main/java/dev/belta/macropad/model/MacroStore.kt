@@ -25,6 +25,7 @@ class MacroStore(private val context: Context) {
         addDesktopDockKeys(layout)
         upgradeDesktopRow(layout)
         addPageIcons(layout)
+        addClipboardKey(layout)
         if (backupFile?.exists() == false) writeBackup(export(layout))
         return layout
     }
@@ -112,6 +113,17 @@ class MacroStore(private val context: Context) {
         if (changed) save(layout)
     }
 
+    /** 1.3: "Type clipboard" in the sidebar's first free slot. */
+    private fun addClipboardKey(layout: Layout) {
+        if (prefs.getBoolean(CLIPBOARD_KEY_FLAG, false)) return
+        prefs.edit().putBoolean(CLIPBOARD_KEY_FLAG, true).apply()
+        val sidebar = layout.sidebar
+        if (sidebar.buttons.any { it?.action == DefaultLayout.TYPE_CLIPBOARD.action }) return
+        val free = (0 until Layout.SIDEBAR_SIZE).firstOrNull { layout.button(sidebar, it) == null } ?: return
+        layout.setButton(sidebar, free, DefaultLayout.TYPE_CLIPBOARD)
+        save(layout)
+    }
+
     /** Stores a tab icon for pages without one, so it survives renaming. */
     private fun addPageIcons(layout: Layout) {
         var changed = false
@@ -125,6 +137,7 @@ class MacroStore(private val context: Context) {
         const val TEAMS_UPGRADE_FLAG = "upgraded_teams_focus"
         const val DOCK_UPGRADE_FLAG = "upgraded_desktop_dock"
         const val DESKTOP_ROW_FLAG = "upgraded_desktop_row"
+        const val CLIPBOARD_KEY_FLAG = "added_clipboard_key"
         const val KEY = "layout_v3"
         const val BACKUP_NAME = "macropad-layout.json"
     }

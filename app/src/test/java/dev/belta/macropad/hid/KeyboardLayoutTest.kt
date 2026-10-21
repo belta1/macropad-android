@@ -5,6 +5,7 @@ import dev.belta.macropad.hid.HidKeys.SHIFT
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KeyboardLayoutTest {
@@ -88,5 +89,18 @@ class KeyboardLayoutTest {
         for (layout in KeyboardLayout.values()) {
             for (c in ' '..'~') assertNotNull("${layout.name} can't type '$c'", layout.strokes(c))
         }
+    }
+
+    @Test
+    fun `code and copied text type literally, typographic characters fall back to ASCII`() {
+        val code = "def f(x):\n\tprint(f\"{x}\\n\", '/' | `$` ~ ^ @ # % & * [] <> ? ; = + -)\r\n"
+        for (layout in KeyboardLayout.values()) {
+            val skipped = layout.unsupported(code)
+            assertTrue("${layout.name} skips $skipped", skipped.isEmpty())
+            assertEquals(layout.strokes('"'), layout.strokes('“'))
+            assertEquals(layout.strokes('-'), layout.strokes('—'))
+            assertEquals(emptyList<Stroke>(), layout.strokes('\uFEFF'))
+        }
+        assertEquals(setOf('漢'), KeyboardLayout.US.unsupported("a漢b"))
     }
 }

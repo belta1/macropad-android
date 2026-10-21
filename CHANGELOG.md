@@ -5,6 +5,11 @@
 - **Sidebar on every page** (right or left: ⚙ → Sidebar): connection status, Record, Edit, Settings and the ⇄
   switch button (moved from the top bar, which now holds only the tabs), plus four action keys:
   **Away**, **Lock PC**, **Work Citrix** and a free slot (editable in edit mode).
+- **Type clipboard** (sidebar): types the **tablet's** clipboard character by character — code
+  included: `\n` stays backslash-n, real line breaks press Enter, Windows line endings give one
+  Enter, smart quotes / dashes / non-breaking spaces become plain ASCII, Caps Lock on the computer
+  is compensated. Texts of 60+ characters show a **tap to stop** banner over the dock; characters
+  the keyboard layout can't type are listed and skipped.
 - **Work Citrix** opens the Citrix portal in Chrome and fills in user and password. The address,
   user and password are **saved values** (⚙ → Saved values), used as `{secret:work_url}`,
   `{secret:work_user}`, `{secret:work_password}`: encrypted with an Android Keystore key, kept out of

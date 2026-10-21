@@ -28,6 +28,19 @@ Every key has an **action**: one step per line. Lines starting with `#` are comm
 
 Dates and times come from the tablet's clock, so keep its date and time correct.
 
+### Typing code and long texts
+
+`text:{clipboard}` (the sidebar's **Type clipboard** key) types exactly what was copied on the tablet:
+backslashes, quotes, braces and `{...}` inside the copied text are typed as they are; line breaks
+press Enter and tabs press Tab. Smart quotes, long dashes and non-breaking spaces are typed as
+their ASCII forms; other characters the layout lacks are skipped (a message lists them). While a
+text of 60+ characters is typed, the dock shows **Typing N characters… tap here to stop**.
+
+Editors that **auto-indent or auto-close brackets** (VS Code, PowerShell ISE, IDEs) add their own
+indentation and closing brackets as the code is typed, which doubles them. Type into a plain editor
+(Notepad) and copy from there, or turn those features off. In chat apps (Teams) every line break
+is an Enter, which sends the message.
+
 ### Long-press action
 
 In the editor, **Long-press action** gives a key a second action. A short tap runs the normal action

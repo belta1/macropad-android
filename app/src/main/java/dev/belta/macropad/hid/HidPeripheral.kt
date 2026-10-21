@@ -100,6 +100,7 @@ class HidPeripheral(private val context: Context) {
     private var detail = ""
 
     private lateinit var keyboardInput: BluetoothGattCharacteristic
+    private var keyboardOutput: BluetoothGattCharacteristic? = null
     private lateinit var consumerInput: BluetoothGattCharacteristic
     private lateinit var mouseInput: BluetoothGattCharacteristic
 
@@ -432,17 +433,42 @@ class HidPeripheral(private val context: Context) {
         }
     }
 
-    /** Runs a multi-step macro (taps every combo). */
-    fun run(steps: List<Step>) = sender.post {
+    /** Caps Lock state, from the LED output report the computer writes. */
+    @Volatile var capsLock = false
+        private set
+
+    private val stops = AtomicInteger()
+
+    /** Cancels the macros running or queued now (e.g. a long text being typed); later ones run. */
+    fun stopTyping() { stops.incrementAndGet() }
+
+    /** Runs a multi-step macro (taps every combo); [onDone] runs on the sender thread afterwards. */
+    fun run(steps: List<Step>, onDone: (() -> Unit)? = null) {
+        val stop = stops.get()
+        sender.post {
+            try {
+                runSteps(steps) { stops.get() != stop }
+            } finally {
+                onDone?.invoke()
+            }
+        }
+    }
+
+    private fun runSteps(steps: List<Step>, stopped: () -> Boolean) {
         for (step in steps) {
-            if (host == null) break
+            if (host == null || stopped()) break
             when (step) {
                 is Step.Combo -> tap(step.mods, step.keys)
                 is Step.Media -> { sendConsumer(step.usage); pause(keyTiming.holdMs); sendConsumer(0); pause(keyTiming.gapMs) }
                 is Step.Delay -> Thread.sleep(step.ms)
                 is Step.Text -> for (c in step.text) {
+                    if (host == null || stopped()) break
                     val strokes = keyboardLayout.strokes(c) ?: continue
-                    for (s in strokes) tap(s.mods, listOf(s.key))
+                    for (s in strokes) {
+                        // With Caps Lock on, Shift gives lower case letters: flip it so text types as written.
+                        val letter = s.key in LETTER_A..LETTER_Z
+                        tap(if (letter && capsLock) s.mods xor HidKeys.SHIFT else s.mods, listOf(s.key))
+                    }
                 }
                 is Step.Click -> {
                     sendMouse(0, 0, buttons = mouseButtons or step.buttons)
@@ -620,6 +646,7 @@ class HidPeripheral(private val context: Context) {
             debug("write ${name(characteristic)} value=${value?.hex()} response=$responseNeeded")
             // Output report = keyboard LEDs (caps/num lock); protocol mode / control point = suspend etc.
             if (characteristic.uuid != HID_CONTROL_POINT) characteristic.value = value
+            if (characteristic === keyboardOutput) capsLock = ((value?.firstOrNull()?.toInt() ?: 0) and LED_CAPS_LOCK) != 0
             if (responseNeeded) server?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
         }
 
@@ -733,12 +760,12 @@ class HidPeripheral(private val context: Context) {
 
         keyboardInput = inputReport(HidReports.ID_KEYBOARD, ByteArray(8))
         addCharacteristic(keyboardInput)
-        addCharacteristic(
-            characteristic(REPORT, PROPERTY_READ or PROPERTY_WRITE or PROPERTY_WRITE_NO_RESPONSE,
-                PERMISSION_READ_ENCRYPTED or PERMISSION_WRITE_ENCRYPTED, byteArrayOf(0)).apply {
-                addDescriptor(descriptor(REPORT_REFERENCE, PERMISSION_READ_ENCRYPTED,
-                    byteArrayOf(HidReports.ID_KEYBOARD, REPORT_TYPE_OUTPUT)))
-            })
+        keyboardOutput = characteristic(REPORT, PROPERTY_READ or PROPERTY_WRITE or PROPERTY_WRITE_NO_RESPONSE,
+            PERMISSION_READ_ENCRYPTED or PERMISSION_WRITE_ENCRYPTED, byteArrayOf(0)).apply {
+            addDescriptor(descriptor(REPORT_REFERENCE, PERMISSION_READ_ENCRYPTED,
+                byteArrayOf(HidReports.ID_KEYBOARD, REPORT_TYPE_OUTPUT)))
+        }
+        addCharacteristic(keyboardOutput!!)
         consumerInput = inputReport(HidReports.ID_CONSUMER, ByteArray(2))
         addCharacteristic(consumerInput)
         mouseInput = inputReport(HidReports.ID_MOUSE, ByteArray(5))
@@ -800,5 +827,8 @@ class HidPeripheral(private val context: Context) {
 
         const val REPORT_TYPE_INPUT: Byte = 1
         const val REPORT_TYPE_OUTPUT: Byte = 2
+        const val LED_CAPS_LOCK = 0x02
+        const val LETTER_A = 0x04
+        const val LETTER_Z = 0x1D
     }
 }
