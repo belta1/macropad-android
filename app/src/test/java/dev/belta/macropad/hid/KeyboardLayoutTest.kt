@@ -68,6 +68,22 @@ class KeyboardLayoutTest {
     }
 
     @Test
+    fun `US International types dead-key symbols with a space and accents with the letter`() {
+        val intl = KeyboardLayout.US_INTL
+        val space = Stroke(0, 0x2C)
+        assertEquals(listOf(Stroke(0, 0x34), space), intl.strokes('\''))
+        assertEquals(listOf(Stroke(SHIFT, 0x34), space), intl.strokes('"'))
+        assertEquals(listOf(Stroke(SHIFT, 0x35), space), intl.strokes('~'))
+        assertEquals(listOf(Stroke(SHIFT, 0x23), space), intl.strokes('^'))
+        assertEquals(listOf(Stroke(0, 0x34), Stroke(0, 0x08)), intl.strokes('é'))
+        assertEquals(listOf(Stroke(SHIFT, 0x35), Stroke(0, 0x11)), intl.strokes('ñ'))
+        assertEquals(Stroke(ALTGR, 0x38), one(intl, '¿'))
+        // Everything else matches US.
+        assertEquals(one(KeyboardLayout.US, '@'), one(intl, '@'))
+        assertEquals(one(KeyboardLayout.US, '/'), one(intl, '/'))
+    }
+
+    @Test
     fun `printable ASCII is typeable in every layout`() {
         for (layout in KeyboardLayout.values()) {
             for (c in ' '..'~') assertNotNull("${layout.name} can't type '$c'", layout.strokes(c))

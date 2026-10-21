@@ -3,7 +3,7 @@ package dev.belta.macropad.model
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** [toggle] keys remember an on/off state (e.g. Mute) and show it; they fire on tap instead of being held. */
+/** [toggle] keys remember an on/off state (e.g. Mute) and show it; they flip on every press. */
 data class MacroButton(
     var label: String,
     var action: String,

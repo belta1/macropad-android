@@ -1,6 +1,7 @@
 package dev.belta.macropad.model
 
 import android.content.Context
+import dev.belta.macropad.hid.KeyTiming
 import dev.belta.macropad.hid.KeyboardLayout
 
 /** App-wide preferences (not part of the exported layout). */
@@ -11,6 +12,11 @@ class AppSettings(context: Context) {
         get() = KeyboardLayout.values().firstOrNull { it.name == prefs.getString("keyboard_layout", null) }
             ?: KeyboardLayout.US
         set(value) = prefs.edit().putString("keyboard_layout", value.name).apply()
+
+    var keyTiming: KeyTiming
+        get() = KeyTiming.values().firstOrNull { it.name == prefs.getString("key_timing", null) }
+            ?: KeyTiming.NORMAL
+        set(value) = prefs.edit().putString("key_timing", value.name).apply()
 
     /** Start the macropad when the tablet boots. */
     var openOnBoot: Boolean

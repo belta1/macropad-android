@@ -13,6 +13,7 @@ data class Stroke(val mods: Int, val key: Int)
  */
 enum class KeyboardLayout(val label: String) {
     US("English (US)"),
+    US_INTL("English (US International)"),
     LATAM("Spanish (Latin America)"),
     SPAIN("Spanish (Spain)");
 
@@ -49,7 +50,7 @@ enum class KeyboardLayout(val label: String) {
             key(' ', SPACE)
 
             when (layout) {
-                US -> {
+                US, US_INTL -> {
                     ")!@#$%^&*(".forEachIndexed { i, c -> key(c, if (i == 0) 0x27 else 0x1E + i - 1, SHIFT) }
                     key('-', 0x2D); key('_', 0x2D, SHIFT)
                     key('=', 0x2E); key('+', 0x2E, SHIFT)
@@ -62,6 +63,22 @@ enum class KeyboardLayout(val label: String) {
                     key(',', 0x36); key('<', 0x36, SHIFT)
                     key('.', 0x37); key('>', 0x37, SHIFT)
                     key('/', 0x38); key('?', 0x38, SHIFT)
+                    if (layout == US_INTL) {
+                        // ' " ` ~ ^ are dead keys; the rest of the extras sit on AltGr.
+                        dead('\'', 0x34); dead('"', 0x34, SHIFT)
+                        dead('`', 0x35); dead('~', 0x35, SHIFT)
+                        dead('^', 0x23, SHIFT)
+                        accented("áéíóú", 0x34)
+                        accented("äëïöü", 0x34, SHIFT)
+                        accented("àèìòù", 0x35)
+                        accented("âêîôû", 0x23, SHIFT)
+                        t['ñ'] = listOf(Stroke(SHIFT, 0x35), Stroke(0, 0x11))
+                        t['Ñ'] = listOf(Stroke(SHIFT, 0x35), Stroke(SHIFT, 0x11))
+                        t['ç'] = listOf(Stroke(0, 0x34), Stroke(0, 0x06))
+                        t['Ç'] = listOf(Stroke(0, 0x34), Stroke(SHIFT, 0x06))
+                        key('¡', 0x1E, ALTGR); key('¿', 0x38, ALTGR)
+                        key('€', 0x22, ALTGR)
+                    }
                 }
                 SPAIN -> {
                     key('º', 0x35); key('ª', 0x35, SHIFT); key('\\', 0x35, ALTGR)

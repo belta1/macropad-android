@@ -420,6 +420,13 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     private fun toggleKey(page: Page, index: Int) = "${page.name}#$index"
 
+    override val toggledKeys: Int get() = toggledOn.size
+
+    override fun resetToggles() {
+        toggledOn.clear()
+        renderPage()
+    }
+
     // ---------------------------------------------------------------- pressing
 
     override fun onKeyPressed(view: View, page: Page, index: Int, button: MacroButton) =
@@ -448,12 +455,11 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             if (!recorder.isRecording) ui.toast("Not connected to a computer yet")
             return
         }
+        if (button.toggle) {
+            val key = toggleKey(page, index)
+            if (!toggledOn.remove(key)) toggledOn += key
+        }
         when {
-            button.toggle -> {
-                val key = toggleKey(page, index)
-                if (!toggledOn.remove(key)) toggledOn += key
-                hid.run(steps)
-            }
             Macro.isHoldable(steps) -> {
                 heldSteps[token] = steps[0]
                 hid.press(token, steps[0])

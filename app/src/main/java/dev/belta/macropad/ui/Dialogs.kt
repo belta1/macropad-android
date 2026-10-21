@@ -14,6 +14,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import dev.belta.macropad.MacropadService
 import dev.belta.macropad.hid.HidPeripheral
+import dev.belta.macropad.hid.KeyTiming
 import dev.belta.macropad.hid.KeyboardLayout
 import dev.belta.macropad.model.AppSettings
 import dev.belta.macropad.model.DefaultLayout
@@ -40,6 +41,9 @@ interface MacropadHost {
     fun exportLayout()
     fun importLayout()
     fun quit()
+    /** Number of toggle keys currently shown as ON. */
+    val toggledKeys: Int
+    fun resetToggles()
 }
 
 /** Settings menu and the dialogs behind it. */
@@ -48,9 +52,11 @@ class Dialogs(private val host: MacropadHost) {
     private val hid: HidPeripheral? get() = host.service?.hid
 
     fun settings() {
-        val items = listOf(
+        val items = listOfNotNull(
+            if (host.toggledKeys > 0) "Reset ON/OFF keys (${host.toggledKeys} on)" to host::resetToggles else null,
             "Grid size (${host.layout.rows} × ${host.layout.cols})" to ::gridSize,
             "Computer keyboard layout: ${host.settings.keyboardLayout.label}" to ::keyboardLayout,
+            "Key timing: ${host.settings.keyTiming.label}" to ::keyTiming,
             "Computers…" to ::computers,
             "Tablet volume buttons…" to ::tabletButtons,
             "Pages…" to ::pages,
@@ -148,6 +154,7 @@ class Dialogs(private val host: MacropadHost) {
             d.secureSettingsGranted)
         d.audioProfilesBlocked?.let { line("Audio profiles blocked", if (it) "yes" else "no", it) }
         line("Computer keyboard layout", host.settings.keyboardLayout.label)
+        line("Key timing", host.settings.keyTiming.label)
         text.append("\nRecent events\n")
         val eventsStart = text.length
         text.append(if (d.events.isEmpty()) "(none)" else d.events.joinToString("\n"))
@@ -187,6 +194,22 @@ class Dialogs(private val host: MacropadHost) {
                 host.service?.applySettings()
                 d.dismiss()
                 ui.toast("Typed text now uses ${layouts[i].label}")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun keyTiming() {
+        val timings = KeyTiming.values()
+        ui.dialog()
+            .setTitle("Key timing")
+            .setSingleChoiceItems(
+                timings.map { "${it.label} — held ${it.holdMs} ms" }.toTypedArray(),
+                timings.indexOf(host.settings.keyTiming),
+            ) { d, i ->
+                host.settings.keyTiming = timings[i]
+                host.service?.applySettings()
+                d.dismiss()
             }
             .setNegativeButton("Cancel", null)
             .show()

@@ -41,6 +41,7 @@ class MacropadService : Service() {
         settings = AppSettings(this)
         hid = HidPeripheral(applicationContext)
         hid.keyboardLayout = settings.keyboardLayout
+        hid.keyTiming = settings.keyTiming
         hid.listener = HidPeripheral.Listener { state, detail ->
             updateNotification(state, detail)
             listeners.toList().forEach { it.onStateChanged(state, detail) }
@@ -83,6 +84,7 @@ class MacropadService : Service() {
 
     fun applySettings() {
         hid.keyboardLayout = settings.keyboardLayout
+        hid.keyTiming = settings.keyTiming
     }
 
     private val bluetoothReceiver = object : BroadcastReceiver() {

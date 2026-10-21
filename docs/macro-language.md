@@ -13,8 +13,8 @@ Every key has an **action**: one step per line. Lines starting with `#` are comm
 
 A key whose action is a **single combo, media key or click** is *held* for as long as it is
 touched, like a physical key (auto-repeat, push-to-talk, holding a modifier, dragging with a held
-click). Anything longer runs once per tap. Keys marked **Toggle** in the editor fire once per tap
-and show ON/OFF (the state resets when the connection drops, since the computer's real state is
+click). Anything longer runs once per tap. Keys marked **Toggle** in the editor are held the same way
+and flip an ON/OFF display on every press (the state resets when the connection drops, since the computer's real state is
 unknown).
 
 ## Keyboard layouts
@@ -25,8 +25,8 @@ A keyboard sends *key positions*, not characters, so:
   If the computer uses another layout and a shortcut involves punctuation, name the key by where
   it sits on a US keyboard (letters, digits, F-keys and named keys are the same everywhere).
   `iso` is the extra key left of Z on ISO keyboards.
-- **`text:` uses the layout set in ⚙ → Computer keyboard layout** (English US, Spanish Latin
-  America, Spanish Spain). Accented letters are typed with dead keys (´ + a → á). Characters a
+- **`text:` uses the layout set in ⚙ → Computer keyboard layout** (English US, English US
+  International, Spanish Latin America, Spanish Spain). Accented letters are typed with dead keys (´ + a → á). Characters a
   layout can't produce are skipped.
 
 ## Names

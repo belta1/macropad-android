@@ -80,6 +80,9 @@ class HidPeripheral(private val context: Context) {
     /** Layout of the computer's keyboard; used for `text:` steps. */
     @Volatile var keyboardLayout = KeyboardLayout.US
 
+    /** Hold time and spacing of tapped keys. */
+    @Volatile var keyTiming = KeyTiming.NORMAL
+
     private val manager = context.getSystemService(BluetoothManager::class.java)
     private val adapter get() = manager?.adapter
     private val main = Handler(Looper.getMainLooper())
@@ -412,7 +415,7 @@ class HidPeripheral(private val context: Context) {
             if (host == null) break
             when (step) {
                 is Step.Combo -> tap(step.mods, step.keys)
-                is Step.Media -> { sendConsumer(step.usage); sendConsumer(0) }
+                is Step.Media -> { sendConsumer(step.usage); pause(keyTiming.holdMs); sendConsumer(0); pause(keyTiming.gapMs) }
                 is Step.Delay -> Thread.sleep(step.ms)
                 is Step.Text -> for (c in step.text) {
                     val strokes = keyboardLayout.strokes(c) ?: continue
@@ -420,7 +423,9 @@ class HidPeripheral(private val context: Context) {
                 }
                 is Step.Click -> {
                     sendMouse(0, 0, buttons = mouseButtons or step.buttons)
+                    pause(keyTiming.holdMs)
                     sendMouse(0, 0)
+                    pause(keyTiming.gapMs)
                 }
                 is Step.Scroll -> sendMouse(0, 0, wheel = step.amount)
             }
@@ -468,10 +473,26 @@ class HidPeripheral(private val context: Context) {
         return now
     }
 
+    /**
+     * Presses modifiers first, then the keys, holds them for [KeyTiming.holdMs] and releases in
+     * reverse order. Sending everything in one report and releasing it at once is too quick for
+     * Teams and Citrix, which then miss the shortcut.
+     */
     private fun tap(mods: Int, keys: List<Int>) {
+        val timing = keyTiming
         val base = currentKeys()
-        sendKeyboard(Step.Combo(base.mods or mods, (base.keys + keys).distinct()))
+        val down = base.mods or mods
+        val extraMods = down != base.mods
+        if (extraMods) { sendKeyboard(Step.Combo(down, base.keys)); pause(timing.gapMs) }
+        sendKeyboard(Step.Combo(down, (base.keys + keys).distinct()))
+        pause(timing.holdMs)
+        if (extraMods) { sendKeyboard(Step.Combo(down, base.keys)); pause(timing.gapMs) }
         sendKeyboard(base)
+        pause(timing.gapMs)
+    }
+
+    private fun pause(ms: Long) {
+        if (ms > 0) Thread.sleep(ms)
     }
 
     private fun currentKeys(): Step.Combo {

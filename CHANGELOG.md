@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased (1.2)
+
+- **Toggle keys fixed**: they are now held while touched like other keys (Teams missed the
+  instant press/release before) and only flip their ON/OFF display. ⚙ → **Reset ON/OFF keys**
+  clears the display when it drifts from the app's real state.
+- **Key timing** (⚙): tapped keys in macros and typed text press modifiers first and are held
+  briefly; a slower *Remote session (Citrix / RDP)* preset.
+- **English (US International)** keyboard layout for typed text (dead-key quotes and accents).
+
 ## 1.1.0
 
 - **Foreground service**: the Bluetooth keyboard now lives in `MacropadService` with an ongoing
