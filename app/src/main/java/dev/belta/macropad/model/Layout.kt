@@ -3,13 +3,18 @@ package dev.belta.macropad.model
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** [toggle] keys remember an on/off state (e.g. Mute) and show it; they flip on every press. */
+/**
+ * [toggle] keys remember an on/off state (e.g. Mute) and show it; they flip on every press.
+ * [longAction], when set, runs instead of [action] if the key is held down (and is itself held while
+ * it is a single combo); [action] then runs on release of a short tap.
+ */
 data class MacroButton(
     var label: String,
     var action: String,
     var color: Int,
     var icon: String? = null,
     var toggle: Boolean = false,
+    var longAction: String? = null,
 )
 
 enum class PageKind { KEYS, TRACKPAD }
@@ -85,6 +90,7 @@ object LayoutJson {
                 JSONObject().put("label", it.label).put("action", it.action).put("color", it.color)
                     .put("icon", it.icon ?: JSONObject.NULL)
                     .apply { if (it.toggle) put("toggle", true) }
+                    .apply { it.longAction?.let { long -> put("longAction", long) } }
             } ?: JSONObject.NULL)
         })
     }
@@ -97,6 +103,7 @@ object LayoutJson {
                     it.getString("label"), it.getString("action"), it.getInt("color"),
                     if (it.isNull("icon")) null else it.optString("icon"),
                     it.optBoolean("toggle", false),
+                    it.optString("longAction").ifBlank { null },
                 )
             }
         }

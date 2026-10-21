@@ -3,6 +3,7 @@ package dev.belta.macropad.model
 import android.content.Context
 import dev.belta.macropad.hid.KeyTiming
 import dev.belta.macropad.hid.KeyboardLayout
+import java.security.MessageDigest
 
 /** App-wide preferences (not part of the exported layout). */
 class AppSettings(context: Context) {
@@ -28,7 +29,23 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("open_on_charge", true)
         set(value) = prefs.edit().putBoolean("open_on_charge", value).apply()
 
+    /** Minutes without a touch before the screen dims to a clock; 0 = never. */
+    var idleDimMinutes: Int
+        get() = prefs.getInt("idle_dim_minutes", 5)
+        set(value) = prefs.edit().putInt("idle_dim_minutes", value).apply()
+
+    /** Hash of the PIN that guards editing and settings; null = no PIN. */
+    var pinHash: String?
+        get() = prefs.getString("pin_hash", null)
+        set(value) = prefs.edit().putString("pin_hash", value).apply()
+
     var lastPage: Int
         get() = prefs.getInt("page", 0)
         set(value) = prefs.edit().putInt("page", value).apply()
+
+    companion object {
+        fun hashPin(pin: String): String =
+            MessageDigest.getInstance("SHA-256").digest("macropad-pin:$pin".toByteArray())
+                .joinToString("") { "%02x".format(it) }
+    }
 }

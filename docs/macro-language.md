@@ -10,6 +10,27 @@ Every key has an **action**: one step per line. Lines starting with `#` are comm
 | Delay | `delay:250` | Waits, in milliseconds (max 10000). `wait:` also works |
 | Mouse click | `click:left` | `left`, `right` or `middle` |
 | Scroll | `scroll:3` | Mouse wheel notches; positive = up, negative = down (max ±50) |
+| Page | `page:next` | Switches the tablet's page: `next`, `prev` or a page name. Runs on the tablet, even when no computer is connected |
+
+### Text variables
+
+`text:` steps can contain variables, filled in when the key runs:
+
+| Variable | Example result |
+|---|---|
+| `{date}` | `2026-10-21` |
+| `{time}` | `14:05` |
+| `{date:dd/MM/yyyy}`, `{time:HH:mm:ss}` | any [SimpleDateFormat](https://developer.android.com/reference/java/text/SimpleDateFormat) pattern |
+| `{clipboard}` | the **tablet's** clipboard text (the tablet can't read the computer's clipboard) |
+| `{{` | a literal `{` |
+
+Dates and times come from the tablet's clock, so keep its date and time correct.
+
+### Long-press action
+
+In the editor, **Long-press action** gives a key a second action. A short tap runs the normal action
+when the finger lifts; holding for 0.45 s runs the long-press action instead (held while touched if
+it is a single combo). Example: action `win+alt+k` (toggle mute), long-press `ctrl+space` (push to talk).
 
 A key whose action is a **single combo, media key or click** is *held* for as long as it is
 touched, like a physical key (auto-repeat, push-to-talk, holding a modifier, dragging with a held

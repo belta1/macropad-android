@@ -61,8 +61,17 @@ object KeyEditor {
             text = "Toggle key — shows ON/OFF (e.g. mute, camera)"
             isChecked = initial?.toggle == true
         }
+        val longAction = EditText(context).apply {
+            hint = "Long-press action (optional), e.g. ctrl+space"
+            setText(initial?.longAction ?: "")
+            typeface = Typeface.MONOSPACE
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            gravity = Gravity.TOP or Gravity.START
+        }
         content.addView(label)
         content.addView(action)
+        content.addView(longAction)
         content.addView(toggle)
 
         content.addView(ui.sectionTitle("Color"))
@@ -127,8 +136,17 @@ object KeyEditor {
                     action.error = e.message
                     return@setOnClickListener
                 }
+                val longText = longAction.text.toString().trim().ifEmpty { null }
+                if (longText != null) {
+                    try {
+                        Macro.parse(longText)
+                    } catch (e: MacroException) {
+                        longAction.error = e.message
+                        return@setOnClickListener
+                    }
+                }
                 val labelText = label.text.toString().trim().ifEmpty { actionText.lines().first() }
-                onSave(MacroButton(labelText, actionText, color, iconName, toggle.isChecked))
+                onSave(MacroButton(labelText, actionText, color, iconName, toggle.isChecked, longText))
                 dialog.dismiss()
             }
         }
@@ -143,6 +161,10 @@ object KeyEditor {
   delay:200        wait (ms)
   click:left       mouse button (right, middle)
   scroll:3         wheel (+ up, − down)
+  page:next        tablet page (prev, or a name)
+
+In text: {date} {time} {clipboard}
+  {date:dd/MM/yyyy} custom format
 
 Modifiers: ctrl shift alt win/cmd altgr
 Keys: a-z 0-9 f1-f24 enter esc tab space
@@ -157,6 +179,9 @@ Media: playpause next prev stop mute
 
 A single combo/media key/click is held
 while touched; multi-step macros run on
-tap. text: uses the computer's keyboard
-layout (Settings → Keyboard layout)."""
+tap. With a long-press action, a tap
+runs the action on release and holding
+(0.45 s) runs the long-press one.
+text: uses the computer's keyboard
+layout (Settings → Computers)."""
 }

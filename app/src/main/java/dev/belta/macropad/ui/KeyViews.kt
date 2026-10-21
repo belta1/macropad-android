@@ -85,8 +85,10 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
                 }
                 key.addView(label(button.label, 13f, if (iconRes != null) 18f else 24f))
                 key.addView(TextView(ui.context).apply {
-                    val hint = Macro.describe(button.action)
+                    val hint = Macro.describe(button.action) + if (button.longAction.isNullOrBlank()) "" else " · +hold"
                     text = when {
+                        // A hint that only repeats the label (numpad digits, "Tab") adds nothing.
+                        !button.toggle && hint.equals(button.label, ignoreCase = true) -> ""
                         !button.toggle -> hint
                         toggledOn -> "ON · $hint"
                         else -> "OFF · $hint"

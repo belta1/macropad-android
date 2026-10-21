@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -16,12 +17,15 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -43,6 +47,7 @@ import dev.belta.macropad.model.Page
 import dev.belta.macropad.model.PageKind
 import dev.belta.macropad.model.Palette
 import dev.belta.macropad.model.Step
+import dev.belta.macropad.model.TextVariables
 import dev.belta.macropad.ui.Dialogs
 import dev.belta.macropad.ui.KeyEditor
 import dev.belta.macropad.ui.KeyViews
@@ -94,6 +99,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     // Keys currently held, by touched view or hardware key code.
     private val heldSteps = HashMap<Any, Step>()
+    private val handler = Handler(Looper.getMainLooper())
 
     // On/off state of toggle keys ("page#index"); kept for this session.
     private val toggledOn = HashSet<String>()
@@ -123,7 +129,11 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         keyViews = KeyViews(ui, this)
         recorder = Recorder(ui, send = { action -> if (connected) hid?.run(Macro.parse(action)) }) { renderChrome() }
 
-        setContentView(buildUi())
+        idleOverlay = buildIdleOverlay()
+        setContentView(FrameLayout(this).apply {
+            addView(buildUi())
+            addView(idleOverlay)
+        })
         // Re-hide the status bar if something (e.g. the notification shade) brought it back.
         @Suppress("DEPRECATION")
         window.decorView.setOnSystemUiVisibilityChangeListener { flags ->
@@ -151,12 +161,142 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     }
 
     override fun onDestroy() {
-        heldSteps.keys.toList().forEach { releaseKey(it) }
+        (heldSteps.keys + pendingPresses.keys).toList().forEach { releaseKey(it) }
         service?.removeListener(stateListener)
         unbindService(connection)
         unregisterReceiver(pairingReceiver)
         unregisterReceiver(quitReceiver)
         super.onDestroy()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        resetIdleTimer()
+    }
+
+    override fun onPause() {
+        handler.removeCallbacks(dimRunnable)
+        super.onPause()
+    }
+
+    override fun onStop() {
+        unlocked = false // ask for the PIN again next time
+        super.onStop()
+    }
+
+    // ---------------------------------------------------------------- idle clock
+
+    private lateinit var idleOverlay: FrameLayout
+    private lateinit var idleClock: LinearLayout
+    private lateinit var idleTime: TextView
+    private lateinit var idleDate: TextView
+    private lateinit var idleStatus: TextView
+    private var dimmed = false
+    private var swallowGesture = false
+    private val dimRunnable = Runnable { dim() }
+    private val clockTick = object : Runnable {
+        override fun run() {
+            updateIdleClock()
+            handler.postDelayed(this, 20_000)
+        }
+    }
+
+    private fun buildIdleOverlay() = FrameLayout(this).apply {
+        setBackgroundColor(Color.BLACK)
+        visibility = View.GONE
+        idleClock = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        idleTime = TextView(context).apply {
+            typeface = ui.fontBold
+            setTextColor(0xFF8A93A6.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 96f)
+        }
+        idleDate = TextView(context).apply {
+            typeface = ui.fontMedium
+            setTextColor(0xFF5C6476.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+        }
+        idleStatus = TextView(context).apply {
+            typeface = ui.fontMedium
+            setTextColor(0xFF4A5163.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setPadding(0, ui.dp(18), 0, 0)
+        }
+        for (line in listOf(idleTime, idleDate, idleStatus)) {
+            idleClock.addView(line, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+            })
+        }
+        addView(idleClock, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+    }
+
+    private fun resetIdleTimer() {
+        handler.removeCallbacks(dimRunnable)
+        val minutes = settings.idleDimMinutes
+        if (minutes > 0 && !dimmed) handler.postDelayed(dimRunnable, minutes * 60_000L)
+    }
+
+    /** Dims the screen to a clock (saves the screen and a weak charger); the next touch only wakes it. */
+    private fun dim() {
+        if (dimmed || editing || recorder.isRecording || heldSteps.isNotEmpty()) return resetIdleTimer()
+        dimmed = true
+        unlocked = false
+        updateIdleClock()
+        idleOverlay.visibility = View.VISIBLE
+        window.attributes = window.attributes.apply { screenBrightness = 0.02f }
+        handler.post(clockTick)
+    }
+
+    private fun wake() {
+        dimmed = false
+        idleOverlay.visibility = View.GONE
+        window.attributes = window.attributes.apply {
+            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        }
+        handler.removeCallbacks(clockTick)
+        resetIdleTimer()
+    }
+
+    private fun updateIdleClock() {
+        val now = java.util.Date()
+        idleTime.text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(now)
+        idleDate.text = java.text.SimpleDateFormat("EEEE d MMMM", java.util.Locale.getDefault()).format(now)
+        idleStatus.text = if (connected) "● ${statusText.text}" else "○ Not connected"
+        // Drift a little so nothing stays lit on the same pixels.
+        idleClock.translationX = ((Math.random() - 0.5) * ui.dp(160)).toFloat()
+        idleClock.translationY = ((Math.random() - 0.5) * ui.dp(120)).toFloat()
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            swallowGesture = dimmed
+            if (dimmed) wake()
+        }
+        if (swallowGesture) return true // the touch that wakes the screen never presses a key
+        resetIdleTimer()
+        return super.dispatchTouchEvent(ev)
+    }
+
+    // ---------------------------------------------------------------- PIN
+
+    private var unlocked = false
+
+    /** Runs [action] if no PIN is set or it was entered since the screen last dimmed / was left. */
+    override fun withUnlock(action: () -> Unit) {
+        val hash = settings.pinHash
+        if (hash == null || unlocked) return action()
+        dialogs.askPin("Enter PIN") { pin ->
+            if (AppSettings.hashPin(pin) == hash) {
+                unlocked = true
+                action()
+            } else {
+                ui.toast("Wrong PIN")
+            }
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -230,7 +370,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         val slot = hardwareSlot(keyCode) ?: return super.onKeyUp(keyCode, event)
         layout.button(layout.hardware, slot) ?: return super.onKeyUp(keyCode, event)
-        releaseKey(keyCode)
+        releaseKey(keyCode, tapped = true)
         return true
     }
 
@@ -288,11 +428,13 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             marginStart = ui.dp(10)
         })
 
-        recordButton = ui.iconButton("record") { if (recorder.isRecording) stopRecording() else startRecording() }
-        editButton = ui.iconButton("edit") { toggleEdit() }
+        recordButton = ui.iconButton("record") {
+            if (recorder.isRecording) stopRecording() else withUnlock { startRecording() }
+        }
+        editButton = ui.iconButton("edit") { if (editing) toggleEdit() else withUnlock { toggleEdit() } }
         bar.addView(recordButton)
         bar.addView(editButton)
-        bar.addView(ui.iconButton("settings") { dialogs.settings() })
+        bar.addView(ui.iconButton("settings") { withUnlock { dialogs.settings() } })
         root.addView(bar)
 
         // Takes the media dock's place while no computer is connected (the dock does nothing then),
@@ -375,7 +517,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
                     ui.pressable(Color.TRANSPARENT, ui.dp(20).toFloat())
                 }
                 setOnClickListener { selectPage(i); renderPage() }
-                setOnLongClickListener { dialogs.renamePage(i); true }
+                setOnLongClickListener { withUnlock { dialogs.renamePage(i) }; true }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ui.dp(36)))
         }
         // Keep the selected tab fully visible (once the new tabs are laid out).
@@ -422,7 +564,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         }
         renderTabs()
         renderChrome()
-        heldSteps.keys.toList().forEach { releaseKey(it) }
+        (heldSteps.keys + pendingPresses.keys).toList().forEach { releaseKey(it) }
 
         content.removeAllViews()
         content.addView(if (page.kind == PageKind.TRACKPAD) buildTrackpad(page) else buildGrid(page))
@@ -496,45 +638,101 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         pressKey(view, page, index, button, view)
 
     override fun onKeyReleased(view: View, page: Page, index: Int, button: MacroButton, cancelled: Boolean) {
-        releaseKey(view)
+        releaseKey(view, tapped = !cancelled)
         // Toggle keys flip on press; redraw them once the finger lifts.
         if (button.toggle) keyViews.replace(view, keyView(page, index, compact = page === layout.dock))
     }
 
     override fun onEditKey(page: Page, index: Int) = editKey(page, index)
 
-    /** [token] identifies the physical source (touched view or hardware key) for press/release pairing. */
+    /** A key with a long-press action, waiting to see whether it is tapped or held. */
+    private class PendingPress(val page: Page, val index: Int, val button: MacroButton, val longPress: Runnable)
+
+    private val pendingPresses = HashMap<Any, PendingPress>()
+
+    /**
+     * [token] identifies the physical source (touched view or hardware key) for press/release pairing.
+     * Keys without a long-press action fire at once; the others wait [LONG_PRESS_MS] to decide.
+     */
     private fun pressKey(token: Any, page: Page, index: Int, button: MacroButton, view: View?) {
+        val longAction = button.longAction?.takeIf { it.isNotBlank() }
+            ?: return runAction(token, page, index, button, button.action, view, hold = true)
+        view?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+        val longPress = Runnable {
+            pendingPresses.remove(token)
+            view?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            runAction(token, page, index, button, longAction, null, hold = true, primary = false)
+        }
+        pendingPresses[token] = PendingPress(page, index, button, longPress)
+        handler.postDelayed(longPress, LONG_PRESS_MS)
+    }
+
+    /** [tapped] = the finger lifted normally, so a key still waiting for a long press runs its tap action. */
+    private fun releaseKey(token: Any, tapped: Boolean = false) {
+        pendingPresses.remove(token)?.let { pending ->
+            handler.removeCallbacks(pending.longPress)
+            if (tapped) runAction(token, pending.page, pending.index, pending.button, pending.button.action, null, hold = false)
+        }
+        heldSteps.remove(token)?.let { hid?.release(token, it) }
+    }
+
+    /**
+     * Runs [action] of [button]: page steps on the tablet, the rest on the computer. With [hold] a
+     * single combo / media key / click stays down until [releaseKey]. [primary] = the tap action
+     * (flips toggle keys), not the long-press one.
+     */
+    private fun runAction(
+        token: Any, page: Page, index: Int, button: MacroButton, action: String, view: View?,
+        hold: Boolean, primary: Boolean = true,
+    ) {
         val steps = try {
-            Macro.parse(button.action)
+            Macro.parse(action)
         } catch (e: MacroException) {
             ui.toast("${button.label}: ${e.message}")
             return
         }
         view?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-        recorder.record(button.action)
+        recorder.record(action)
+        steps.filterIsInstance<Step.Page>().lastOrNull()?.let { goToPage(it.target) }
+        val remote = steps.filterNot { it is Step.Page }.map { step ->
+            if (step is Step.Text) Step.Text(TextVariables.expand(step.text, clipboard = ::clipboardText)) else step
+        }
+        if (remote.isEmpty()) return
         val hid = hid
         if (hid == null || !connected) {
             if (!recorder.isRecording) offlineBanner.animate().alpha(0.3f).setDuration(120)
                 .withEndAction { offlineBanner.animate().alpha(1f).setDuration(120) }
             return
         }
-        if (button.toggle) {
+        if (primary && button.toggle) {
             val key = toggleKey(page, index)
             if (!toggledOn.remove(key)) toggledOn += key
         }
-        when {
-            Macro.isHoldable(steps) -> {
-                heldSteps[token] = steps[0]
-                hid.press(token, steps[0])
-            }
-            else -> hid.run(steps)
+        if (hold && Macro.isHoldable(remote)) {
+            heldSteps[token] = remote[0]
+            hid.press(token, remote[0])
+        } else {
+            hid.run(remote)
         }
     }
 
-    private fun releaseKey(token: Any) {
-        heldSteps.remove(token)?.let { hid?.release(token, it) }
+    /** "next" / "prev" (among the pages shown for this computer) or a page name. */
+    private fun goToPage(target: String) {
+        val shown = layout.pages.indices.filter { layout.pages[it].name !in hiddenPages() }
+        val at = shown.indexOf(pageIndex)
+        val index = when (target.lowercase()) {
+            "next" -> shown[(at + 1).mod(shown.size)]
+            "prev", "previous" -> shown[(at - 1).mod(shown.size)]
+            else -> layout.pages.indexOfFirst { it.name.equals(target, ignoreCase = true) }
+        }
+        if (index < 0) return ui.toast("No page named \"$target\"")
+        selectPage(index)
+        renderPage()
     }
+
+    private fun clipboardText(): String? =
+        getSystemService(ClipboardManager::class.java)?.primaryClip
+            ?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
 
     // ---------------------------------------------------------------- status
 
@@ -746,6 +944,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         private const val REQUEST_EXPORT = 2
         private const val REQUEST_IMPORT = 3
         private const val TRACKPAD_KEYS = 5
+        private const val LONG_PRESS_MS = 450L
 
         fun bringToFront(context: Context) {
             context.startActivity(Intent(context, MainActivity::class.java)

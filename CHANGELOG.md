@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (1.2)
+## 1.2.0
 
 - **Toggle keys fixed**: they are now held while touched like other keys (Teams missed the
   instant press/release before) and only flip their ON/OFF display. ⚙ → **Reset ON/OFF keys**
@@ -21,6 +21,17 @@
   hotkeys (Ctrl+Alt+Del, Task manager, Start, switch apps), window/full screen. See
   [docs/citrix.md](docs/citrix.md).
 - **Not connected banner** in place of the media dock while no computer is connected.
+- **Long-press actions**: a key can have a second action that runs when it is held (0.45 s), e.g.
+  tap = toggle mute, hold = push to talk. Shown as "+hold" in the hint.
+- **Text variables**: `{date}`, `{time}`, `{date:dd/MM/yyyy}` (any pattern) and `{clipboard}` (the
+  tablet's clipboard) in `text:` steps.
+- **`page:` steps** (`page:next`, `page:prev`, `page:Teams`) switch the tablet's page — for keys or
+  the tablet volume buttons. (Swiping isn't used: keys fire on touch, so a swipe would press one.)
+- **Numpad page** (main-row digits, so Num Lock doesn't matter).
+- **Idle clock**: after 5 minutes without a touch (⚙ → Dim when idle) the screen dims to a drifting
+  clock; the touch that wakes it never presses a key.
+- **PIN lock** (⚙ → PIN lock): editing, recording, settings and computer changes ask for a PIN;
+  using the keys never does. Asked again after the screen dims.
 - Macro hints for "focus app + shortcut" keys (`Win+8 → Ctrl+2`, `Ctrl+Shift+O ↩`); the selected
   tab is kept in view.
 

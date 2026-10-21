@@ -12,6 +12,10 @@ import dev.belta.macropad.hid.KeyboardLayout
  *   delay:250           wait in milliseconds
  *   click:left          mouse button (left, right, middle)
  *   scroll:3            mouse wheel; positive = up, negative = down
+ *   page:next           switches the tablet's page (next, prev or a page name); not sent
+ *
+ * Text may contain {date}, {time}, {date:<pattern>} and {clipboard}, filled in when the key runs
+ * ([TextVariables]).
  *
  * A macro that is a single combo, media key or click is "held" while the key is touched,
  * so the computer sees a real key press (auto-repeat, holding modifiers, dragging, ...).
@@ -23,6 +27,8 @@ sealed class Step {
     data class Delay(val ms: Long) : Step()
     data class Click(val buttons: Int) : Step()
     data class Scroll(val amount: Int) : Step()
+    /** Handled on the tablet: "next", "prev" or a page name. */
+    data class Page(val target: String) : Step()
 }
 
 class MacroException(message: String) : Exception(message)
@@ -37,6 +43,8 @@ object Macro {
             val lower = line.lowercase()
             steps += when {
                 lower.startsWith("text:") -> Step.Text(unescape(raw.trimStart().substring(5)))
+                lower.startsWith("page:") -> Step.Page(
+                    line.substring(5).trim().ifEmpty { throw MacroException("Page step needs next, prev or a page name") })
                 lower.startsWith("media:") -> {
                     val name = lower.substring(6).trim()
                     Step.Media(HidKeys.media[name] ?: throw MacroException("Unknown media key '$name'"))
@@ -90,6 +98,11 @@ object Macro {
             lower.startsWith("media:") -> "Media key"
             lower.startsWith("click:") -> lower.substring(6).trim().replaceFirstChar { it.uppercase() } + " click"
             lower.startsWith("scroll:") -> "Scroll " + lower.substring(7).trim()
+            lower.startsWith("page:") -> when (val target = line.substring(5).trim()) {
+                "next" -> "Next page"
+                "prev" -> "Previous page"
+                else -> "Page $target"
+            }
             else -> describeCombo(line)
         }.let { if (lines.size > actions.size) "$it · timed" else it }
     }

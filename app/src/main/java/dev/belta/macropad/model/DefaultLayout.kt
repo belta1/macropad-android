@@ -6,9 +6,10 @@ object DefaultLayout {
     const val TRACKPAD_PAGE = "Trackpad"
     const val TEAMS_PAGE = "Teams"
     const val CITRIX_PAGE = "Citrix"
+    const val NUMPAD_PAGE = "Numpad"
 
     /** Pages added in later versions; inserted once into existing layouts at their default position. */
-    val ADDED_PAGES = listOf("Desktop", TEAMS_PAGE, CITRIX_PAGE, TRACKPAD_PAGE)
+    val ADDED_PAGES = listOf("Desktop", NUMPAD_PAGE, TEAMS_PAGE, CITRIX_PAGE, TRACKPAD_PAGE)
 
     // Taskbar positions (Win+1…9, counting pinned apps after Start/Search) on the work PC. Win+number
     // focuses an app even while a Citrix / Remote Desktop window has the keyboard.
@@ -40,7 +41,7 @@ object DefaultLayout {
     private val BLUE = c[0]; private val GREEN = c[1]; private val ORANGE = c[2]; private val RED = c[3]
     private val PURPLE = c[4]; private val TEAL = c[5]; private val YELLOW = c[6]; private val GRAY = c[7]
 
-    private fun b(label: String, action: String, color: Int, icon: String, toggle: Boolean = false) =
+    private fun b(label: String, action: String, color: Int, icon: String?, toggle: Boolean = false) =
         MacroButton(label, action, color, icon, toggle)
 
     /** Opens an app through the Windows Run box (Win+R), so it works for anything on the PATH. */
@@ -129,6 +130,16 @@ object DefaultLayout {
             b("Prev sheet", "ctrl+pageup", GRAY, "chevron_left"),
             b("Next sheet", "ctrl+pagedown", GRAY, "chevron_right"),
             b("New line in cell", "alt+enter", PURPLE, "newline"),
+        )),
+        // Number entry (e.g. Excel on a laptop without a keypad). Uses the main-row digits so it works
+        // whatever the computer's Num Lock state is.
+        Page(NUMPAD_PAGE, mutableListOf(
+            b("7", "7", GRAY, null), b("8", "8", GRAY, null), b("9", "9", GRAY, null),
+            b(".", "period", GRAY, null), b("Backspace", "backspace", RED, "back"),
+            b("4", "4", GRAY, null), b("5", "5", GRAY, null), b("6", "6", GRAY, null),
+            b("0", "0", GRAY, null), b("Tab", "tab", BLUE, "tab"),
+            b("1", "1", GRAY, null), b("2", "2", GRAY, null), b("3", "3", GRAY, null),
+            b("−", "minus", GRAY, null), b("Enter", "enter", GREEN, "newline"),
         )),
         Page("Word", mutableListOf(
             b("Bold", "ctrl+b", BLUE, "bold"),

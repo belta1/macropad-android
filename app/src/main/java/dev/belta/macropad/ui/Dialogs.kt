@@ -6,6 +6,9 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.view.Gravity
+import android.text.InputType
+import android.text.method.PasswordTransformationMethod
+import android.view.WindowManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -47,6 +50,8 @@ interface MacropadHost {
     fun resetToggles()
     /** A computer's name or settings changed. */
     fun profilesChanged()
+    /** Runs [action] once the PIN (if any) has been entered. */
+    fun withUnlock(action: () -> Unit)
 }
 
 /** Settings menu and the dialogs behind it. */
@@ -65,6 +70,8 @@ class Dialogs(private val host: MacropadHost) {
             "Pages…" to ::pages,
             "Backup and restore…" to ::backup,
             "Startup…" to ::startup,
+            "Dim when idle: ${dimLabel(host.settings.idleDimMinutes)}" to ::idleDim,
+            "PIN lock: ${if (host.settings.pinHash == null) "off" else "on"}" to ::pinLock,
             "Diagnostics…" to ::diagnostics,
             "Quit macropad" to { host.quit() },
         )
@@ -83,8 +90,8 @@ class Dialogs(private val host: MacropadHost) {
                 .setTitle("Connected")
                 .setMessage(hid.diagnostics().detail)
                 .setPositiveButton("OK", null)
-                .setNegativeButton("Switch computer…") { _, _ -> computers() }
-                .setNeutralButton("Diagnostics") { _, _ -> diagnostics() }
+                .setNegativeButton("Switch computer…") { _, _ -> host.withUnlock { computers() } }
+                .setNeutralButton("Diagnostics") { _, _ -> host.withUnlock { diagnostics() } }
                 .show()
             else -> ui.dialog()
                 .setTitle("Pairing")
@@ -96,7 +103,7 @@ class Dialogs(private val host: MacropadHost) {
                         "on the computer. Don't open Bluetooth settings on this tablet while pairing."
                 )
                 .setPositiveButton("OK", null)
-                .setNegativeButton("Diagnostics") { _, _ -> diagnostics() }
+                .setNegativeButton("Diagnostics") { _, _ -> host.withUnlock { diagnostics() } }
                 .setNeutralButton("Restart Bluetooth") { _, _ -> hid.restart() }
                 .show()
         }
@@ -443,6 +450,60 @@ class Dialogs(private val host: MacropadHost) {
             host.selectPage(host.pageIndex.coerceAtMost(pages.lastIndex))
             host.saveAndRender()
         }
+    }
+
+    private fun dimLabel(minutes: Int) = if (minutes == 0) "never" else "after $minutes min"
+
+    private fun idleDim() {
+        val options = listOf(0, 1, 2, 5, 10, 30)
+        ui.dialog()
+            .setTitle("Dim to a clock when idle")
+            .setSingleChoiceItems(options.map { dimLabel(it) }.toTypedArray(),
+                options.indexOf(host.settings.idleDimMinutes).coerceAtLeast(0)) { d, i ->
+                host.settings.idleDimMinutes = options[i]
+                d.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun pinLock() {
+        val settings = host.settings
+        fun setNew() = askPin("New PIN (4+ digits)") { pin ->
+            if (pin.length < 4) return@askPin ui.toast("Use at least 4 digits")
+            askPin("Repeat the PIN") { again ->
+                if (again != pin) return@askPin ui.toast("PINs don't match")
+                settings.pinHash = AppSettings.hashPin(pin)
+                ui.toast("PIN set — editing and settings now ask for it")
+            }
+        }
+        if (settings.pinHash == null) return setNew()
+        ui.dialog()
+            .setTitle("PIN lock")
+            .setMessage("Editing keys, recording, settings and computer changes ask for the PIN. " +
+                "Using the keys never does.")
+            .setPositiveButton("Change PIN") { _, _ -> setNew() }
+            .setNeutralButton("Remove PIN") { _, _ -> settings.pinHash = null; ui.toast("PIN removed") }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    fun askPin(title: String, onPin: (String) -> Unit) {
+        val input = EditText(ui.context).apply {
+            setSingleLine() // before the input type: it would replace the password masking
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            transformationMethod = PasswordTransformationMethod.getInstance()
+        }
+        ui.dialog()
+            .setTitle(title)
+            .setView(FrameLayout(ui.context).apply { setPadding(ui.dp(20), ui.dp(8), ui.dp(20), 0); addView(input) })
+            .setPositiveButton("OK") { _, _ -> onPin(input.text.toString()) }
+            .setNegativeButton("Cancel", null)
+            .show()
+            .also {
+                input.requestFocus()
+                it.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+            }
     }
 
     // ---------------------------------------------------------------- helpers

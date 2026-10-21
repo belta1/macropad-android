@@ -1,6 +1,6 @@
 {
   "format": "macropad-layout",
-  "version": 1,
+  "version": 2,
   "rows": 3,
   "cols": 5,
   "pages": [
@@ -290,6 +290,200 @@
       ]
     },
     {
+      "name": "Teams",
+      "buttons": [
+        {
+          "label": "Mute \/ Unmute",
+          "action": "win+alt+k",
+          "color": -41862,
+          "icon": "mic_off",
+          "toggle": true
+        },
+        {
+          "label": "Camera on \/ off",
+          "action": "win+8\ndelay:300\nctrl+shift+o\ndelay:150\nalt+tab",
+          "color": -11563777,
+          "icon": "videocam",
+          "toggle": true
+        },
+        {
+          "label": "Raise hand",
+          "action": "win+8\ndelay:300\nctrl+shift+k\ndelay:150\nalt+tab",
+          "color": -11205,
+          "icon": "hand",
+          "toggle": true
+        },
+        {
+          "label": "Share screen",
+          "action": "win+8\ndelay:300\nctrl+shift+e",
+          "color": -13711896,
+          "icon": "screen_share"
+        },
+        {
+          "label": "Leave call",
+          "action": "win+8\ndelay:300\nctrl+shift+h\ndelay:150\nalt+tab",
+          "color": -41862,
+          "icon": "call_end"
+        },
+        {
+          "label": "Push to talk",
+          "action": "ctrl+space",
+          "color": -13644914,
+          "icon": "mic"
+        },
+        {
+          "label": "Blur background",
+          "action": "win+8\ndelay:300\nctrl+shift+p\ndelay:150\nalt+tab",
+          "color": -5800961,
+          "icon": "blur",
+          "toggle": true
+        },
+        {
+          "label": "Admit from lobby",
+          "action": "win+8\ndelay:300\nctrl+shift+y\ndelay:150\nalt+tab",
+          "color": -24765,
+          "icon": "group"
+        },
+        {
+          "label": "Accept call",
+          "action": "win+8\ndelay:300\nctrl+shift+a\ndelay:150\nalt+tab",
+          "color": -13644914,
+          "icon": "call"
+        },
+        {
+          "label": "Decline call",
+          "action": "win+8\ndelay:300\nctrl+shift+d\ndelay:150\nalt+tab",
+          "color": -41862,
+          "icon": "call_end"
+        },
+        {
+          "label": "Activity",
+          "action": "win+8\ndelay:300\nctrl+1",
+          "color": -6642504,
+          "icon": "bell"
+        },
+        {
+          "label": "Chat",
+          "action": "win+8\ndelay:300\nctrl+2",
+          "color": -11563777,
+          "icon": "chat"
+        },
+        {
+          "label": "Calendar",
+          "action": "win+8\ndelay:300\nctrl+4",
+          "color": -5800961,
+          "icon": "calendar"
+        },
+        {
+          "label": "Search",
+          "action": "win+8\ndelay:300\nctrl+e",
+          "color": -13711896,
+          "icon": "search"
+        },
+        {
+          "label": "New chat",
+          "action": "win+8\ndelay:300\nctrl+n",
+          "color": -11563777,
+          "icon": "edit"
+        }
+      ]
+    },
+    {
+      "name": "Citrix",
+      "buttons": [
+        {
+          "label": "Remote desktop",
+          "action": "win+4",
+          "color": -11563777,
+          "icon": "desktop"
+        },
+        {
+          "label": "Teams",
+          "action": "win+8",
+          "color": -5800961,
+          "icon": "group"
+        },
+        {
+          "label": "Outlook",
+          "action": "win+2",
+          "color": -11563777,
+          "icon": "mail"
+        },
+        {
+          "label": "Edge",
+          "action": "win+7",
+          "color": -13711896,
+          "icon": "globe"
+        },
+        {
+          "label": "Explorer (local)",
+          "action": "win+6",
+          "color": -11205,
+          "icon": "folder"
+        },
+        {
+          "label": "Ctrl+Alt+Del (session)",
+          "action": "ctrl+f1",
+          "color": -41862,
+          "icon": "lock"
+        },
+        {
+          "label": "Task manager (session)",
+          "action": "ctrl+f3",
+          "color": -24765,
+          "icon": "tune"
+        },
+        {
+          "label": "Start (session)",
+          "action": "ctrl+f2",
+          "color": -6642504,
+          "icon": "task_view"
+        },
+        {
+          "label": "Next app (session)",
+          "action": "alt+f3",
+          "color": -13711896,
+          "icon": "chevron_right"
+        },
+        {
+          "label": "Prev app (session)",
+          "action": "alt+shift+f3",
+          "color": -13711896,
+          "icon": "chevron_left"
+        },
+        {
+          "label": "Window \/ full screen",
+          "action": "shift+f2",
+          "color": -6642504,
+          "icon": "open_in_new"
+        },
+        {
+          "label": "Copy",
+          "action": "ctrl+c",
+          "color": -6642504,
+          "icon": "copy"
+        },
+        {
+          "label": "Paste",
+          "action": "ctrl+v",
+          "color": -6642504,
+          "icon": "paste"
+        },
+        {
+          "label": "Snip (local)",
+          "action": "win+shift+s",
+          "color": -13644914,
+          "icon": "camera"
+        },
+        {
+          "label": "Lock PC",
+          "action": "win+l",
+          "color": -41862,
+          "icon": "lock"
+        }
+      ]
+    },
+    {
       "name": "Excel",
       "buttons": [
         {
@@ -380,6 +574,101 @@
           "label": "New line in cell",
           "action": "alt+enter",
           "color": -5800961,
+          "icon": "newline"
+        }
+      ]
+    },
+    {
+      "name": "Numpad",
+      "buttons": [
+        {
+          "label": "7",
+          "action": "7",
+          "color": -6642504,
+          "icon": null
+        },
+        {
+          "label": "8",
+          "action": "8",
+          "color": -6642504,
+          "icon": null
+        },
+        {
+          "label": "9",
+          "action": "9",
+          "color": -6642504,
+          "icon": null
+        },
+        {
+          "label": ".",
+          "action": "period",
+          "color": -6642504,
+          "icon": null
+        },
+        {
+          "label": "Backspace",
+          "action": "backspace",
+          "color": -41862,
+          "icon": "back"
+        },
+        {
+          "label": "4",
+          "action": "4",
+          "color": -6642504,
+          "icon": null
+        },
+        {
+          "label": "5",
+          "action": "5",
+          "color": -6642504,
+          "icon": null
+        },
+        {
+          "label": "6",
+          "action": "6",
+          "color": -6642504,
+          "icon": null
+        },
+        {
+          "label": "0",
+          "action": "0",
+          "color": -6642504,
+          "icon": null
+        },
+        {
+          "label": "Tab",
+          "action": "tab",
+          "color": -11563777,
+          "icon": "tab"
+        },
+        {
+          "label": "1",
+          "action": "1",
+          "color": -6642504,
+          "icon": null
+        },
+        {
+          "label": "2",
+          "action": "2",
+          "color": -6642504,
+          "icon": null
+        },
+        {
+          "label": "3",
+          "action": "3",
+          "color": -6642504,
+          "icon": null
+        },
+        {
+          "label": "−",
+          "action": "minus",
+          "color": -6642504,
+          "icon": null
+        },
+        {
+          "label": "Enter",
+          "action": "enter",
+          "color": -13644914,
           "icon": "newline"
         }
       ]
@@ -480,105 +769,6 @@
       ]
     },
     {
-      "name": "Teams",
-      "buttons": [
-        {
-          "label": "Mute \/ Unmute",
-          "action": "ctrl+shift+m",
-          "color": -41862,
-          "icon": "mic_off",
-          "toggle": true
-        },
-        {
-          "label": "Camera on \/ off",
-          "action": "ctrl+shift+o",
-          "color": -11563777,
-          "icon": "videocam",
-          "toggle": true
-        },
-        {
-          "label": "Raise hand",
-          "action": "ctrl+shift+k",
-          "color": -11205,
-          "icon": "hand",
-          "toggle": true
-        },
-        {
-          "label": "Share screen",
-          "action": "ctrl+shift+e",
-          "color": -13711896,
-          "icon": "screen_share"
-        },
-        {
-          "label": "Leave call",
-          "action": "ctrl+shift+h",
-          "color": -41862,
-          "icon": "call_end"
-        },
-        {
-          "label": "Push to talk",
-          "action": "ctrl+space",
-          "color": -13644914,
-          "icon": "mic"
-        },
-        {
-          "label": "Blur background",
-          "action": "ctrl+shift+p",
-          "color": -5800961,
-          "icon": "blur",
-          "toggle": true
-        },
-        {
-          "label": "Admit from lobby",
-          "action": "ctrl+shift+y",
-          "color": -24765,
-          "icon": "group"
-        },
-        {
-          "label": "Accept call",
-          "action": "ctrl+shift+a",
-          "color": -13644914,
-          "icon": "call"
-        },
-        {
-          "label": "Decline call",
-          "action": "ctrl+shift+d",
-          "color": -41862,
-          "icon": "call_end"
-        },
-        {
-          "label": "Activity",
-          "action": "ctrl+1",
-          "color": -6642504,
-          "icon": "bell"
-        },
-        {
-          "label": "Chat",
-          "action": "ctrl+2",
-          "color": -11563777,
-          "icon": "chat"
-        },
-        {
-          "label": "Calendar",
-          "action": "ctrl+4",
-          "color": -5800961,
-          "icon": "calendar"
-        },
-        {
-          "label": "Search",
-          "action": "ctrl+e",
-          "color": -13711896,
-          "icon": "search"
-        },
-        {
-          "label": "New chat",
-          "action": "ctrl+n",
-          "color": -11563777,
-          "icon": "edit"
-        }
-      ]
-    },
-    {
       "name": "Trackpad",
       "kind": "TRACKPAD",
       "buttons": [
@@ -670,5 +860,6 @@
         "icon": "volume_down"
       }
     ]
-  }
+  },
+  "computers": {}
 }

@@ -19,7 +19,12 @@ Windows laptops/desktops.
 - **Media dock** on every page: Previous · Play/Pause · Next · Volume − · Volume +.
 - **Trackpad page**: pointer with acceleration, tap / two-finger tap to click / right-click,
   two-finger or edge-strip scrolling, long-press to drag, plus editable click/scroll keys.
-- **Toggle keys** (Teams mute, camera, hand, blur) show their ON/OFF state.
+- **Toggle keys** (Teams mute, camera, hand, blur) show their ON/OFF state; any key can also have a
+  **long-press action** (e.g. tap = toggle mute, hold = push to talk).
+- **Text variables** in typed text: `{date}`, `{time}`, custom date formats and `{clipboard}`.
+- **Numpad page**, and `page:` actions to change page from a key or the tablet's volume buttons.
+- **Idle clock**: dims to a clock when not used; the waking touch never presses a key.
+- **PIN lock** for editing and settings.
 - **Tablet volume buttons** act as macropad keys (PC volume by default; assignable to any action).
 - **Edit mode** (✏️): tap any key to change its label, action, accent color, icon (96 icons) and
   toggle behaviour.
@@ -122,7 +127,7 @@ See [docs/bluetooth-troubleshooting.md](docs/bluetooth-troubleshooting.md).
 | Notification | Shows the connection; **Quit** stops the macropad completely. |
 
 **Settings (⚙):** reset ON/OFF keys · grid size · default keyboard layout · default key timing ·
-computers (name, layout, timing, pages, start page) · tablet volume buttons ·
+computers (name, layout, timing, pages, start page) · tablet volume buttons · dim when idle · PIN lock ·
 pages (add keys/trackpad page, rename, reorder, delete) · backup and restore · startup (open on
 boot / when charging) · diagnostics · quit.
 
