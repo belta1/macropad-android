@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Macropad" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF10131A</item>
+        <item name="android:colorAccent">#FF4F8CFF</item>
+        <item name="android:statusBarColor">#FF10131A</item>
+        <item name="android:navigationBarColor">#FF07080B</item>
+        <item name="android:fontFamily">@font/inter_medium</item>
+    </style>
+
+    <style name="Theme.Macropad.Dialog" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_background</item>
+        <item name="android:colorAccent">#FF4F8CFF</item>
+        <item name="android:colorBackground">#FF1A1E27</item>
+        <item name="android:textColorPrimary">#FFF2F4F8</item>
+        <item name="android:textColorSecondary">#FF8A93A6</item>
+        <item name="android:fontFamily">@font/inter_medium</item>
+    </style>
+</resources>

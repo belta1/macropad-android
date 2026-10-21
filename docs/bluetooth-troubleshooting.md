@@ -1,0 +1,57 @@
+# Bluetooth notes and troubleshooting
+
+Notes from getting a Fire HD 8 (Fire OS 7.3 / Android 9) to work as a keyboard for Windows,
+including the reasons for the workarounds in `HidPeripheral.kt`.
+
+## Why BLE HID over GATT
+
+Android 9+ has a public `BluetoothHidDevice` API (Classic Bluetooth HID), but it needs the
+Bluetooth stack's HID-device profile. On Fire OS it is compiled out:
+
+```bash
+adb pull /system/app/Bluetooth/Bluetooth.apk
+aapt2 dump resources Bluetooth.apk | grep -A1 profile_supported_hid_device
+#   () false
+```
+
+BLE peripheral mode (GATT server + advertising) *is* available, so the app implements the
+**HID over GATT profile** itself: HID service (0x1812) with a keyboard report (ID 1, plus LED
+output report) and a consumer-control report (ID 2), Battery service and Device Information
+(PnP ID). All HID characteristics require an encrypted link, which makes the computer pair.
+
+## Fire OS / Windows problems and fixes
+
+| Symptom | Cause | Fix in the app |
+|---|---|---|
+| Pairing fails after ~1 s; Windows shows a code but nothing on the tablet | Fire OS puts the numeric-comparison prompt in a notification when another app is in front; the PC times out | The app shows the code itself and pulls down the notification shade so **Pair** is visible |
+| Windows disconnects ~3 s after pairing | Right after bonding, Fire OS scans the PC's audio profiles and starts connecting A2DP/Hands-Free to it as if it were headphones | On connect, the app sets `bluetooth_a2dp_sink_priority_<addr>` and `bluetooth_headset_priority_<addr>` to 0 (needs `WRITE_SECURE_SETTINGS`) and disconnects those profiles |
+| After a disconnect, Windows never reconnects (until the app restarts) | Windows only re-recognises the keyboard when the GATT server and advertising start fresh | After every disconnect the app closes and rebuilds the GATT server and advertising |
+| Bond silently deleted; link dies ~15 s later | Windows also tried Classic pairing (the tablet's Classic side has the same name); Fire OS answers "already bonded (removing)" and wipes the LE keys | While running, the app makes Classic Bluetooth non-connectable (`setScanMode(SCAN_MODE_NONE)`, needs `WRITE_SECURE_SETTINGS`); restored when the app stops |
+| Keys work, then the link drops every ~15 s ("L2CAP connection rejected") | The tablet has the PC cached as a *dual-mode* device and keeps opening Classic channels to it; the PC refuses, and Fire OS tears down every link to that PC | ⚙ → **Reset pairing (forget computers)**: unbonds the computers and restarts Bluetooth to clear the cache; then re-pair on the computer |
+| Windows doesn't re-enable notifications on reconnect | Bonded hosts expect CCCD values to persist | CCCD values are stored per host and survive reconnects |
+
+**Don't make the tablet discoverable or open its Bluetooth settings while pairing.** That exposes
+the Classic side, and Windows may pair with *that* instead of the keyboard (it has no keys).
+
+## Clean re-pair procedure
+
+1. Tablet: ⚙ → **Reset pairing (forget computers)**, or over adb:
+   ```bash
+   adb shell am start -n dev.belta.macropad/.MainActivity --ez reset_pairing true
+   ```
+2. Computer: remove **every** "Fire Macropad" entry (Windows: Bluetooth & devices, and
+   Control Panel → Devices and Printers).
+3. Computer: add **Fire Macropad** again and confirm the code on both screens.
+
+## Useful commands
+
+```bash
+adb logcat -s HidPeripheral                       # app: GATT requests, connections, workarounds
+adb shell dumpsys bluetooth_manager | grep -E "state:|ScanMode"
+adb shell dumpsys bluetooth_manager | sed -n '/Bonded devices/,/^$/p'
+adb shell settings list global | grep priority_    # per-device profile priorities
+adb logcat -G 16M                                  # bigger log buffer (default is tiny on Fire OS)
+```
+
+Disconnect reasons in the log: `0x13` = the remote (computer) ended the connection,
+`0x16` = the tablet ended it, `0x08` = link timeout (out of range / interference).
