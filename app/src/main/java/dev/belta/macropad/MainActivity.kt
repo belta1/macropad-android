@@ -653,6 +653,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private fun renderSidebar() {
         sideKeys.removeAllViews()
         for (index in 0 until Layout.SIDEBAR_SIZE) {
+            // Empty slots only take room while editing (to add a key there).
+            if (!editing && layout.button(layout.sidebar, index) == null) continue
             sideKeys.addView(keyView(layout.sidebar, index, compact = false),
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
                     setMargins(0, ui.dp(3), 0, ui.dp(3))
@@ -709,6 +711,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         emphasize = page === layout.dock && index == 1,
         iconOnly = page === layout.dock && dockIconOnly(layout.button(page, index)),
         showHint = page !== layout.sidebar,
+        small = page === layout.sidebar,
     )
 
     private fun toggleKey(page: Page, index: Int) = "${page.name}#$index"

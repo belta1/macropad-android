@@ -46,7 +46,7 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
     fun build(
         page: Page, index: Int, button: MacroButton?,
         compact: Boolean, editing: Boolean, toggledOn: Boolean = false, emphasize: Boolean = false,
-        iconOnly: Boolean = false, showHint: Boolean = true,
+        iconOnly: Boolean = false, showHint: Boolean = true, small: Boolean = false,
     ): View {
         val key = LinearLayout(ui.context).apply {
             orientation = if (compact) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
@@ -86,11 +86,14 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
                     val badge = FrameLayout(ui.context).apply {
                         background = ui.roundRect(withAlpha(if (filled) Color.WHITE else accent, 0.18f), ui.dp(14).toFloat())
                         addView(ui.icon(button.icon!!, if (filled) Color.WHITE else accent),
-                            FrameLayout.LayoutParams(ui.dp(26), ui.dp(26), Gravity.CENTER))
+                            FrameLayout.LayoutParams(ui.dp(if (small) 22 else 26), ui.dp(if (small) 22 else 26), Gravity.CENTER))
                     }
-                    key.addView(badge, LinearLayout.LayoutParams(ui.dp(46), ui.dp(46)).apply { bottomMargin = ui.dp(8) })
+                    val badgeSize = ui.dp(if (small) 36 else 46)
+                    key.addView(badge, LinearLayout.LayoutParams(badgeSize, badgeSize).apply {
+                        bottomMargin = ui.dp(if (small) 4 else 8)
+                    })
                 }
-                key.addView(label(button.label, 13f, if (iconRes != null) 18f else 24f))
+                key.addView(label(button.label, if (small) 12f else 13f, if (small) 15f else if (iconRes != null) 18f else 24f))
                 if (showHint || button.toggle) key.addView(TextView(ui.context).apply {
                     val hint = Macro.describe(button.action) + if (button.longAction.isNullOrBlank()) "" else " · +hold"
                     text = when {
