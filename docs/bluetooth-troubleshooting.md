@@ -27,15 +27,33 @@ output report) and a consumer-control report (ID 2), Battery service and Device 
 | Windows disconnects ~3 s after pairing | Right after bonding, Fire OS scans the PC's audio profiles and starts connecting A2DP/Hands-Free to it as if it were headphones | On connect, the app sets `bluetooth_a2dp_sink_priority_<addr>` and `bluetooth_headset_priority_<addr>` to 0 (needs `WRITE_SECURE_SETTINGS`) and disconnects those profiles |
 | After a disconnect, Windows never reconnects (until the app restarts) | Windows only re-recognises the keyboard when the GATT server and advertising start fresh | After every disconnect the app closes and rebuilds the GATT server and advertising |
 | Bond silently deleted; link dies ~15 s later | Windows also tried Classic pairing (the tablet's Classic side has the same name); Fire OS answers "already bonded (removing)" and wipes the LE keys | While running, the app makes Classic Bluetooth non-connectable (`setScanMode(SCAN_MODE_NONE)`, needs `WRITE_SECURE_SETTINGS`); restored when the app stops |
-| Keys work, then the link drops every ~15 s ("L2CAP connection rejected") | The tablet has the PC cached as a *dual-mode* device and keeps opening Classic channels to it; the PC refuses, and Fire OS tears down every link to that PC | ⚙ → **Reset pairing (forget computers)**: unbonds the computers and restarts Bluetooth to clear the cache; then re-pair on the computer |
+| Keys work, then the link drops every ~15 s ("L2CAP connection rejected") | The tablet has the PC cached as a *dual-mode* device and keeps opening Classic channels to it; the PC refuses, and Fire OS tears down every link to that PC | ⚙ → **Diagnostics… → Reset pairing**: unbonds the computers and restarts Bluetooth to clear the cache; then re-pair on the computer |
 | Windows doesn't re-enable notifications on reconnect | Bonded hosts expect CCCD values to persist | CCCD values are stored per host and survive reconnects |
 
 **Don't make the tablet discoverable or open its Bluetooth settings while pairing.** That exposes
 the Classic side, and Windows may pair with *that* instead of the keyboard (it has no keys).
 
+## Diagnostics screen
+
+⚙ → **Diagnostics…** (or tap the status chip) shows, without adb:
+
+- connection state, connected computer and whether the tablet is paired with it,
+- which computer the macropad is set to (⚙ → Computers),
+- whether Classic Bluetooth is hidden and the secure-settings permission is granted (✓/✗),
+- whether audio profiles are blocked for the connected computer,
+- the last 60 Bluetooth events (connects, disconnects, ignored computers, workaround failures).
+
+It also has **Restart Bluetooth** and **Reset pairing** buttons.
+
+## Updating the app
+
+The Bluetooth keyboard runs in a foreground service (notification "Macropad"); updating the app
+restarts it and the computer reconnects by itself. When the HID report map changes (1.1 added the
+mouse), Windows keeps using its cached copy until the device is removed and re-added.
+
 ## Clean re-pair procedure
 
-1. Tablet: ⚙ → **Reset pairing (forget computers)**, or over adb:
+1. Tablet: ⚙ → **Diagnostics… → Reset pairing**, or over adb:
    ```bash
    adb shell am start -n dev.belta.macropad/.MainActivity --ez reset_pairing true
    ```

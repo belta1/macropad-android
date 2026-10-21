@@ -6,12 +6,28 @@ Every key has an **action**: one step per line. Lines starting with `#` are comm
 |---|---|---|
 | Key combo | `ctrl+shift+t` | Modifiers plus up to 6 keys, pressed together |
 | Media key | `media:volup` | Consumer-control key |
-| Text | `text:Hello world` | Types the text (US layout). `\n` = Enter, `\t` = Tab |
+| Text | `text:Hello world` | Types the text using the computer's keyboard layout. `\n` = Enter, `\t` = Tab |
 | Delay | `delay:250` | Waits, in milliseconds (max 10000). `wait:` also works |
+| Mouse click | `click:left` | `left`, `right` or `middle` |
+| Scroll | `scroll:3` | Mouse wheel notches; positive = up, negative = down (max ±50) |
 
-A key whose action is a **single combo or media key** is *held* for as long as it is touched,
-like a physical key (auto-repeat, push-to-talk, holding a modifier while pressing another key).
-Anything longer runs once per tap.
+A key whose action is a **single combo, media key or click** is *held* for as long as it is
+touched, like a physical key (auto-repeat, push-to-talk, holding a modifier, dragging with a held
+click). Anything longer runs once per tap. Keys marked **Toggle** in the editor fire once per tap
+and show ON/OFF (the state resets when the connection drops, since the computer's real state is
+unknown).
+
+## Keyboard layouts
+
+A keyboard sends *key positions*, not characters, so:
+
+- **Combos use US key names / positions** — `ctrl+/` presses the key that is `/` on a US keyboard.
+  If the computer uses another layout and a shortcut involves punctuation, name the key by where
+  it sits on a US keyboard (letters, digits, F-keys and named keys are the same everywhere).
+  `iso` is the extra key left of Z on ISO keyboards.
+- **`text:` uses the layout set in ⚙ → Computer keyboard layout** (English US, Spanish Latin
+  America, Spanish Spain). Accented letters are typed with dead keys (´ + a → á). Characters a
+  layout can't produce are skipped.
 
 ## Names
 
@@ -21,7 +37,7 @@ Anything longer runs once per tap.
 **Keys:** `a`–`z`, `0`–`9`, `f1`–`f24`, `enter`, `esc`, `tab`, `space`, `backspace`, `delete`,
 `insert`, `home`, `end`, `pageup`, `pagedown`, `up`, `down`, `left`, `right`, `printscreen`,
 `scrolllock`, `pause`, `capslock`, `numlock`, `menu`, `kp0`–`kp9`, `kpplus`, `kpminus`,
-`kpasterisk`, `kpslash`, `kpenter`, `kpdot`.
+`kpasterisk`, `kpslash`, `kpenter`, `kpdot`, `iso`.
 
 Punctuation: `minus` `equal` `plus` `lbracket` `rbracket` `backslash` `semicolon` `quote`
 `grave` `comma` `period` `slash` — or the character itself (`ctrl+/`). Use `plus` for the `+` key,

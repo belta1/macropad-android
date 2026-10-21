@@ -1,0 +1,674 @@
+{
+  "format": "macropad-layout",
+  "version": 1,
+  "rows": 3,
+  "cols": 5,
+  "pages": [
+    {
+      "name": "Desktop",
+      "buttons": [
+        {
+          "label": "Chrome",
+          "action": "win+r\ndelay:400\ntext:chrome\\n",
+          "color": -11563777,
+          "icon": "globe"
+        },
+        {
+          "label": "VS Code",
+          "action": "win+r\ndelay:400\ntext:code\\n",
+          "color": -13711896,
+          "icon": "code"
+        },
+        {
+          "label": "Excel",
+          "action": "win+r\ndelay:400\ntext:excel\\n",
+          "color": -13644914,
+          "icon": "table"
+        },
+        {
+          "label": "Word",
+          "action": "win+r\ndelay:400\ntext:winword\\n",
+          "color": -11563777,
+          "icon": "document"
+        },
+        {
+          "label": "Teams",
+          "action": "win+r\ndelay:400\ntext:ms-teams\\n",
+          "color": -5800961,
+          "icon": "group"
+        },
+        {
+          "label": "File Explorer",
+          "action": "win+e",
+          "color": -11205,
+          "icon": "folder"
+        },
+        {
+          "label": "Terminal",
+          "action": "win+r\ndelay:400\ntext:wt\\n",
+          "color": -6642504,
+          "icon": "terminal"
+        },
+        {
+          "label": "Outlook",
+          "action": "win+r\ndelay:400\ntext:outlook\\n",
+          "color": -11563777,
+          "icon": "mail"
+        },
+        {
+          "label": "Calculator",
+          "action": "media:calc",
+          "color": -24765,
+          "icon": "calculator"
+        },
+        {
+          "label": "Settings",
+          "action": "win+i",
+          "color": -6642504,
+          "icon": "settings"
+        },
+        {
+          "label": "Prev desktop",
+          "action": "win+ctrl+left",
+          "color": -13711896,
+          "icon": "chevron_left"
+        },
+        {
+          "label": "Task view",
+          "action": "win+tab",
+          "color": -5800961,
+          "icon": "task_view"
+        },
+        {
+          "label": "New desktop",
+          "action": "win+ctrl+d",
+          "color": -13644914,
+          "icon": "desktop_add"
+        },
+        {
+          "label": "Close desktop",
+          "action": "win+ctrl+f4",
+          "color": -41862,
+          "icon": "desktop_close"
+        },
+        {
+          "label": "Next desktop",
+          "action": "win+ctrl+right",
+          "color": -13711896,
+          "icon": "chevron_right"
+        }
+      ]
+    },
+    {
+      "name": "VS Code",
+      "buttons": [
+        {
+          "label": "Command palette",
+          "action": "ctrl+shift+p",
+          "color": -11563777,
+          "icon": "command"
+        },
+        {
+          "label": "Quick open",
+          "action": "ctrl+p",
+          "color": -11563777,
+          "icon": "search"
+        },
+        {
+          "label": "Terminal",
+          "action": "ctrl+grave",
+          "color": -6642504,
+          "icon": "terminal"
+        },
+        {
+          "label": "Sidebar",
+          "action": "ctrl+b",
+          "color": -6642504,
+          "icon": "sidebar"
+        },
+        {
+          "label": "Search files",
+          "action": "ctrl+shift+f",
+          "color": -13711896,
+          "icon": "find_replace"
+        },
+        {
+          "label": "Go to definition",
+          "action": "f12",
+          "color": -11563777,
+          "icon": "open_in_new"
+        },
+        {
+          "label": "Rename symbol",
+          "action": "f2",
+          "color": -24765,
+          "icon": "edit"
+        },
+        {
+          "label": "Format document",
+          "action": "shift+alt+f",
+          "color": -24765,
+          "icon": "align_left"
+        },
+        {
+          "label": "Toggle comment",
+          "action": "ctrl+slash",
+          "color": -13711896,
+          "icon": "comment"
+        },
+        {
+          "label": "Save all",
+          "action": "ctrl+k\ns",
+          "color": -13644914,
+          "icon": "save"
+        },
+        {
+          "label": "Run \/ Debug",
+          "action": "f5",
+          "color": -13644914,
+          "icon": "play"
+        },
+        {
+          "label": "Stop",
+          "action": "shift+f5",
+          "color": -41862,
+          "icon": "stop"
+        },
+        {
+          "label": "Step over",
+          "action": "f10",
+          "color": -5800961,
+          "icon": "step_over"
+        },
+        {
+          "label": "Step into",
+          "action": "f11",
+          "color": -5800961,
+          "icon": "step_into"
+        },
+        {
+          "label": "Cursor below",
+          "action": "ctrl+alt+down",
+          "color": -11205,
+          "icon": "cursor"
+        }
+      ]
+    },
+    {
+      "name": "Chrome",
+      "buttons": [
+        {
+          "label": "New tab",
+          "action": "ctrl+t",
+          "color": -11563777,
+          "icon": "add"
+        },
+        {
+          "label": "Close tab",
+          "action": "ctrl+w",
+          "color": -41862,
+          "icon": "close"
+        },
+        {
+          "label": "Reopen tab",
+          "action": "ctrl+shift+t",
+          "color": -24765,
+          "icon": "undo"
+        },
+        {
+          "label": "Prev tab",
+          "action": "ctrl+shift+tab",
+          "color": -6642504,
+          "icon": "chevron_left"
+        },
+        {
+          "label": "Next tab",
+          "action": "ctrl+tab",
+          "color": -6642504,
+          "icon": "chevron_right"
+        },
+        {
+          "label": "Back",
+          "action": "alt+left",
+          "color": -13711896,
+          "icon": "back"
+        },
+        {
+          "label": "Forward",
+          "action": "alt+right",
+          "color": -13711896,
+          "icon": "forward"
+        },
+        {
+          "label": "Reload",
+          "action": "ctrl+r",
+          "color": -13644914,
+          "icon": "refresh"
+        },
+        {
+          "label": "Hard reload",
+          "action": "ctrl+shift+r",
+          "color": -13644914,
+          "icon": "refresh"
+        },
+        {
+          "label": "Address bar",
+          "action": "ctrl+l",
+          "color": -11563777,
+          "icon": "link"
+        },
+        {
+          "label": "Find",
+          "action": "ctrl+f",
+          "color": -5800961,
+          "icon": "search"
+        },
+        {
+          "label": "Bookmark",
+          "action": "ctrl+d",
+          "color": -11205,
+          "icon": "bookmark"
+        },
+        {
+          "label": "History",
+          "action": "ctrl+h",
+          "color": -5800961,
+          "icon": "history"
+        },
+        {
+          "label": "Downloads",
+          "action": "ctrl+j",
+          "color": -5800961,
+          "icon": "download"
+        },
+        {
+          "label": "DevTools",
+          "action": "f12",
+          "color": -6642504,
+          "icon": "code"
+        }
+      ]
+    },
+    {
+      "name": "Excel",
+      "buttons": [
+        {
+          "label": "AutoSum",
+          "action": "alt+equal",
+          "color": -13644914,
+          "icon": "sum"
+        },
+        {
+          "label": "Insert row",
+          "action": "shift+space\nctrl+shift+plus",
+          "color": -11563777,
+          "icon": "row_add"
+        },
+        {
+          "label": "Delete row",
+          "action": "shift+space\nctrl+minus",
+          "color": -41862,
+          "icon": "row_remove"
+        },
+        {
+          "label": "Fill down",
+          "action": "ctrl+d",
+          "color": -13711896,
+          "icon": "arrow_down"
+        },
+        {
+          "label": "Fill right",
+          "action": "ctrl+r",
+          "color": -13711896,
+          "icon": "forward"
+        },
+        {
+          "label": "Format cells",
+          "action": "ctrl+1",
+          "color": -24765,
+          "icon": "tune"
+        },
+        {
+          "label": "Edit cell",
+          "action": "f2",
+          "color": -11563777,
+          "icon": "edit"
+        },
+        {
+          "label": "Toggle $ ref",
+          "action": "f4",
+          "color": -11205,
+          "icon": "dollar"
+        },
+        {
+          "label": "Today's date",
+          "action": "ctrl+semicolon",
+          "color": -5800961,
+          "icon": "calendar"
+        },
+        {
+          "label": "Filter",
+          "action": "ctrl+shift+l",
+          "color": -24765,
+          "icon": "filter"
+        },
+        {
+          "label": "Paste values",
+          "action": "ctrl+alt+v\ndelay:300\nv\nenter",
+          "color": -13644914,
+          "icon": "paste"
+        },
+        {
+          "label": "Make table",
+          "action": "ctrl+t",
+          "color": -13711896,
+          "icon": "table"
+        },
+        {
+          "label": "Prev sheet",
+          "action": "ctrl+pageup",
+          "color": -6642504,
+          "icon": "chevron_left"
+        },
+        {
+          "label": "Next sheet",
+          "action": "ctrl+pagedown",
+          "color": -6642504,
+          "icon": "chevron_right"
+        },
+        {
+          "label": "New line in cell",
+          "action": "alt+enter",
+          "color": -5800961,
+          "icon": "newline"
+        }
+      ]
+    },
+    {
+      "name": "Word",
+      "buttons": [
+        {
+          "label": "Bold",
+          "action": "ctrl+b",
+          "color": -11563777,
+          "icon": "bold"
+        },
+        {
+          "label": "Italic",
+          "action": "ctrl+i",
+          "color": -11563777,
+          "icon": "italic"
+        },
+        {
+          "label": "Underline",
+          "action": "ctrl+u",
+          "color": -11563777,
+          "icon": "underline"
+        },
+        {
+          "label": "Heading 1",
+          "action": "ctrl+alt+1",
+          "color": -5800961,
+          "icon": "heading"
+        },
+        {
+          "label": "Heading 2",
+          "action": "ctrl+alt+2",
+          "color": -5800961,
+          "icon": "heading"
+        },
+        {
+          "label": "Normal style",
+          "action": "ctrl+shift+n",
+          "color": -5800961,
+          "icon": "notes"
+        },
+        {
+          "label": "Bullets",
+          "action": "ctrl+shift+l",
+          "color": -13711896,
+          "icon": "bullets"
+        },
+        {
+          "label": "Align left",
+          "action": "ctrl+l",
+          "color": -6642504,
+          "icon": "align_left"
+        },
+        {
+          "label": "Center",
+          "action": "ctrl+e",
+          "color": -6642504,
+          "icon": "align_center"
+        },
+        {
+          "label": "Align right",
+          "action": "ctrl+r",
+          "color": -6642504,
+          "icon": "align_right"
+        },
+        {
+          "label": "Page break",
+          "action": "ctrl+enter",
+          "color": -24765,
+          "icon": "page_break"
+        },
+        {
+          "label": "Find & replace",
+          "action": "ctrl+h",
+          "color": -11205,
+          "icon": "find_replace"
+        },
+        {
+          "label": "Track changes",
+          "action": "ctrl+shift+e",
+          "color": -41862,
+          "icon": "track_changes"
+        },
+        {
+          "label": "Word count",
+          "action": "ctrl+shift+g",
+          "color": -13644914,
+          "icon": "hash"
+        },
+        {
+          "label": "Clear formatting",
+          "action": "ctrl+space",
+          "color": -41862,
+          "icon": "format_clear"
+        }
+      ]
+    },
+    {
+      "name": "Teams",
+      "buttons": [
+        {
+          "label": "Mute \/ Unmute",
+          "action": "ctrl+shift+m",
+          "color": -41862,
+          "icon": "mic_off",
+          "toggle": true
+        },
+        {
+          "label": "Camera on \/ off",
+          "action": "ctrl+shift+o",
+          "color": -11563777,
+          "icon": "videocam",
+          "toggle": true
+        },
+        {
+          "label": "Raise hand",
+          "action": "ctrl+shift+k",
+          "color": -11205,
+          "icon": "hand",
+          "toggle": true
+        },
+        {
+          "label": "Share screen",
+          "action": "ctrl+shift+e",
+          "color": -13711896,
+          "icon": "screen_share"
+        },
+        {
+          "label": "Leave call",
+          "action": "ctrl+shift+h",
+          "color": -41862,
+          "icon": "call_end"
+        },
+        {
+          "label": "Push to talk",
+          "action": "ctrl+space",
+          "color": -13644914,
+          "icon": "mic"
+        },
+        {
+          "label": "Blur background",
+          "action": "ctrl+shift+p",
+          "color": -5800961,
+          "icon": "blur",
+          "toggle": true
+        },
+        {
+          "label": "Admit from lobby",
+          "action": "ctrl+shift+y",
+          "color": -24765,
+          "icon": "group"
+        },
+        {
+          "label": "Accept call",
+          "action": "ctrl+shift+a",
+          "color": -13644914,
+          "icon": "call"
+        },
+        {
+          "label": "Decline call",
+          "action": "ctrl+shift+d",
+          "color": -41862,
+          "icon": "call_end"
+        },
+        {
+          "label": "Activity",
+          "action": "ctrl+1",
+          "color": -6642504,
+          "icon": "bell"
+        },
+        {
+          "label": "Chat",
+          "action": "ctrl+2",
+          "color": -11563777,
+          "icon": "chat"
+        },
+        {
+          "label": "Calendar",
+          "action": "ctrl+4",
+          "color": -5800961,
+          "icon": "calendar"
+        },
+        {
+          "label": "Search",
+          "action": "ctrl+e",
+          "color": -13711896,
+          "icon": "search"
+        },
+        {
+          "label": "New chat",
+          "action": "ctrl+n",
+          "color": -11563777,
+          "icon": "edit"
+        }
+      ]
+    },
+    {
+      "name": "Trackpad",
+      "kind": "TRACKPAD",
+      "buttons": [
+        {
+          "label": "Left click",
+          "action": "click:left",
+          "color": -11563777,
+          "icon": "mouse"
+        },
+        {
+          "label": "Middle click",
+          "action": "click:middle",
+          "color": -6642504,
+          "icon": "mouse"
+        },
+        {
+          "label": "Right click",
+          "action": "click:right",
+          "color": -5800961,
+          "icon": "mouse"
+        },
+        {
+          "label": "Scroll up",
+          "action": "scroll:3",
+          "color": -13711896,
+          "icon": "arrow_up"
+        },
+        {
+          "label": "Scroll down",
+          "action": "scroll:-3",
+          "color": -13711896,
+          "icon": "arrow_down"
+        }
+      ]
+    },
+    {
+      "name": "Custom",
+      "buttons": []
+    }
+  ],
+  "dock": {
+    "name": "Media",
+    "buttons": [
+      {
+        "label": "Previous",
+        "action": "media:prev",
+        "color": -6642504,
+        "icon": "prev"
+      },
+      {
+        "label": "Play \/ Pause",
+        "action": "media:playpause",
+        "color": -11563777,
+        "icon": "play_pause"
+      },
+      {
+        "label": "Next",
+        "action": "media:next",
+        "color": -6642504,
+        "icon": "next"
+      },
+      {
+        "label": "Volume −",
+        "action": "media:voldown",
+        "color": -6642504,
+        "icon": "volume_down"
+      },
+      {
+        "label": "Volume +",
+        "action": "media:volup",
+        "color": -6642504,
+        "icon": "volume_up"
+      }
+    ]
+  },
+  "hardware": {
+    "name": "Tablet buttons",
+    "buttons": [
+      {
+        "label": "Volume +",
+        "action": "media:volup",
+        "color": -6642504,
+        "icon": "volume_up"
+      },
+      {
+        "label": "Volume −",
+        "action": "media:voldown",
+        "color": -6642504,
+        "icon": "volume_down"
+      }
+    ]
+  }
+}

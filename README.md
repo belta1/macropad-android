@@ -1,9 +1,9 @@
 # Macropad for Android
 
-Turns a spare Android tablet into a wireless **touch macropad** for your computer. The tablet
-pairs over Bluetooth Low Energy as a standard **BLE keyboard (HID over GATT)**, so nothing has
-to be installed on the computer — Windows, macOS, Linux, ChromeOS, iOS and Android all support it
-natively. Everything runs on the tablet.
+Turns a spare Android tablet into a wireless **touch macropad and trackpad** for your computer.
+The tablet pairs over Bluetooth Low Energy as a standard **BLE keyboard + mouse (HID over GATT)**,
+so nothing has to be installed on the computer — Windows, macOS, Linux, ChromeOS, iOS and Android
+all support it natively. Everything runs on the tablet.
 
 Built and tested on an **Amazon Fire HD 8 (8th gen, KFKAWI, Fire OS 7.3 / Android 9)** paired with
 Windows laptops/desktops.
@@ -13,17 +13,25 @@ Windows laptops/desktops.
 ## Features
 
 - **Pages (tabs)** with ready-made shortcuts: **Desktop** (open apps, virtual desktops),
-  **VS Code**, **Chrome**, **Excel**, **Word**, **Teams**, plus an empty **Custom** page.
+  **VS Code**, **Chrome**, **Excel**, **Word**, **Teams**, a **Trackpad**, and an empty **Custom** page.
 - **Media dock** on every page: Previous · Play/Pause · Next · Volume − · Volume +.
+- **Trackpad page**: pointer with acceleration, tap / two-finger tap to click / right-click,
+  two-finger or edge-strip scrolling, long-press to drag, plus editable click/scroll keys.
+- **Toggle keys** (Teams mute, camera, hand, blur) show their ON/OFF state.
 - **Tablet volume buttons** act as macropad keys (PC volume by default; assignable to any action).
-- **Edit mode** (✏️): tap any key to change its label, action, accent color and icon (95 icons).
-- **Macro language**: key combos, media keys, typed text, delays — see
-  [docs/macro-language.md](docs/macro-language.md).
+- **Edit mode** (✏️): tap any key to change its label, action, accent color, icon (96 icons) and
+  toggle behaviour.
+- **Macro language**: key combos, media keys, typed text, delays, mouse clicks and scrolling —
+  see [docs/macro-language.md](docs/macro-language.md).
 - **Recorder** (●): press keys, type text or send combos — each is sent to the computer live and
   captured with its timing — then save it as a new key on the Custom page.
-- Keys behave like real keys: single combos are *held* while touched (auto-repeat, push-to-talk);
-  multi-step macros run on tap. Several keys can be held at once.
-- Runs full-screen, keeps the screen on, and shows over the lock screen.
+- **Keyboard layouts** for typed text: English (US), Spanish (Latin America), Spanish (Spain).
+- **Several computers**: remembers every computer it has served; pick one or let the first to
+  connect win.
+- **Runs in the background** as a foreground service, so the connection survives the screen being
+  closed or recreated. Can start on boot and come to the front when the charger is plugged in.
+- **Backup**: layout auto-saved to a JSON file, plus export/import through the file picker.
+- **Diagnostics** screen: connection health checks and recent Bluetooth events, no adb needed.
 
 ## Requirements
 
@@ -31,13 +39,16 @@ Windows laptops/desktops.
 |---|---|
 | Tablet | Android 9 (API 28) or newer with BLE **peripheral/advertising** support |
 | Build machine | JDK 17, Android SDK (platform 34, build-tools 34). Gradle comes via the wrapper. |
-| Computer | Any OS with Bluetooth LE. Text typing assumes a **US keyboard layout** on the computer. |
+| Computer | Any OS with Bluetooth LE |
 
 > Many tablets — including Fire tablets — ship with the *Classic* Bluetooth HID-device profile
-> disabled (`profile_supported_hid_device=false`), which is why this app uses BLE HID over GATT
-> instead of Android's `BluetoothHidDevice` API.
+> disabled (`profile_supported_hid_device=false`), which is why this app implements BLE HID over
+> GATT itself instead of using Android's `BluetoothHidDevice` API.
 
-## Build
+## Install
+
+Either download an APK from the [Releases](../../releases) page / the **Actions** tab (debug APK
+artifact), or build it:
 
 ```bash
 export JAVA_HOME=/path/to/jdk-17
@@ -46,30 +57,32 @@ export ANDROID_HOME=/path/to/Android/Sdk      # or put sdk.dir in local.properti
 # → app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Install and set up the tablet
+Then, with **USB debugging** enabled on the tablet:
 
-1. Enable **Developer options → USB debugging** on the tablet and connect it over USB.
-   On Linux you may need a udev rule, e.g. for Amazon (vendor `1949`):
-   ```bash
-   echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="1949", MODE="0666", GROUP="plugdev"' \
-     | sudo tee /etc/udev/rules.d/51-android.rules
-   sudo udevadm control --reload-rules && sudo udevadm trigger
-   ```
-2. Install the app:
-   ```bash
-   adb install -r app/build/outputs/apk/debug/app-debug.apk
-   ```
-3. **Grant the secure-settings permission** (one time). The app uses it to stop the tablet from
-   treating the paired PC as headphones and from accepting Classic Bluetooth connections — both
-   of which make Windows drop the keyboard (see [troubleshooting](docs/bluetooth-troubleshooting.md)):
-   ```bash
-   adb shell pm grant dev.belta.macropad android.permission.WRITE_SECURE_SETTINGS
-   ```
-4. Optional, recommended for a dedicated macropad:
-   ```bash
-   adb shell settings put global stay_on_while_plugged_in 7   # stay awake while charging
-   ```
-   Use a charger of at least 2 A — with the screen always on, a weak USB port can't keep up.
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+# One time: lets the app keep Fire OS from treating the PC as headphones and from accepting
+# Classic Bluetooth connections — both make Windows drop the keyboard.
+adb shell pm grant dev.belta.macropad android.permission.WRITE_SECURE_SETTINGS
+
+# Recommended for a dedicated macropad: stay awake while charging.
+adb shell settings put global stay_on_while_plugged_in 7
+```
+
+On Linux, adb may need a udev rule for the tablet's USB vendor ID (Amazon is `1949`):
+
+```bash
+echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="1949", MODE="0666", GROUP="plugdev"' \
+  | sudo tee /etc/udev/rules.d/51-android.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+Use a charger of at least 2 A — with the screen always on, a weak USB port can't keep up.
+
+> Debug and release builds are signed with different keys. Switching between them requires
+> uninstalling first, which clears the app's data — **export your layout first** and re-run the
+> `pm grant` command afterwards.
 
 ## Pair with a computer
 
@@ -81,49 +94,80 @@ export ANDROID_HOME=/path/to/Android/Sdk      # or put sdk.dir in local.properti
 4. Windows connects, disconnects and reconnects within a few seconds (normal for BLE keyboards).
    The chip turns **green** with the computer's name.
 
-The computer reconnects automatically whenever the app is open. One computer is connected at a
-time. **Avoid opening Bluetooth settings on the tablet** — its scan re-learns the PC as a Classic
-device. If connections start dropping, use ⚙ → **Reset pairing (forget computers)**, then remove
-and re-add *Fire Macropad* on the computer.
+The computer reconnects automatically while the macropad runs. One computer is connected at a time;
+choose which in ⚙ → **Computers…**. **Avoid opening Bluetooth settings on the tablet** — its scan
+re-learns the PC as a Classic device. If connections drop, open ⚙ → **Diagnostics…**, and if needed
+**Reset pairing**, then remove and re-add *Fire Macropad* on the computer.
+See [docs/bluetooth-troubleshooting.md](docs/bluetooth-troubleshooting.md).
+
+> Updating from 1.0: the keyboard description changed (mouse added). Remove and re-add
+> *Fire Macropad* on each computer once so it picks up the trackpad.
 
 ## Using it
 
 | Control | What it does |
 |---|---|
 | Tabs | Switch page. Long-press a tab to rename it. |
-| Status chip | Connection state; tap for details. |
+| Status chip | Connection state; tap for details, switching computer and diagnostics. |
 | ● / ■ | Start / stop recording a macro. |
 | ✏️ / ✓ | Edit mode: tap a key to edit, tap an empty slot to add one. |
-| ⚙ | Grid size, tablet volume buttons, pages, Bluetooth restart / reset, reset keys to defaults. |
+| ⚙ | Settings (below). |
 | Tablet volume buttons | Assigned actions (default: PC volume). Clear an assignment to give the button back to the tablet. |
+| Notification | Shows the connection; **Quit** stops the macropad completely. |
 
-Shortcuts on the app pages are the **Windows** defaults. On macOS, edit keys to use `cmd` instead
-of `ctrl`.
+**Settings (⚙):** grid size · computer keyboard layout · computers · tablet volume buttons ·
+pages (add keys/trackpad page, rename, reorder, delete) · backup and restore · startup (open on
+boot / when charging) · diagnostics · quit.
 
-## Project layout
+Shortcuts on the app pages are the **Windows** defaults; on macOS, edit keys to use `cmd`.
+
+## Backup
+
+- Every change is written to `/sdcard/Android/data/dev.belta.macropad/files/macropad-layout.json`:
+  ```bash
+  adb pull /sdcard/Android/data/dev.belta.macropad/files/macropad-layout.json backup/
+  ```
+- ⚙ → **Backup and restore** exports/imports the same JSON through the file picker.
+- [backup/macropad-layout.json](backup/macropad-layout.json) in this repo is the current layout.
+
+## Development
 
 ```
 app/src/main/java/dev/belta/macropad/
-  HidPeripheral.kt  BLE HID-over-GATT peripheral: GATT services, advertising, report sending,
-                    reconnect handling and Fire OS workarounds
-  Macro.kt          Macro language parser, key/media usage tables, key hint text
-  MacroStore.kt     Layout model, default pages, JSON persistence, migrations for new pages
-  MainActivity.kt   UI (tabs, key grid, dock, editor, recorder, settings), volume-button input
-  Icons.kt          Generated icon table
-app/src/main/res/drawable/ic_k_*.xml   Generated key icons
-app/src/main/res/font/                 Inter font
-tools/gen_icons.py                     Regenerates the icons and Icons.kt
-docs/                                  Macro language, Bluetooth troubleshooting
-licenses/                              Third-party licenses
+  MainActivity.kt      Screen: tabs, key grid / trackpad, dock, key presses, volume buttons
+  MacropadService.kt   Foreground service that owns the Bluetooth keyboard
+  BootReceiver.kt      Start on boot
+  hid/                 HidPeripheral (GATT server, advertising, sending, Fire OS workarounds),
+                       HidReports (report descriptor + builders), HidKeys, KeyboardLayout
+  model/               Macro (parser), Layout + LayoutJson, DefaultLayout, MacroStore, AppSettings
+  ui/                  KeyViews, KeyEditor, Recorder, TrackpadView, Dialogs, Ui (theme), Icons
+app/src/test/          Unit tests (macro parser, keyboard layouts, HID reports, layout JSON)
+tools/gen_icons.py     Regenerates res/drawable/ic_k_*.xml and ui/Icons.kt
 ```
-
-## Debugging
-
-The app logs every GATT request, connection change and workaround under the tag `HidPeripheral`:
 
 ```bash
-adb logcat -s HidPeripheral
+./gradlew testDebugUnitTest      # unit tests
+./gradlew assembleRelease        # signed with keystore.properties (see below), else the debug key
+adb logcat -s HidPeripheral      # Bluetooth events (GATT request details in debug builds)
 ```
+
+**Release signing.** Create a keystore outside the repo and a git-ignored `keystore.properties`:
+
+```properties
+storeFile=/home/you/.android/macropad-release.jks
+storePassword=…
+keyAlias=macropad
+keyPassword=…
+```
+
+Keep the keystore and its password backed up — updates must be signed with the same key.
+
+**CI.** [.github/workflows/android.yml](.github/workflows/android.yml) runs the tests and uploads a
+debug APK on every push. Pushing a tag `v*` also builds the release APK and attaches it to a GitHub
+Release. To sign it, add repository secrets `MACROPAD_KEYSTORE_BASE64` (`base64 -w0 your.jks`),
+`MACROPAD_KEYSTORE_PASSWORD`, `MACROPAD_KEY_ALIAS` and `MACROPAD_KEY_PASSWORD`.
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
 
 ## Credits and licenses
 
