@@ -81,7 +81,7 @@ class Dialogs(private val host: MacropadHost) {
             "Default key timing: ${host.settings.keyTiming.label}" to ::keyTiming,
             "Computers…" to ::computers,
             "Tablet volume buttons…" to ::tabletButtons,
-            "Saved values (logins)…" to ::savedValues,
+            "Saved values for logins…" to ::savedValues,
             "Pages…" to ::pages,
             "Backup and restore…" to ::backup,
             "Startup…" to ::startup,

@@ -46,12 +46,12 @@ object KeyEditor {
             setPadding(ui.dp(20), ui.dp(8), ui.dp(20), 0)
         }
         val label = EditText(context).apply {
-            hint = "Label"
+            hint = "Shown on the key"
             setText(initial?.label ?: "")
             setSingleLine()
         }
         val action = EditText(context).apply {
-            hint = "Action, e.g. ctrl+shift+t"
+            hint = "e.g. ctrl+shift+t"
             setText(initial?.action ?: "")
             typeface = Typeface.MONOSPACE
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
@@ -64,17 +64,21 @@ object KeyEditor {
             isChecked = initial?.toggle == true
         }
         val longAction = EditText(context).apply {
-            hint = "Long-press action (optional), e.g. ctrl+space"
+            hint = "Optional, e.g. ctrl+space"
             setText(initial?.longAction ?: "")
             typeface = Typeface.MONOSPACE
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                 InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             gravity = Gravity.TOP or Gravity.START
         }
+        content.addView(ui.sectionTitle("Label"))
         content.addView(label)
+        content.addView(ui.sectionTitle("Action"))
         content.addView(action)
+        content.addView(ui.sectionTitle("Long press"))
         content.addView(longAction)
-        content.addView(toggle)
+        content.addView(toggle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = ui.dp(10) })
 
         content.addView(ui.sectionTitle("Color"))
         val swatches = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }

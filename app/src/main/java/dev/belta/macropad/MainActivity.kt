@@ -59,6 +59,7 @@ import dev.belta.macropad.ui.Recorder
 import dev.belta.macropad.ui.TrackpadView
 import dev.belta.macropad.ui.Ui
 import dev.belta.macropad.ui.Ui.Companion.BG_BOTTOM
+import dev.belta.macropad.ui.Ui.Companion.BLUE
 import dev.belta.macropad.ui.Ui.Companion.BG_TOP
 import dev.belta.macropad.ui.Ui.Companion.MUTED
 import dev.belta.macropad.ui.Ui.Companion.RED
@@ -68,6 +69,7 @@ import dev.belta.macropad.ui.Ui.Companion.STROKE_STRONG
 import dev.belta.macropad.ui.Ui.Companion.SURFACE
 import dev.belta.macropad.ui.Ui.Companion.SURFACE_ACTIVE
 import dev.belta.macropad.ui.Ui.Companion.TEXT
+import dev.belta.macropad.ui.Ui.Companion.blend
 import dev.belta.macropad.ui.Ui.Companion.withAlpha
 
 /** The macropad screen. The Bluetooth keyboard itself lives in [MacropadService]. */
@@ -482,12 +484,12 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         offlineBanner = TextView(this).apply {
             setTextColor(0xFFFF8FA3.toInt())
             typeface = ui.fontSemiBold
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             gravity = Gravity.CENTER
             setPadding(ui.dp(16), 0, ui.dp(16), 0)
             visibility = View.GONE
-            background = ui.roundRect(0xFF2A1219.toInt(), ui.dp(26).toFloat()).apply {
-                setStroke(ui.dp(1), withAlpha(RED, 0.45f))
+            background = ui.roundRect(blend(RED, SURFACE, 0.12f), ui.dp(22).toFloat()).apply {
+                setStroke(ui.dp(1), withAlpha(RED, 0.3f))
             }
             setOnClickListener { onStatusTapped() }
         }
@@ -500,7 +502,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             gravity = Gravity.CENTER
             setPadding(ui.dp(16), 0, ui.dp(16), 0)
             visibility = View.GONE
-            background = ui.pressable(0xFF15263F.toInt(), ui.dp(26).toFloat())
+            background = ui.pressable(blend(BLUE, SURFACE, 0.16f), ui.dp(22).toFloat())
             setOnClickListener {
                 hid?.stopTyping()
                 text = "Stopping…"
@@ -541,7 +543,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         dockRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(ui.dp(5), ui.dp(5), ui.dp(5), ui.dp(5))
-            background = ui.roundRect(SURFACE, ui.dp(26).toFloat()).apply { setStroke(ui.dp(1), STROKE) }
+            background = ui.roundRect(SURFACE, ui.dp(22).toFloat()).apply { setStroke(ui.dp(1), STROKE) }
             isMotionEventSplittingEnabled = true
         }
         root.addView(FrameLayout(this).apply {
@@ -591,7 +593,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
                     setPadding(ui.dp(9), 0, 0, 0)
                 })
                 background = if (active) {
-                    ui.roundRect(SURFACE_ACTIVE, ui.dp(20).toFloat()).apply { setStroke(ui.dp(1), STROKE_STRONG) }
+                    ui.roundRect(blend(BLUE, SURFACE_ACTIVE, 0.22f), ui.dp(20).toFloat())
+                        .apply { setStroke(ui.dp(1), withAlpha(BLUE, 0.45f)) }
                 } else {
                     ui.pressable(Color.TRANSPARENT, ui.dp(20).toFloat())
                 }
@@ -652,19 +655,21 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
         renderSidebar()
 
-        // Icon-only keys (media) take one share of the width, labelled keys two; a divider
-        // separates the two groups.
+        // Icon-only keys take one share of the width, labelled keys two; a divider separates the
+        // media keys from the rest.
         dockRow.removeAllViews()
-        var previousIconOnly: Boolean? = null
+        var previousMedia: Boolean? = null
         for (index in 0 until Layout.DOCK_SIZE) {
-            val iconOnly = dockIconOnly(layout.button(layout.dock, index))
-            if (previousIconOnly != null && iconOnly != previousIconOnly) {
+            val button = layout.button(layout.dock, index)
+            val iconOnly = dockIconOnly(button)
+            val media = button == null || isMediaKey(button)
+            if (previousMedia != null && media != previousMedia) {
                 dockRow.addView(View(this).apply { setBackgroundColor(STROKE) },
                     LinearLayout.LayoutParams(ui.dp(1), ViewGroup.LayoutParams.MATCH_PARENT).apply {
                         setMargins(ui.dp(6), ui.dp(12), ui.dp(6), ui.dp(12))
                     })
             }
-            previousIconOnly = iconOnly
+            previousMedia = media
             dockRow.addView(keyView(layout.dock, index, compact = true),
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, if (iconOnly) 1f else 2f).apply {
                     setMargins(ui.dp(3), 0, ui.dp(3), 0)
@@ -684,9 +689,11 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         }
     }
 
-    /** Dock keys that only send a media key show just their icon. Empty slots count as icon-only. */
-    private fun dockIconOnly(button: MacroButton?) = button == null ||
-        (Icons.get(button.icon) != null && runCatching { Macro.parse(button.action) }.getOrNull()?.singleOrNull() is Step.Media)
+    /** Dock keys with an icon show just the icon (the label is in edit mode). Empty slots count as icon-only. */
+    private fun dockIconOnly(button: MacroButton?) = button == null || Icons.get(button.icon) != null
+
+    private fun isMediaKey(button: MacroButton) =
+        runCatching { Macro.parse(button.action) }.getOrNull()?.singleOrNull() is Step.Media
 
     private fun buildGrid(page: Page) = GridLayout(this).apply {
         isMotionEventSplittingEnabled = true

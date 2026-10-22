@@ -27,7 +27,7 @@ class Ui(val context: Context) {
 
     fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
 
-    fun dialog(): AlertDialog.Builder = AlertDialog.Builder(context, R.style.Theme_Macropad_Dialog)
+    fun dialog(): AlertDialog.Builder = MenuDialogBuilder(this)
 
     /**
      * Opens the on-screen keyboard when [field] is focused. Fire OS sometimes leaves it closed for
@@ -64,7 +64,7 @@ class Ui(val context: Context) {
         imageTintList = ColorStateList.valueOf(TEXT)
         scaleType = ImageView.ScaleType.CENTER_INSIDE
         setPadding(dp(11), dp(11), dp(11), dp(11))
-        background = pressable(SURFACE, dp(22).toFloat())
+        background = pressable(SURFACE_HI, dp(14).toFloat())
         setOnClickListener { onClick() }
         layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(8) }
     }
@@ -72,7 +72,7 @@ class Ui(val context: Context) {
     fun setIconButton(view: ImageView, icon: String, fill: Int?) {
         view.setImageResource(Icons.get(icon)!!)
         view.imageTintList = ColorStateList.valueOf(TEXT)
-        view.background = pressable(fill ?: SURFACE, dp(22).toFloat())
+        view.background = pressable(fill ?: SURFACE_HI, dp(14).toFloat())
     }
 
     fun chip(text: String, icon: String, accent: Int? = null, onClick: () -> Unit) = LinearLayout(context).apply {
@@ -111,15 +111,15 @@ class Ui(val context: Context) {
     }
 
     companion object {
-        const val BG_TOP = 0xFF10131A.toInt()
-        const val BG_BOTTOM = 0xFF07080B.toInt()
-        const val SURFACE = 0xFF161A22.toInt()
-        const val SURFACE_HI = 0xFF1E232E.toInt()
-        const val SURFACE_ACTIVE = 0xFF2A3040.toInt()
-        const val STROKE = 0x14FFFFFF
-        const val STROKE_STRONG = 0x33FFFFFF
+        const val BG_TOP = 0xFF0E1118.toInt()
+        const val BG_BOTTOM = 0xFF06070A.toInt()
+        const val SURFACE = 0xFF13161D.toInt()
+        const val SURFACE_HI = 0xFF1C2029.toInt()
+        const val SURFACE_ACTIVE = 0xFF262B37.toInt()
+        const val STROKE = 0x12FFFFFF
+        const val STROKE_STRONG = 0x2EFFFFFF
         const val TEXT = 0xFFF2F4F8.toInt()
-        const val MUTED = 0xFF8A93A6.toInt()
+        const val MUTED = 0xFF8C94A6.toInt()
         val BLUE = Palette.colors[0]
         val GREEN = Palette.colors[1]
         val ORANGE = Palette.colors[2]

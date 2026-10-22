@@ -159,7 +159,8 @@ app/src/main/java/dev/belta/macropad/
   hid/                 HidPeripheral (GATT server, advertising, sending, Fire OS workarounds),
                        HidReports (report descriptor + builders), HidKeys, KeyboardLayout
   model/               Macro (parser), Layout + LayoutJson, DefaultLayout, MacroStore, AppSettings
-  ui/                  KeyViews, KeyEditor, Recorder, TrackpadView, Dialogs, Ui (theme), Icons
+  ui/                  KeyViews, KeyEditor, Recorder, TrackpadView, Dialogs, MenuDialog (menu rows),
+                       Ui (theme), Icons, AppIcons
 app/src/test/          Unit tests (macro parser, keyboard layouts, HID reports, layout JSON)
 tools/gen_icons.py     Regenerates res/drawable/ic_k_*.xml and ui/Icons.kt
 ```

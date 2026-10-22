@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.0
+
+- **New look**: keys are cards with the icon top-left, the name below it and the shortcut in a
+  keycap-style pill; flatter dark surfaces with a soft glow of each key's color; the selected tab is
+  tinted; the sidebar's buttons are rounded tiles; the dock shows every key as an icon (no more cut
+  labels).
+- **Menus and dialogs**: rounded sheets with icon rows, the current value of each setting shown on
+  the right, chevrons on entries that open more options, a check on the chosen option, a filled main
+  button and no all-caps buttons. Text fields are filled and outlined while typing, with labels in
+  the key editor.
+- Backup and restore: its options were hidden under the note about the auto-saved file; they show again.
+
 ## 1.3.0
 
 - **Key editor**: Save, Cancel and Delete moved to a header above the form, so the on-screen

@@ -54,7 +54,7 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
             setPadding(ui.dp(10), ui.dp(8), ui.dp(10), ui.dp(8))
             isHapticFeedbackEnabled = true
         }
-        val radius = ui.dp(if (compact) 20 else 22).toFloat()
+        val radius = ui.dp(if (compact) 18 else 20).toFloat()
 
         if (button == null) {
             if (editing) {
@@ -81,37 +81,45 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
                     ellipsize = TextUtils.TruncateAt.END
                     setPadding(if (iconRes != null) ui.dp(10) else 0, 0, 0, 0)
                 })
+            } else if (!small && iconRes != null) {
+                // Card: icon badge top-left, label and shortcut pill at the bottom-left.
+                key.gravity = Gravity.START
+                key.setPadding(ui.dp(14), ui.dp(12), ui.dp(12), ui.dp(12))
+                key.addView(badge(button.icon!!, accent, filled, 22, 38))
+                key.addView(label(button.label, 12f, 18f).apply {
+                    gravity = Gravity.START or Gravity.BOTTOM
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+                })
             } else {
-                if (iconRes != null) {
-                    val badge = FrameLayout(ui.context).apply {
-                        background = ui.roundRect(withAlpha(if (filled) Color.WHITE else accent, 0.18f), ui.dp(14).toFloat())
-                        addView(ui.icon(button.icon!!, if (filled) Color.WHITE else accent),
-                            FrameLayout.LayoutParams(ui.dp(if (small) 22 else 26), ui.dp(if (small) 22 else 26), Gravity.CENTER))
-                    }
-                    val badgeSize = ui.dp(if (small) 36 else 46)
-                    key.addView(badge, LinearLayout.LayoutParams(badgeSize, badgeSize).apply {
-                        bottomMargin = ui.dp(if (small) 4 else 8)
-                    })
-                }
-                key.addView(label(button.label, if (small) 12f else 13f, if (small) 15f else if (iconRes != null) 18f else 24f))
-                if (showHint || button.toggle) key.addView(TextView(ui.context).apply {
-                    val hint = Macro.describe(button.action) + if (button.longAction.isNullOrBlank()) "" else " · +hold"
-                    text = when {
-                        // A hint that only repeats the label (numpad digits, "Tab") adds nothing.
-                        !button.toggle && hint.equals(button.label, ignoreCase = true) -> ""
-                        !button.toggle -> hint
-                        toggledOn -> "ON · $hint"
-                        else -> "OFF · $hint"
-                    }
-                    typeface = if (toggledOn) ui.fontBold else ui.fontMedium
-                    setTextColor(if (filled) withAlpha(Color.WHITE, 0.85f) else MUTED)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
-                    gravity = Gravity.CENTER
-                    maxLines = 1
-                    ellipsize = TextUtils.TruncateAt.END
-                    setPadding(0, ui.dp(3), 0, 0)
+                if (iconRes != null) key.addView(badge(button.icon!!, accent, filled, 22, 36).apply {
+                    (layoutParams as LinearLayout.LayoutParams).bottomMargin = ui.dp(4)
+                })
+                key.addView(label(button.label, if (small) 12f else 13f, if (small) 15f else 24f).apply {
+                    if (!small) layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
                 })
             }
+            // The shortcut as a small keycap-style pill under the label.
+            if (!compact && (showHint || button.toggle)) key.addView(TextView(ui.context).apply {
+                val hint = Macro.describe(button.action) + if (button.longAction.isNullOrBlank()) "" else " · +hold"
+                text = when {
+                    // A hint that only repeats the label (numpad digits, "Tab") adds nothing.
+                    !button.toggle && hint.equals(button.label, ignoreCase = true) -> ""
+                    !button.toggle -> hint
+                    toggledOn -> "ON · $hint"
+                    else -> "OFF · $hint"
+                }
+                typeface = if (toggledOn) ui.fontBold else ui.fontMedium
+                setTextColor(if (filled) withAlpha(Color.WHITE, 0.9f) else MUTED)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                gravity = Gravity.CENTER
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                setPadding(ui.dp(8), ui.dp(2), ui.dp(8), ui.dp(2))
+                if (text.isNotEmpty()) background = ui.roundRect(
+                    withAlpha(Color.WHITE, if (filled) 0.16f else 0.06f), ui.dp(8).toFloat())
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = ui.dp(4)
+            })
             if (editing) key.foreground = editBadge(radius)
         }
 
@@ -148,6 +156,13 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
         parent.addView(new, at, params)
     }
 
+    private fun badge(icon: String, accent: Int, filled: Boolean, iconDp: Int, sizeDp: Int) = FrameLayout(ui.context).apply {
+        background = ui.roundRect(withAlpha(if (filled) Color.WHITE else accent, if (filled) 0.2f else 0.16f), ui.dp(12).toFloat())
+        addView(ui.icon(icon, if (filled) Color.WHITE else lighten(accent, 0.15f)),
+            FrameLayout.LayoutParams(ui.dp(iconDp), ui.dp(iconDp), Gravity.CENTER))
+        layoutParams = LinearLayout.LayoutParams(ui.dp(sizeDp), ui.dp(sizeDp))
+    }
+
     private fun label(text: String, minSp: Float, maxSp: Float) = TextView(ui.context).apply {
         this.text = text
         typeface = ui.fontSemiBold
@@ -167,13 +182,23 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
                 intArrayOf(if (pressed) lighten(accent, 0.25f) else accent, darken(accent, if (pressed) 0.15f else 0.3f)))
                 .apply { cornerRadius = radius }
         } else {
-            GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(
-                blend(accent, SURFACE_HI, if (pressed) 0.38f else 0.14f),
-                blend(accent, SURFACE, if (pressed) 0.22f else 0.04f),
-            )).apply {
-                cornerRadius = radius
-                setStroke(ui.dp(1), withAlpha(accent, if (pressed) 0.8f else 0.22f))
-            }
+            // Flat dark card with a soft glow of the accent from the top edge.
+            LayerDrawable(arrayOf(
+                GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(
+                    blend(accent, SURFACE_HI, if (pressed) 0.30f else 0.06f), SURFACE,
+                )).apply { cornerRadius = radius },
+                GradientDrawable().apply {
+                    gradientType = GradientDrawable.RADIAL_GRADIENT
+                    setGradientCenter(0.5f, 0f)
+                    gradientRadius = ui.dp(150).toFloat()
+                    colors = intArrayOf(withAlpha(accent, if (pressed) 0.42f else 0.17f), withAlpha(accent, 0f))
+                    cornerRadius = radius
+                },
+                GradientDrawable().apply {
+                    cornerRadius = radius
+                    setStroke(ui.dp(1), if (pressed) withAlpha(accent, 0.75f) else withAlpha(Color.WHITE, 0.07f))
+                },
+            ))
         }
         return StateListDrawable().apply {
             addState(intArrayOf(android.R.attr.state_pressed), face(true))
