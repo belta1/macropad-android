@@ -21,6 +21,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.text.TextUtils
+import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
@@ -51,6 +52,8 @@ import dev.belta.macropad.model.Palette
 import dev.belta.macropad.model.SecretStore
 import dev.belta.macropad.model.Step
 import dev.belta.macropad.model.TextVariables
+import dev.belta.macropad.net.NetActions
+import dev.belta.macropad.net.Updater
 import dev.belta.macropad.ui.AppIcons
 import dev.belta.macropad.ui.Dialogs
 import dev.belta.macropad.ui.Icons
@@ -74,6 +77,8 @@ import dev.belta.macropad.ui.Ui.Companion.RED
 import dev.belta.macropad.ui.Ui.Companion.TEXT
 import dev.belta.macropad.ui.Ui.Companion.lighten
 import dev.belta.macropad.ui.Ui.Companion.withAlpha
+import java.io.IOException
+import java.util.concurrent.Executors
 
 /** The macropad screen. The Bluetooth keyboard itself lives in [MacropadService]. */
 class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
@@ -172,6 +177,20 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         MacropadService.start(this)
         bindService(Intent(this, MacropadService::class.java), connection, Context.BIND_AUTO_CREATE)
         handleIntent(intent)
+        checkForUpdate()
+    }
+
+    /** Once a day, says when GitHub has a newer version; installing is up to ⚙ → Updates. */
+    private fun checkForUpdate() {
+        val now = System.currentTimeMillis()
+        if (now - settings.lastUpdateCheck < 24 * 3_600_000L) return
+        settings.lastUpdateCheck = now
+        network.execute {
+            val release = runCatching { Updater.latest() }.getOrNull() ?: return@execute
+            if (Updater.isNewer(release.version, BuildConfig.VERSION_NAME)) {
+                runOnUiThread { ui.toast("Version ${release.version} is available: ⚙ → Updates") }
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -222,6 +241,10 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private lateinit var idleTime: TextView
     private lateinit var idleDate: TextView
     private lateinit var idleStatus: TextView
+    private lateinit var idleEvent: TextView
+    /** The Home Assistant calendar's next event (⚙ → Saved values → ha_calendar), refreshed while dimmed. */
+    @Volatile private var nextEvent: NetActions.CalendarEvent? = null
+    private var eventFetchedAt = 0L
     private var dimmed = false
     private var swallowGesture = false
     private val dimRunnable = Runnable { dim() }
@@ -249,13 +272,20 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             setTextColor(withAlpha(FAINT, 0.8f))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
         }
+        idleEvent = TextView(context).apply {
+            typeface = ui.fontLabel
+            setTextColor(withAlpha(FAINT, 0.8f))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+            setPadding(0, ui.dp(14), 0, 0)
+            visibility = View.GONE
+        }
         idleStatus = TextView(context).apply {
             typeface = ui.fontHint
             setTextColor(withAlpha(FAINT, 0.6f))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
             setPadding(0, ui.dp(18), 0, 0)
         }
-        for (line in listOf(idleTime, idleDate, idleStatus)) {
+        for (line in listOf(idleTime, idleDate, idleEvent, idleStatus)) {
             idleClock.addView(line, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
@@ -297,9 +327,47 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         idleTime.text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(now)
         idleDate.text = java.text.SimpleDateFormat("EEEE d MMMM", java.util.Locale.getDefault()).format(now)
         idleStatus.text = if (connected) "Connected to ${statusText.text}" else "Not connected"
+        val event = describeEvent(nextEvent, now)
+        idleEvent.text = event
+        idleEvent.visibility = if (event == null) View.GONE else View.VISIBLE
+        refreshNextEvent()
         // Drift a little so nothing stays lit on the same pixels.
         idleClock.translationX = ((Math.random() - 0.5) * ui.dp(160)).toFloat()
         idleClock.translationY = ((Math.random() - 0.5) * ui.dp(120)).toFloat()
+    }
+
+    /** Fetches the next calendar event every few minutes; the clock shows it on its next tick. */
+    private fun refreshNextEvent() {
+        val calendar = secrets[NetActions.HA_CALENDAR]?.trim()
+        if (calendar.isNullOrEmpty()) { nextEvent = null; return }
+        if (System.currentTimeMillis() - eventFetchedAt < EVENT_REFRESH_MS) return
+        eventFetchedAt = System.currentTimeMillis()
+        network.execute {
+            val event = try {
+                NetActions.nextEvent({ secrets[it] }, calendar)
+            } catch (e: Exception) {
+                Log.w(TAG, "calendar: $e")
+                return@execute // keep the last one we had
+            }
+            runOnUiThread { nextEvent = event; if (dimmed) updateIdleClock() }
+        }
+    }
+
+    /** "Now: Standup · until 10:45", "Next: Standup · 10:30 (in 4 min)", "Tomorrow 09:00 · Standup". */
+    private fun describeEvent(event: NetActions.CalendarEvent?, now: java.util.Date): String? {
+        event ?: return null
+        val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+        if (event.now) return "Now: ${event.title}" + (event.end?.let { " · until ${time.format(it)}" } ?: "")
+        val minutes = (event.start.time - now.time) / 60_000
+        if (minutes < 0) return null
+        val day = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
+        val tomorrow = java.util.Date(now.time + 24 * 3_600_000L)
+        return when {
+            day.format(event.start) == day.format(now) ->
+                "Next: ${event.title} · ${time.format(event.start)}" + if (minutes < 60) " (in $minutes min)" else ""
+            day.format(event.start) == day.format(tomorrow) -> "Tomorrow ${time.format(event.start)} · ${event.title}"
+            else -> null
+        }
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
@@ -943,16 +1011,22 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         // A slider assigned somewhere it can't be dragged (the tablet's volume buttons).
         if (steps.any { it is Step.Slide }) return ui.toast("${button.label}: drag the slider")
         view?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-        val missing = steps.filterIsInstance<Step.Text>().flatMap { TextVariables.secretNames(it.text) }
-            .distinct().filter { secrets[it] == null }
+        val missing = steps.flatMap { step ->
+            when (step) {
+                is Step.Text -> TextVariables.secretNames(step.text)
+                is Step.Http -> TextVariables.secretNames(step.url + step.body.orEmpty())
+                else -> NetActions.requiredSecrets(step)
+            }
+        }.distinct().filter { secrets[it] == null }
         if (missing.isNotEmpty()) return ui.toast("${button.label}: set ${missing.joinToString()} in ⚙ → Saved values")
         recorder.record(action)
         steps.filterIsInstance<Step.Page>().lastOrNull()?.let { goToPage(it.target) }
         // Dim after the keys have gone out (e.g. "lock PC, then dim"), so the idle overlay doesn't
         // block them.
         if (steps.any { it is Step.Tablet && it.command == "dim" }) handler.postDelayed({ dim() }, 600)
-        val remote = steps.filterNot { it is Step.Page || it is Step.Tablet }.map { step ->
-            if (step is Step.Text) Step.Text(TextVariables.expand(step.text, secret = { secrets[it] }, clipboard = ::clipboardText)) else step
+        steps.filter { it.isNetwork }.takeIf { it.isNotEmpty() }?.let { runNetwork(button.label, it) }
+        val remote = steps.filterNot { it is Step.Page || it is Step.Tablet || it.isNetwork }.map { step ->
+            if (step is Step.Text) Step.Text(expandText(step.text)) else step
         }
         if (remote.isEmpty()) return
         if (action.contains("{clipboard}") && clipboardText().isNullOrEmpty()) {
@@ -974,6 +1048,22 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             runSteps(hid, remote)
         }
     }
+
+    private val network = Executors.newCachedThreadPool()
+
+    /** Web, Wake-on-LAN and Home Assistant steps, in order, off the main thread; a failure stops the rest. */
+    private fun runNetwork(label: String, steps: List<Step>) {
+        network.execute {
+            try {
+                for (step in steps) NetActions.run(step, secret = { secrets[it] }) { expandText(it) }
+            } catch (e: Exception) {
+                Log.w(TAG, "network step failed: $e")
+                runOnUiThread { ui.toast("$label: ${(e as? IOException)?.message ?: "network error"}") }
+            }
+        }
+    }
+
+    private fun expandText(text: String) = TextVariables.expand(text, secret = { secrets[it] }, clipboard = ::clipboardText)
 
     /** Runs a macro; long texts show a banner (tap to stop) and say which characters can't be typed. */
     private fun runSteps(hid: HidPeripheral, steps: List<Step>) {
@@ -1264,6 +1354,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     }
 
     companion object {
+        private const val TAG = "Macropad"
+        private const val EVENT_REFRESH_MS = 5 * 60_000L
         private const val REQUEST_PERMISSIONS = 1
         private const val REQUEST_EXPORT = 2
         private const val REQUEST_IMPORT = 3

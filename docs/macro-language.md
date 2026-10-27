@@ -13,6 +13,9 @@ Every key has an **action**: one step per line. Lines starting with `#` are comm
 | Page | `page:next` | Switches the tablet's page: `next`, `prev` or a page name. Runs on the tablet, even when no computer is connected |
 | Tablet | `tablet:dim` | Dims the tablet to its idle clock (after the other steps have been sent). Runs on the tablet |
 | Slider | `slide:volume` | Makes the key a **slider** you drag instead of tap (see [Sliders](#sliders)). Must be the key's only step |
+| Web request | `http:POST https://… \| {"on":true}` | Sent by the tablet over Wi-Fi (see [Network steps](#network-steps)) |
+| Wake on LAN | `wol:AA:BB:CC:DD:EE:FF` | Wakes a computer on the tablet's network |
+| Home Assistant | `ha:light.toggle light.desk` | Calls a Home Assistant service |
 
 ### Text variables
 
@@ -86,6 +89,31 @@ slider is three keys wide, and tapping its speaker mutes the computer. Use `back
 inside a combo. In edit mode a slider shows as a normal key, so tapping it opens the editor,
 which has **Volume / Scroll / Zoom slider** buttons under the action. Long-press actions and
 Toggle don't apply to sliders. A slider can't be assigned to the tablet's volume buttons.
+
+### Network steps
+
+`http:`, `wol:` and `ha:` steps are sent by the **tablet** over its Wi-Fi, not typed on the
+computer, so they work with no computer connected. They start as soon as the key is pressed,
+beside its keys (one after another, in order; if one fails, a message says why and the rest are
+skipped).
+
+| Step | Meaning |
+|---|---|
+| `http:https://example.com/hook` | GET request |
+| `http:POST https://example.com/hook \| {"on":true}` | POST with a body (JSON when it starts with `{` or `[`, else plain text). `GET`, `POST`, `PUT` and `DELETE`; with a body and no method, POST |
+| `wol:AA:BB:CC:DD:EE:FF` | Wake-on-LAN magic packet (broadcast, UDP port 9). The computer must allow wake on LAN in its BIOS and network adapter settings |
+| `ha:light.toggle light.desk` | Home Assistant service `domain.service`, optionally for one entity: `ha:scene.turn_on scene.focus`, `ha:script.turn_on script.away` |
+
+URLs and bodies can use [text variables](#text-variables), e.g. `{secret:webhook_key}`, so keys
+stay out of backups.
+
+**Home Assistant** needs two saved values (⚙ → **Saved values**): `ha_url` (e.g.
+`https://xxxx.ui.nabu.casa` or `http://homeassistant.local:8123`) and `ha_token` (a long-lived
+access token: Home Assistant → your profile → Security → Long-lived access tokens).
+
+**Next meeting on the idle clock**: set the saved value `ha_calendar` to a Home Assistant calendar
+entity (e.g. `calendar.work`). The clock shows `Next: Standup · 10:30 (in 4 min)`, `Now: …` or
+tomorrow's first event, refreshed every 5 minutes. Any calendar Home Assistant can read works.
 
 ## Keyboard layouts
 

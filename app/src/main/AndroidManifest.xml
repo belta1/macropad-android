@@ -9,6 +9,10 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Network steps (http:, wol:, ha:) and the idle clock's calendar line. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Updates from GitHub Releases (⚙ → Updates); Android still asks before each install. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
     <!-- Keeps the Bluetooth keyboard running while the screen is recreated or in the background. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -54,7 +58,12 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".net.Updater$StatusReceiver"
+            android:exported="false" />
     </application>
 </manifest>

@@ -15,6 +15,11 @@ import dev.belta.macropad.hid.KeyboardLayout
  *   page:next           switches the tablet's page (next, prev or a page name); not sent
  *   tablet:dim          dims the tablet to its idle clock; not sent
  *   slide:volume        makes the key a slider (a preset, or "up step | down step [| tap step]"); must be the only step
+ *   http:POST https://… | {"a":1}   web request from the tablet (GET by default; "| body" is optional)
+ *   wol:AA:BB:CC:DD:EE:FF           Wake-on-LAN packet from the tablet
+ *   ha:light.toggle light.desk      calls a Home Assistant service (ha_url / ha_token saved values)
+ *
+ * Network steps run on the tablet at once, beside the keys, and work with no computer connected.
  *
  * Text may contain {date}, {time}, {date:<pattern>} and {clipboard}, filled in when the key runs
  * ([TextVariables]).
@@ -38,6 +43,15 @@ sealed class Step {
      * [tap], if any (Mute for the volume slider). [preset] is its name, if any.
      */
     data class Slide(val up: Step, val down: Step, val preset: String?, val tap: Step? = null) : Step()
+    /** Handled on the tablet: a web request. [url] and [body] may hold text variables. */
+    data class Http(val method: String, val url: String, val body: String?) : Step()
+    /** Handled on the tablet: a Wake-on-LAN magic packet for [mac] ("AA:BB:CC:DD:EE:FF"). */
+    data class Wol(val mac: String) : Step()
+    /** Handled on the tablet: Home Assistant service [domain].[service], for [entity] if any. */
+    data class Ha(val domain: String, val service: String, val entity: String?) : Step()
+
+    /** Steps the tablet sends over the network instead of to the computer. */
+    val isNetwork get() = this is Http || this is Wol || this is Ha
 }
 
 class MacroException(message: String) : Exception(message)
@@ -77,6 +91,9 @@ object Macro {
                     Step.Scroll(amount.coerceIn(-50, 50))
                 }
                 lower.startsWith("slide:") -> parseSlide(line.substring(6).trim())
+                lower.startsWith("http:") -> parseHttp(line.substring(5).trim())
+                lower.startsWith("wol:") -> parseWol(line.substring(4).trim())
+                lower.startsWith("ha:") -> parseHa(line.substring(3).trim())
                 else -> parseCombo(lower)
             }
         }
@@ -126,6 +143,9 @@ object Macro {
                 "Slider · " + if (spec.lowercase() in SLIDE_PRESETS) spec.lowercase().replaceFirstChar { it.uppercase() }
                 else spec.split('|').take(2).joinToString(" / ") { describe(it.trim()) }
             }
+            lower.startsWith("http:") -> "Web request"
+            lower.startsWith("wol:") -> "Wake on LAN"
+            lower.startsWith("ha:") -> "Home Assistant"
             lower.startsWith("page:") -> when (val target = line.substring(5).trim()) {
                 "next" -> "Next page"
                 "prev" -> "Previous page"
@@ -171,6 +191,40 @@ object Macro {
                 else "Slider steps must be key combos, media keys or scroll")
         }
         return step
+    }
+
+    private val HTTP_METHODS = listOf("GET", "POST", "PUT", "DELETE")
+
+    /** "[METHOD] url [| body]"; the URL is kept as written (text variables are filled in when it runs). */
+    private fun parseHttp(spec: String): Step.Http {
+        val request = spec.substringBefore('|').trim()
+        val body = if ('|' in spec) spec.substringAfter('|').trim() else null
+        val first = request.substringBefore(' ')
+        val method = first.uppercase().takeIf { it in HTTP_METHODS && ' ' in request }
+        val url = if (method != null) request.substringAfter(' ').trim() else request
+        if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+            throw MacroException("A web request needs an http:// or https:// address")
+        }
+        return Step.Http(method ?: if (body != null) "POST" else "GET", url, body)
+    }
+
+    private val MAC = Regex("""([0-9a-f]{2})[:-]([0-9a-f]{2})[:-]([0-9a-f]{2})[:-]([0-9a-f]{2})[:-]([0-9a-f]{2})[:-]([0-9a-f]{2})""", RegexOption.IGNORE_CASE)
+
+    private fun parseWol(spec: String): Step.Wol {
+        val match = MAC.matchEntire(spec) ?: throw MacroException("Wake on LAN needs the computer's MAC address, e.g. wol:AA:BB:CC:DD:EE:FF")
+        return Step.Wol(match.groupValues.drop(1).joinToString(":").uppercase())
+    }
+
+    private val HA_SERVICE = Regex("""([a-z0-9_]+)\.([a-z0-9_]+)""")
+
+    /** "domain.service [entity_id]", e.g. "light.toggle light.desk" or "scene.turn_on scene.focus". */
+    private fun parseHa(spec: String): Step.Ha {
+        val parts = spec.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val service = parts.firstOrNull()?.lowercase()?.let { HA_SERVICE.matchEntire(it) }
+        if (service == null || parts.size > 2) {
+            throw MacroException("Home Assistant step: ha:domain.service entity, e.g. ha:light.toggle light.desk")
+        }
+        return Step.Ha(service.groupValues[1], service.groupValues[2], parts.getOrNull(1)?.lowercase())
     }
 
     private val FOCUS_APP = Regex("""(win|super|gui|meta)\+[0-9]""")

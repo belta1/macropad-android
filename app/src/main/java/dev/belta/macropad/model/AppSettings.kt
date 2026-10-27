@@ -62,6 +62,11 @@ class AppSettings(context: Context) {
         get() = prefs.getString("pin_hash", null)
         set(value) = prefs.edit().putString("pin_hash", value).apply()
 
+    /** When the app last looked for an update on its own (ms since epoch). */
+    var lastUpdateCheck: Long
+        get() = prefs.getLong("last_update_check", 0)
+        set(value) = prefs.edit().putLong("last_update_check", value).apply()
+
     var lastPage: Int
         get() = prefs.getInt("page", 0)
         set(value) = prefs.edit().putInt("page", value).apply()

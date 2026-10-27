@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **Network steps** (the tablet uses its Wi-Fi): `http:` web requests, `wol:` Wake-on-LAN and
+  `ha:` Home Assistant services, with `ha_url` / `ha_token` saved values. They work with no
+  computer connected. See [docs/macro-language.md](docs/macro-language.md#network-steps).
+- **Next meeting on the idle clock** from a Home Assistant calendar (saved value `ha_calendar`).
+- **Updates from GitHub Releases** (⚙ → Updates): checks for a newer version (also on its own
+  once a day), downloads it and hands it to Android's installer. It first checks the release is
+  signed with the same key as the installed app, else explains instead of failing. After an
+  update the macropad starts again by itself.
+- `tools/deploy.sh fire|tab`: build a release-signed APK and install it over Wi-Fi adb, keeping
+  the tablet's data.
+
 ## 1.6.0
 
 - **Reconnects by itself, no more re-pairing.** After the tablet was out of range, the computer

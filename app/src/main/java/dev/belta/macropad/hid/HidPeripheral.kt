@@ -639,7 +639,7 @@ class HidPeripheral(private val context: Context) {
                     pause(keyTiming.gapMs)
                 }
                 is Step.Scroll -> sendMouse(0, 0, wheel = step.amount)
-                is Step.Page, is Step.Tablet, is Step.Slide -> {} // handled on the tablet
+                is Step.Page, is Step.Tablet, is Step.Slide, is Step.Http, is Step.Wol, is Step.Ha -> {} // handled on the tablet
             }
         }
     }

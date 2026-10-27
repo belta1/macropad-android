@@ -5,6 +5,8 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.graphics.Typeface
@@ -24,6 +26,7 @@ import android.widget.LinearLayout
 import android.widget.NumberPicker
 import android.widget.ScrollView
 import android.widget.TextView
+import dev.belta.macropad.BuildConfig
 import dev.belta.macropad.MacropadService
 import dev.belta.macropad.hid.DeviceQuirks
 import dev.belta.macropad.hid.HidPeripheral
@@ -39,6 +42,7 @@ import dev.belta.macropad.model.Page
 import dev.belta.macropad.model.PageKind
 import dev.belta.macropad.model.SecretStore
 import dev.belta.macropad.model.TextVariables
+import dev.belta.macropad.net.Updater
 import dev.belta.macropad.ui.Ui.Companion.GREEN
 import dev.belta.macropad.ui.Ui.Companion.MUTED
 import dev.belta.macropad.ui.Ui.Companion.RED
@@ -103,6 +107,7 @@ class Dialogs(private val host: MacropadHost) {
                     else "Screen protection off")
             },
             "PIN lock: ${if (host.settings.pinHash == null) "off" else "on"}" to ::pinLock,
+            "Updates: ${BuildConfig.VERSION_NAME}…" to ::updates,
             "Diagnostics…" to ::diagnostics,
             "Quit macropad" to { host.quit() },
         )
@@ -391,6 +396,52 @@ class Dialogs(private val host: MacropadHost) {
             "Then remove \"${hid?.deviceName}\" on each computer and add it again.") {
         hid?.resetPairing()
     }
+
+    // ---------------------------------------------------------------- updates
+
+    /** Looks for a newer release on GitHub and offers to install it. */
+    fun updates() {
+        val checking = ui.dialog().setTitle("Updates").setMessage("Looking for a new version…")
+            .setNegativeButton("Cancel", null).show()
+        background {
+            val result = runCatching { Updater.latest() }
+            main {
+                if (!checking.isShowing) return@main
+                checking.dismiss()
+                val release = result.getOrElse { return@main ui.toast("Can't check for updates: ${it.message}") }
+                if (release == null || !Updater.isNewer(release.version, BuildConfig.VERSION_NAME)) {
+                    ui.dialog().setTitle("Up to date")
+                        .setMessage("Version ${BuildConfig.VERSION_NAME} is the latest.")
+                        .setPositiveButton("OK", null).show()
+                    return@main
+                }
+                ui.dialog()
+                    .setTitle("Version ${release.version} is available")
+                    .setMessage(release.notes.take(1200).ifBlank { "No release notes." } +
+                        "\n\nThe macropad restarts after the update; the computer reconnects by itself.")
+                    .setPositiveButton("Install") { _, _ -> installUpdate(release) }
+                    .setNegativeButton("Later", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun installUpdate(release: Updater.Release) {
+        ui.toast("Downloading version ${release.version}…")
+        val context = ui.context.applicationContext
+        background {
+            val result = runCatching { Updater.install(context, Updater.download(context, release)) }
+            result.exceptionOrNull()?.let { e ->
+                main {
+                    ui.dialog().setTitle("Update not installed").setMessage(e.message ?: "Unknown error")
+                        .setPositiveButton("OK", null).show()
+                }
+            }
+        }
+    }
+
+    private fun background(work: () -> Unit) = Thread(work, "updates").start()
+    private fun main(work: () -> Unit) = Handler(Looper.getMainLooper()).post(work)
 
     // ---------------------------------------------------------------- settings pages
 

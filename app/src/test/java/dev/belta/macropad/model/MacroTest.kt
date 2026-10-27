@@ -178,4 +178,33 @@ class MacroTest {
         assertEquals("win+8\ndelay:300\nctrl+shift+o\ndelay:150\nalt+tab", upgrade["ctrl+shift+o"])
         assertEquals(null, upgrade["ctrl+space"]) // push to talk stays a held key
     }
+
+    @Test
+    fun `parses network steps`() {
+        assertEquals(listOf(Step.Http("GET", "https://example.com/a?b={secret:k}", null)),
+            Macro.parse("http:https://example.com/a?b={secret:k}"))
+        assertEquals(listOf(Step.Http("POST", "https://example.com/hook", """{"on":true}""")),
+            Macro.parse("""http:https://example.com/hook | {"on":true}"""))
+        assertEquals(listOf(Step.Http("PUT", "http://10.0.0.2/x", null)), Macro.parse("http:put http://10.0.0.2/x"))
+        assertEquals(listOf(Step.Wol("AA:BB:CC:0D:0E:0F")), Macro.parse("wol:aa-bb-cc-0d-0e-0f"))
+        assertEquals(listOf(Step.Ha("light", "toggle", "light.desk")), Macro.parse("ha:light.toggle light.Desk"))
+        assertEquals(listOf(Step.Ha("script", "turn_on", null)), Macro.parse("ha:script.turn_on"))
+        assertTrue(Macro.parse("ha:light.toggle light.desk").single().isNetwork)
+        assertFalse(Macro.parse("ctrl+c").single().isNetwork)
+    }
+
+    @Test
+    fun `rejects bad network steps`() {
+        assertThrows("http:example.com")
+        assertThrows("wol:AA:BB:CC")
+        assertThrows("ha:toggle")
+        assertThrows("ha:light.toggle light.a light.b")
+    }
+
+    @Test
+    fun `describes network steps`() {
+        assertEquals("Home Assistant", Macro.describe("ha:light.toggle light.desk"))
+        assertEquals("Wake on LAN", Macro.describe("wol:AA:BB:CC:DD:EE:FF"))
+        assertEquals("Web request", Macro.describe("http:https://example.com"))
+    }
 }
