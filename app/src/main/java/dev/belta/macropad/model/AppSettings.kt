@@ -1,6 +1,8 @@
 package dev.belta.macropad.model
 
 import android.content.Context
+import dev.belta.macropad.hid.DeviceQuirks
+import dev.belta.macropad.hid.HidPeripheral
 import dev.belta.macropad.hid.KeyTiming
 import dev.belta.macropad.hid.KeyboardLayout
 import java.security.MessageDigest
@@ -18,6 +20,22 @@ class AppSettings(context: Context) {
         get() = KeyTiming.values().firstOrNull { it.name == prefs.getString("key_timing", null) }
             ?: KeyTiming.NORMAL
         set(value) = prefs.edit().putString("key_timing", value.name).apply()
+
+    /** Bluetooth LE or Classic Bluetooth; Automatic uses Classic where the tablet has it. */
+    var transport: HidPeripheral.Transport
+        get() = HidPeripheral.Transport.values().firstOrNull { it.name == prefs.getString("transport", null) }
+            ?: HidPeripheral.Transport.AUTO
+        set(value) = prefs.edit().putString("transport", value.name).apply()
+
+    /** The name computers see when pairing. */
+    var bluetoothName: String
+        get() = prefs.getString("bluetooth_name", null)?.takeIf { it.isNotBlank() } ?: DeviceQuirks.defaultDeviceName
+        set(value) = prefs.edit().putString("bluetooth_name", value.ifBlank { null }).apply()
+
+    /** Move the screen a few pixels every few minutes, so an OLED screen doesn't keep a static image. */
+    var screenShift: Boolean
+        get() = prefs.getBoolean("screen_shift", DeviceQuirks.defaultScreenShift)
+        set(value) = prefs.edit().putBoolean("screen_shift", value).apply()
 
     /** Start the macropad when the tablet boots. */
     var openOnBoot: Boolean

@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.6.0
+
+- **Reconnects by itself, no more re-pairing.** After the tablet was out of range, the computer
+  slept, the app was updated or the tablet's Bluetooth restarted, Windows kept listing the
+  keyboard but never used it again until it was removed and paired once more. The app rebuilt its
+  Bluetooth services after every disconnect; Windows then rediscovered them and dropped the
+  keyboard. It now keeps them as they are and only advertises again: Windows comes back within
+  seconds. **Pair once more after updating** (the old pairing has already lost the keyboard).
+- **Dock volume slider**: three keys wide, tapping its speaker mutes, and its **−** / **+** are
+  buttons (tap for one step, hold to keep going; on every slider). The separate Mute key is
+  gone (once, if it was unchanged). Any slider can have a tap step: `slide:up | down | tap`;
+  zoom's resets the zoom (Ctrl+0).
+- **Other tablets** ([docs/devices.md](docs/devices.md)): on tablets with the Classic HID profile
+  (e.g. Galaxy Tab S5e) the keyboard uses Classic Bluetooth and the tablet calls the computer
+  itself (⚙ → Connection → Bluetooth: Automatic, Bluetooth LE or Classic). The Fire OS
+  workarounds only apply on Fire tablets. Bluetooth name is a setting ("Fire Macropad" on Fire,
+  "Macropad" elsewhere), restored when the macropad quits. Larger screens get larger keys.
+  **Screen protection** shifts the screen slightly every few minutes (OLED; on by default off
+  Fire). Android 10+: opening on boot or charge asks for "Display over other apps" (else a
+  notification offers to open). ⚙ → Connection → Run in the background asks to leave the app
+  out of battery optimisation. Android 13+: Reset pairing asks to turn Bluetooth off and on.
+- Diagnostics shows the Bluetooth transport and the background setting; Bluetooth events are also
+  written to `bluetooth-events.log` (see docs/bluetooth-troubleshooting.md), and
+  [tools/ble_scan.py](tools/ble_scan.py) shows the tablet's address from the computer.
+
+## 1.5.0
+
+- **Sliders**: a key with the action `slide:volume` (or `scroll`, `zoom`, `brightness`, `tabs`,
+  `undo`, or any `up | down` pair such as `slide:right | left`) is a strip you drag. Each tick of
+  travel sends one step with a haptic tick, and holding at an end keeps going. Sliders work on
+  pages, in the sidebar and in the dock (where they get a wider slot). The key editor has Volume,
+  Scroll and Zoom slider buttons under the action. See
+  [docs/macro-language.md](docs/macro-language.md#sliders).
+- **Dock**: Volume − and Volume + are replaced by a volume slider and a **Mute** key. Existing
+  layouts and imported backups from older versions get them once, if the old volume keys are still there.
+- **Lock lights**: the status chip shows the computer's **Caps** and **Num** Lock, lit while on.
+  `capslock` / `numlock` / `scrolllock` keys show ON/OFF from the computer's real state.
+- **New look, graphite keycaps**: keys are drawn as keycaps on a dark case. The icon takes the
+  key's color and the label and shortcut are printed on the cap. Pressing a key pushes its top
+  down into the cap. Only things that send keys look like keys: tabs, Record / Edit / Settings and
+  the banners are flat. New typeface: Barlow (condensed for key labels, so long names fit).
+- **On/off is one signal**: toggle and lock keys have an indicator light (like Caps Lock on a
+  keyboard) and fill with their color while ON; no other key is filled. The ON/OFF text is gone.
+- **Status** has two lines that keep their size: the state (Connected, Waiting, Ready to pair…)
+  and the computer, with the Caps / Num lights under them, always in place.
+- **Not connected** banner: calmer, with what's happening and a way to the pairing steps.
+- **Key editor**: a live preview of the key beside the form, and a wider dialog. Every card
+  keeps a line for its shortcut, so labels in a row line up.
+- **Trackpad**: a recessed pad with a ridged scroll strip; sliders are a groove with a knob.
+- Accessibility: keys can be pressed with TalkBack and read their shortcut and ON/OFF state;
+  app buttons have names; touch targets are at least 48 dp.
+
 ## 1.4.0
 
 - **New look**: keys are cards with the icon top-left, the name below it and the shortcut in a

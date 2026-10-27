@@ -11,7 +11,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import dev.belta.macropad.model.Macro
 import dev.belta.macropad.model.MacroException
-import dev.belta.macropad.ui.Ui.Companion.SURFACE_HI
+import dev.belta.macropad.ui.Ui.Companion.RAISED
 import dev.belta.macropad.ui.Ui.Companion.TEXT
 
 /**
@@ -121,11 +121,11 @@ class Recorder(private val ui: Ui, private val send: (String) -> Unit, private v
         for (key in QUICK_KEYS) {
             quick.addView(TextView(ui.context).apply {
                 text = Macro.describe(key)
-                typeface = ui.fontSemiBold
+                typeface = ui.fontLabel
                 setTextColor(TEXT)
                 gravity = Gravity.CENTER
                 setPadding(ui.dp(6), ui.dp(10), ui.dp(6), ui.dp(10))
-                background = ui.pressable(SURFACE_HI, ui.dp(10).toFloat())
+                background = ui.pressable(RAISED, ui.dp(10).toFloat())
                 setOnClickListener { trySend(key) }
             }, GridLayout.LayoutParams(GridLayout.spec(GridLayout.UNDEFINED), GridLayout.spec(GridLayout.UNDEFINED, 1f))
                 .apply { width = 0; setMargins(ui.dp(3), ui.dp(3), ui.dp(3), ui.dp(3)) })

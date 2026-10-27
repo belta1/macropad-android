@@ -12,6 +12,7 @@ Every key has an **action**: one step per line. Lines starting with `#` are comm
 | Scroll | `scroll:3` | Mouse wheel notches; positive = up, negative = down (max ±50) |
 | Page | `page:next` | Switches the tablet's page: `next`, `prev` or a page name. Runs on the tablet, even when no computer is connected |
 | Tablet | `tablet:dim` | Dims the tablet to its idle clock (after the other steps have been sent). Runs on the tablet |
+| Slider | `slide:volume` | Makes the key a **slider** you drag instead of tap (see [Sliders](#sliders)). Must be the key's only step |
 
 ### Text variables
 
@@ -52,6 +53,39 @@ touched, like a physical key (auto-repeat, push-to-talk, holding a modifier, dra
 click). Anything longer runs once per tap. Keys marked **Toggle** in the editor are held the same way
 and flip an ON/OFF display on every press (the state resets when the connection drops, since the computer's real state is
 unknown).
+
+A key whose action is just `capslock`, `numlock` or `scrolllock` shows ON/OFF too, from the
+computer's own keyboard lights, so it stays right even when the lock is changed on the computer's
+keyboard. The status chip shows Caps and Num Lock the same way.
+
+### Sliders
+
+A key whose action is `slide:` is drawn as a strip with a thumb. Dragging it sends one step for
+every short stretch of travel (about 18 dp, each with a haptic tick): dragging **right or up** sends the
+*up* step, **left or down** the *down* step. It drags along the key's longer side, so a slider in
+the dock or a wide cell is horizontal and one in a tall cell is vertical. Holding the finger at
+either end keeps sending steps. The thumb springs back to the middle on release: the slider
+is relative, because the tablet can't know the computer's volume, scroll position, etc.
+
+| Preset | Up / right | Down / left | Tap the icon |
+|---|---|---|---|
+| `slide:volume` | `media:volup` | `media:voldown` | `media:mute` |
+| `slide:scroll` | `scroll:1` | `scroll:-1` | — |
+| `slide:zoom` | `ctrl+equal` | `ctrl+minus` | `ctrl+0` (reset zoom) |
+| `slide:brightness` | `media:brightup` | `media:brightdown` | — |
+| `slide:tabs` | `ctrl+tab` | `ctrl+shift+tab` | — |
+| `slide:undo` | `ctrl+y` (redo) | `ctrl+z` (undo) | — |
+
+Any other pair is written `slide:<up> | <down>`, each side one key combo, media key or scroll,
+e.g. `slide:right | left` to step through a video or a timeline. An optional third part is what
+tapping the slider's icon sends: `slide:right | left | space` (a key combo, media key, scroll or
+`click:`). A slider with a tap step shows its icon on a small disc; a touch that starts there and
+lifts without sliding taps, and a drag that starts there still slides. The **−** and **+** at the
+ends are buttons as well: a tap sends one down / up step, holding keeps stepping. The dock's volume
+slider is three keys wide, and tapping its speaker mutes the computer. Use `backslash` rather than `|`
+inside a combo. In edit mode a slider shows as a normal key, so tapping it opens the editor,
+which has **Volume / Scroll / Zoom slider** buttons under the action. Long-press actions and
+Toggle don't apply to sliders. A slider can't be assigned to the tablet's volume buttons.
 
 ## Keyboard layouts
 

@@ -1,17 +1,21 @@
 package dev.belta.macropad.ui
 
 import android.content.res.ColorStateList
-import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.graphics.Typeface
 import android.text.InputType
 import android.util.TypedValue
 import android.view.ViewGroup
 import android.view.Gravity
 import android.view.View
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.WindowManager
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.GridLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -21,12 +25,18 @@ import dev.belta.macropad.model.Macro
 import dev.belta.macropad.model.MacroButton
 import dev.belta.macropad.model.MacroException
 import dev.belta.macropad.model.Palette
+import dev.belta.macropad.model.Page
+import dev.belta.macropad.ui.Ui.Companion.DIALOG
 import dev.belta.macropad.ui.Ui.Companion.MUTED
-import dev.belta.macropad.ui.Ui.Companion.SURFACE_HI
+import dev.belta.macropad.ui.Ui.Companion.PLATE
+import dev.belta.macropad.ui.Ui.Companion.RAISED
 import dev.belta.macropad.ui.Ui.Companion.TEXT
-import dev.belta.macropad.ui.Ui.Companion.withAlpha
+import dev.belta.macropad.ui.Ui.Companion.legendTone
 
-/** Dialog for creating or editing one key: label, action, toggle behaviour, color and icon. */
+/**
+ * Dialog for creating or editing one key: label, action, toggle behaviour, color and icon, with a
+ * live preview of the key at the top (it can be pressed, but sends nothing).
+ */
 object KeyEditor {
 
     fun show(
@@ -43,7 +53,7 @@ object KeyEditor {
 
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(ui.dp(20), ui.dp(8), ui.dp(20), 0)
+            setPadding(0, 0, ui.dp(24), ui.dp(16))
         }
         val label = EditText(context).apply {
             hint = "Shown on the key"
@@ -60,7 +70,9 @@ object KeyEditor {
             gravity = Gravity.TOP or Gravity.START
         }
         val toggle = CheckBox(context).apply {
-            text = "Toggle key — shows ON/OFF (e.g. mute, camera)"
+            text = "Toggle key: lights up while on (mute, camera)"
+            typeface = ui.fontBody
+            textSize = 16f
             isChecked = initial?.toggle == true
         }
         val longAction = EditText(context).apply {
@@ -71,10 +83,20 @@ object KeyEditor {
                 InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             gravity = Gravity.TOP or Gravity.START
         }
-        content.addView(ui.sectionTitle("Label"))
+        // The preview stays in view beside the form while it scrolls (colors and icons are far down).
+        val previewSlot = FrameLayout(context)
+        content.addView(ui.sectionTitle("Label").apply { setPadding(0, ui.dp(4), 0, ui.dp(6)) })
         content.addView(label)
         content.addView(ui.sectionTitle("Action"))
         content.addView(action)
+        // Quick slider presets (filled in below, once paint() exists).
+        val sliderPresets = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        content.addView(HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(sliderPresets)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = ui.dp(8)
+        })
         content.addView(ui.sectionTitle("Long press"))
         content.addView(longAction)
         content.addView(toggle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -88,26 +110,53 @@ object KeyEditor {
         val icons = GridLayout(context).apply { columnCount = 10 }
         content.addView(icons)
 
+        val previewKeys = KeyViews(ui, object : KeyViews.Listener {
+            override fun onKeyPressed(view: View, page: Page, index: Int, button: MacroButton) = Unit
+            override fun onKeyReleased(view: View, page: Page, index: Int, button: MacroButton, cancelled: Boolean) = Unit
+            override fun onEditKey(page: Page, index: Int) = Unit
+            override fun onSlide(page: Page, index: Int, button: MacroButton, up: Boolean) = Unit
+            override fun onSlideTap(page: Page, index: Int, button: MacroButton) = Unit
+        })
+        val previewPage = Page("Preview", mutableListOf())
+        fun preview() {
+            val actionText = action.text.toString().trim()
+            // The same fallback label as save().
+            val button = MacroButton(label.text.toString().trim().ifEmpty { actionText.lines().first() },
+                actionText, color, iconName, toggle.isChecked, longAction.text.toString().trim().ifEmpty { null })
+            previewSlot.removeAllViews()
+            previewSlot.addView(previewKeys.build(previewPage, 0, button, compact = false, editing = false).apply {
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            })
+        }
+
         fun paint() {
             for (i in 0 until swatches.childCount) {
                 val c = Palette.colors[i]
-                swatches.getChildAt(i).background = ui.roundRect(c, ui.dp(18).toFloat()).apply {
-                    if (c == color) setStroke(ui.dp(3), Color.WHITE)
+                // The chosen color gets a ring, set off from the swatch by a gap of dialog color.
+                swatches.getChildAt(i).background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(c)
+                    if (c == color) setStroke(ui.dp(3), DIALOG)
                 }
+                swatches.getChildAt(i).foreground = if (c == color) GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setStroke(ui.dp(2), TEXT)
+                } else null
             }
             for (i in 0 until icons.childCount) {
                 val v = icons.getChildAt(i) as ImageView
                 val selected = v.tag == iconName
-                v.background = ui.roundRect(if (selected) withAlpha(color, 0.3f) else SURFACE_HI, ui.dp(10).toFloat()).apply {
-                    if (selected) setStroke(ui.dp(2), color)
-                }
-                v.imageTintList = ColorStateList.valueOf(if (selected) color else TEXT)
+                v.background = ui.pressable(if (selected) RAISED else PLATE, ui.dp(10).toFloat())
+                v.foreground = if (selected) ui.roundRect(0, ui.dp(10).toFloat()).apply { setStroke(ui.dp(2), TEXT) } else null
+                v.imageTintList = ColorStateList.valueOf(if (selected) legendTone(color) else MUTED)
             }
+            preview()
         }
         for (c in Palette.colors) {
             swatches.addView(View(context).apply {
+                contentDescription = "Color ${Palette.colors.indexOf(c) + 1}"
                 setOnClickListener { color = c; paint() }
-            }, LinearLayout.LayoutParams(ui.dp(36), ui.dp(36)).apply { marginEnd = ui.dp(10) })
+            }, LinearLayout.LayoutParams(ui.dp(40), ui.dp(40)).apply { marginEnd = ui.dp(12) })
         }
         for (name in listOf<String?>(null) + Icons.all.keys) {
             icons.addView(ImageView(context).apply {
@@ -121,7 +170,23 @@ object KeyEditor {
                 setMargins(ui.dp(3), ui.dp(3), ui.dp(3), ui.dp(3))
             })
         }
+        val repaint = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) = preview()
+        }
+        for (field in listOf(label, action, longAction)) field.addTextChangedListener(repaint)
+        toggle.setOnCheckedChangeListener { _, _ -> preview() }
         paint()
+        for ((name, presetIcon) in listOf("volume" to "volume_up", "scroll" to "mouse", "zoom" to "search")) {
+            val title = name.replaceFirstChar { it.uppercase() }
+            sliderPresets.addView(ui.chip("$title slider", presetIcon) {
+                action.setText("slide:$name")
+                if (label.text.isBlank()) label.setText(title)
+                if (iconName == null) iconName = presetIcon
+                paint()
+            }.apply { (layoutParams as LinearLayout.LayoutParams).apply { marginStart = 0; marginEnd = ui.dp(6) } })
+        }
 
         content.addView(ui.sectionTitle("Action syntax"))
         content.addView(ui.bodyText(HELP, 12f, MUTED).apply { typeface = Typeface.MONOSPACE })
@@ -131,19 +196,32 @@ object KeyEditor {
         val header = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(ui.dp(20), ui.dp(14), ui.dp(14), ui.dp(8))
+            setPadding(ui.dp(24), ui.dp(16), ui.dp(16), ui.dp(8))
             addView(TextView(context).apply {
                 text = title
                 setTextColor(TEXT)
-                typeface = ui.fontBold
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                typeface = ui.fontTitle
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
                 maxLines = 1
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             addView(header)
-            addView(ScrollView(context).apply { addView(content) })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(ui.dp(24), ui.dp(4), ui.dp(24), 0)
+                    addView(ui.sectionTitle("Preview").apply { setPadding(0, ui.dp(4), 0, ui.dp(6)) })
+                    addView(previewSlot, LinearLayout.LayoutParams(ui.dp(PREVIEW_WIDTH_DP), ui.dp(136)))
+                    addView(ui.bodyText("Try it here; it sends nothing.", 14f, MUTED).apply {
+                        setPadding(0, ui.dp(10), 0, 0)
+                    }, LinearLayout.LayoutParams(ui.dp(PREVIEW_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
+                })
+                addView(ScrollView(context).apply { addView(content) },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            })
         }
         val dialog = ui.dialog().setView(root).create()
         fun save() {
@@ -171,11 +249,16 @@ object KeyEditor {
         }
         if (canDelete) header.addView(ui.chip("Delete", "delete") { dialog.dismiss(); onDelete() })
         header.addView(ui.chip("Cancel", "close") { dialog.dismiss() })
-        header.addView(ui.chip("Save", "check", Palette.colors[0]) { save() })
+        header.addView(ui.chip("Save", "check", TEXT) { save() })
         for (field in listOf(label, action, longAction)) ui.showKeyboardOnFocus(field)
         dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         dialog.show()
+        // Wide enough for the preview column and the form side by side (the default dialog is narrow).
+        val width = minOf(ui.dp(860), (context.resources.displayMetrics.widthPixels * 0.92f).toInt())
+        dialog.window?.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
+
+    private const val PREVIEW_WIDTH_DP = 180
 
 
     private const val HELP = """One step per line:
@@ -186,6 +269,9 @@ object KeyEditor {
   click:left       mouse button (right, middle)
   scroll:3         wheel (+ up, − down)
   page:next        tablet page (prev, or a name)
+  slide:volume     drag strip: volume, scroll,
+                   zoom, brightness, tabs, undo,
+                   or up | down (e.g. right | left)
 
 In text: {date} {time} {clipboard}
   {date:dd/MM/yyyy} custom format
@@ -206,6 +292,8 @@ while touched; multi-step macros run on
 tap. With a long-press action, a tap
 runs the action on release and holding
 (0.45 s) runs the long-press one.
+A slide: key is the key's only step;
+long press and Toggle don't apply.
 text: uses the computer's keyboard
 layout (Settings → Computers)."""
 }

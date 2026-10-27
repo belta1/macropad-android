@@ -46,11 +46,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Makes the tablet a Bluetooth LE keyboard + mouse (HID over GATT profile).
- *
- * Fire OS ships with the classic HID Device profile disabled, but BLE peripheral mode works,
- * and every desktop OS supports BLE keyboards natively — no software on the computer.
- * See docs/bluetooth-troubleshooting.md for the Fire OS / Windows workarounds in here.
+ * Makes the tablet a Bluetooth keyboard + mouse, over one of two transports:
+ * - Bluetooth LE (HID over GATT), the GATT server and advertising in this class. Works on Fire OS,
+ *   which ships with the Classic HID Device profile disabled.
+ * - Classic Bluetooth (HID Device profile, [ClassicHidLink]) where the tablet has it (Samsung).
+ *   The tablet can then reconnect to the computer by itself.
+ * Every desktop OS supports both natively — no software on the computer. The sending engine below
+ * (held keys, macros, typing, mouse batching) is shared. See docs/bluetooth-troubleshooting.md
+ * for the Fire OS / Windows workarounds in here.
  */
 @SuppressLint("MissingPermission")
 class HidPeripheral(private val context: Context) {
@@ -63,6 +66,11 @@ class HidPeripheral(private val context: Context) {
 
     data class Host(val address: String, val name: String)
 
+    /** Which Bluetooth the keyboard uses. [AUTO] = Classic where the tablet has it, else LE. */
+    enum class Transport(val label: String) {
+        AUTO("Automatic"), BLE("Bluetooth LE"), CLASSIC("Classic Bluetooth"),
+    }
+
     data class Diagnostics(
         val state: State,
         val detail: String,
@@ -72,6 +80,7 @@ class HidPeripheral(private val context: Context) {
         val classicConnectable: Boolean?,
         val secureSettingsGranted: Boolean,
         val audioProfilesBlocked: Boolean?,
+        val transport: Transport?,
         val events: List<String>,
     )
 
@@ -82,6 +91,20 @@ class HidPeripheral(private val context: Context) {
 
     /** Hold time and spacing of tapped keys. */
     @Volatile var keyTiming = KeyTiming.NORMAL
+
+    /** The name computers see; applied on the next [start]. */
+    @Volatile var deviceName = DeviceQuirks.defaultDeviceName
+
+    /** The transport chosen in settings; applied on the next [start]. */
+    @Volatile var transportSetting = Transport.AUTO
+
+    /** The transport in use, once started. */
+    @Volatile var activeTransport: Transport? = null
+        private set
+
+    private var classic: ClassicHidLink? = null
+    /** The tablet's own Bluetooth name, restored by [shutdown] on tablets used for other things too. */
+    private var originalName: String? = null
 
     private val manager = context.getSystemService(BluetoothManager::class.java)
     private val adapter get() = manager?.adapter
@@ -133,12 +156,12 @@ class HidPeripheral(private val context: Context) {
         when {
             adapter == null -> return setState(State.UNAVAILABLE, "This device has no Bluetooth")
             !adapter.isEnabled -> return setState(State.OFF, "Bluetooth is off — tap to turn on")
-            adapter.bluetoothLeAdvertiser == null || !adapter.isMultipleAdvertisementSupported ->
-                return setState(State.UNAVAILABLE, "This tablet can't act as a BLE peripheral")
         }
-        if (server != null) return
-        if (adapter!!.name != DEVICE_NAME) adapter.name = DEVICE_NAME
-        setClassicConnectable(false)
+        if (server != null || classic != null) return
+        if (adapter!!.name != deviceName) {
+            if (originalName == null) originalName = adapter.name
+            adapter.name = deviceName
+        }
         setState(State.STARTING, "Starting…")
         if (!receiverRegistered) {
             context.registerReceiver(hostProfilesReceiver, IntentFilter(BluetoothDevice.ACTION_UUID).apply {
@@ -146,6 +169,21 @@ class HidPeripheral(private val context: Context) {
             })
             receiverRegistered = true
         }
+        // Automatic skips Classic on Fire OS, which never has the HID Device profile (saves a 4 s wait).
+        val tryClassic = transportSetting == Transport.CLASSIC || (transportSetting == Transport.AUTO && !DeviceQuirks.isFire)
+        if (tryClassic && startClassic(adapter)) return
+        if (transportSetting == Transport.CLASSIC) {
+            return setState(State.UNAVAILABLE, "This tablet has no Classic Bluetooth keyboard — choose Automatic or Bluetooth LE")
+        }
+        startBle(adapter)
+    }
+
+    private fun startBle(adapter: BluetoothAdapter) {
+        if (adapter.bluetoothLeAdvertiser == null || !adapter.isMultipleAdvertisementSupported) {
+            return setState(State.UNAVAILABLE, "This tablet can't act as a BLE peripheral")
+        }
+        activeTransport = Transport.BLE
+        if (DeviceQuirks.hideClassicBluetooth) setClassicConnectable(false)
         server = manager.openGattServer(context, gattCallback)
         if (server == null) return setState(State.UNAVAILABLE, "Could not open GATT server")
         pendingServices.clear()
@@ -160,9 +198,78 @@ class HidPeripheral(private val context: Context) {
             context.unregisterReceiver(hostProfilesReceiver)
             receiverRegistered = false
         }
-        closeServer()
-        setClassicConnectable(true)
+        classic?.stop()
+        classic = null
+        closeServer() // also forgets the host, whichever transport it was on
+        if (DeviceQuirks.hideClassicBluetooth) setClassicConnectable(true)
+        activeTransport = null
         setState(State.OFF, "Bluetooth is off — tap to turn on")
+    }
+
+    /** The macropad quits: stop, and give a tablet used for other things back its own Bluetooth name. */
+    fun shutdown() {
+        stop()
+        val name = originalName ?: return
+        if (!DeviceQuirks.isFire) runCatching { adapter?.name = name }
+    }
+
+    // ---------------------------------------------------------------- Classic Bluetooth
+
+    private fun startClassic(adapter: BluetoothAdapter): Boolean {
+        val link = ClassicHidLink(context, adapter, classicCallbacks)
+        if (!link.start(deviceName)) return false
+        classic = link
+        activeTransport = Transport.CLASSIC
+        return true
+    }
+
+    private val classicCallbacks = object : ClassicHidLink.Callbacks {
+        override fun onReady(ok: Boolean, detail: String) {
+            event(detail)
+            if (ok) return showAdvertising()
+            classic?.stop()
+            classic = null
+            activeTransport = null
+            val adapter = adapter ?: return
+            if (transportSetting == Transport.AUTO) startBle(adapter) else setState(State.UNAVAILABLE, detail)
+        }
+
+        override fun onConnected(device: BluetoothDevice) {
+            device.name?.let { knownHosts.edit().putString(device.address, it).apply() }
+            val name = hostName(device.address)
+            val preferred = hostSettings.getString(PREFERRED_HOST, null)
+            if (preferred != null && preferred != device.address) {
+                event("Ignored $name (macropad is set to another computer)")
+                classic?.disconnect(device)
+                return
+            }
+            host = device
+            if (!knownHosts.contains(device.address)) knownHosts.edit().putString(device.address, name).apply()
+            hostSettings.edit().putString(LAST_HOST, device.address).apply()
+            disableAudioProfiles(device)
+            event("Connected to $name over Classic Bluetooth")
+            setState(State.CONNECTED, "Connected to $name")
+        }
+
+        override fun onDisconnected(device: BluetoothDevice) {
+            if (host != null && device != host) return
+            event("Disconnected from ${hostName(device.address)}; reconnecting when it is back")
+            host = null
+            sender.post { held.clear(); mouseButtons = 0 }
+            showAdvertising()
+        }
+
+        override fun onLeds(value: Int) {
+            if (value != leds) {
+                leds = value
+                refreshListener()
+            }
+        }
+
+        override fun reconnectTarget(): String? =
+            hostSettings.getString(PREFERRED_HOST, null) ?: hostSettings.getString(LAST_HOST, null)
+
+        override fun event(message: String) = this@HidPeripheral.event(message)
     }
 
     fun restart() {
@@ -180,15 +287,32 @@ class HidPeripheral(private val context: Context) {
     }
 
     /**
-     * Windows only reconnects to a bonded BLE keyboard when the tablet's GATT server and advertising
-     * start completely fresh (same as an app restart), so rebuild both after every disconnect.
+     * After a disconnect, advertise again from the same GATT server. Rebuilding the server (as 1.0
+     * to 1.5 did) changes the tablet's services; the stack then tells the computer so, Windows
+     * rediscovers them, ends up without the keyboard service and never uses the keyboard again
+     * until it is removed and paired again. The controller stops connectable advertising when a
+     * computer connects, so it has to be started again here.
      */
-    private fun rebuildAfterDisconnect() {
+    private fun advertiseAfterDisconnect() {
+        host = null
+        sender.post { held.clear(); mouseButtons = 0 }
         setState(State.STARTING, "Waiting for the computer to reconnect…")
         main.postDelayed({
-            closeServer()
-            start()
+            if (server == null) return@postDelayed start()
+            advertising = false
+            startAdvertising()
         }, 500)
+    }
+
+    /** Debug builds only: drops the link as if the computer went out of range (`--ez debug_disconnect true`). */
+    fun debugDisconnect() {
+        if (!BuildConfig.DEBUG) return
+        host?.let { event("Debug: disconnecting ${hostName(it.address)}"); disconnectHost(it) }
+    }
+
+    private fun disconnectHost(device: BluetoothDevice) {
+        classic?.let { return it.disconnect(device) }
+        server?.cancelConnection(device)
     }
 
     /**
@@ -220,7 +344,14 @@ class HidPeripheral(private val context: Context) {
         for (device in computers.distinct()) removeBond(device)
         knownHosts.edit().clear().apply()
         cccdStore.edit().clear().apply()
-        hostSettings.edit().remove(PREFERRED_HOST).apply()
+        hostSettings.edit().remove(PREFERRED_HOST).remove(LAST_HOST).apply()
+        if (!DeviceQuirks.canToggleBluetooth) {
+            // Android 13+ won't let apps switch Bluetooth off; the user does it (the dialog says so).
+            event("Reset pairing: forgot ${computers.distinct().size} computer(s)")
+            stop()
+            main.postDelayed({ start() }, 500)
+            return
+        }
         event("Reset pairing: forgot ${computers.distinct().size} computer(s), restarting Bluetooth")
         stop()
         setState(State.STARTING, "Restarting Bluetooth…")
@@ -291,6 +422,11 @@ class HidPeripheral(private val context: Context) {
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
             debug("advertising started")
+            // Windows can connect before this confirmation arrives; then it's late, not "waiting".
+            if (host != null) {
+                advertising = true // the connection handler already cleared it; stop this late one for real
+                return stopAdvertising()
+            }
             showAdvertising()
         }
 
@@ -350,9 +486,10 @@ class HidPeripheral(private val context: Context) {
         event("Computer selection: ${address?.let { hostName(it) } ?: "any"}")
         val current = host
         if (current != null && address != null && current.address != address) {
-            server?.cancelConnection(current)
+            disconnectHost(current)
         } else if (current == null) {
             refreshAdvertisingState()
+            classic?.reconnectNow() // over Classic the tablet calls the chosen computer itself
         }
     }
 
@@ -363,7 +500,7 @@ class HidPeripheral(private val context: Context) {
         cccdStore.all.keys.filter { it.startsWith("$address|") }.forEach { editor.remove(it) }
         editor.apply()
         if (hostSettings.getString(PREFERRED_HOST, null) == address) hostSettings.edit().remove(PREFERRED_HOST).apply()
-        host?.let { if (it.address == address) server?.cancelConnection(it) }
+        host?.let { if (it.address == address) disconnectHost(it) }
     }
 
     private fun refreshAdvertisingState() {
@@ -371,8 +508,9 @@ class HidPeripheral(private val context: Context) {
     }
 
     private fun showAdvertising() {
+        if (host != null) return // connected meanwhile (see advertiseCallback)
         val waitingFor = preferredHost()?.let { "Waiting for ${it.name}" }
-            ?: "Waiting for a computer — pair with \"$DEVICE_NAME\""
+            ?: "Waiting for a computer — pair with \"$deviceName\""
         setState(State.ADVERTISING, waitingFor)
     }
 
@@ -380,11 +518,30 @@ class HidPeripheral(private val context: Context) {
 
     private fun event(message: String) {
         Log.i(TAG, message)
+        val line = "${timeFormat.format(Date())}  $message"
         synchronized(events) {
-            events.addLast("${timeFormat.format(Date())}  $message")
+            events.addLast(line)
             while (events.size > 60) events.removeFirst()
         }
+        sender.post { appendToLogFile(line) }
     }
+
+    /**
+     * The same events in a file that survives restarts (logcat on Fire OS is overwritten within
+     * minutes): adb pull /sdcard/Android/data/dev.belta.macropad/files/bluetooth-events.log
+     */
+    private fun appendToLogFile(line: String) {
+        val dir = context.getExternalFilesDir(null) ?: return
+        try {
+            val file = java.io.File(dir, LOG_FILE)
+            if (file.length() > LOG_FILE_MAX_BYTES) file.renameTo(java.io.File(dir, "$LOG_FILE.1"))
+            file.appendText("${dateFormat.format(Date())} $line\n")
+        } catch (e: Exception) {
+            Log.w(TAG, "could not write $LOG_FILE: $e")
+        }
+    }
+
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
     private fun debug(message: String) {
         if (BuildConfig.DEBUG) Log.d(TAG, message)
@@ -408,6 +565,7 @@ class HidPeripheral(private val context: Context) {
             classicConnectable = adapter?.let { it.scanMode != BluetoothAdapter.SCAN_MODE_NONE },
             secureSettingsGranted = secure,
             audioProfilesBlocked = audioBlocked,
+            transport = activeTransport,
             events = synchronized(events) { events.toList().asReversed() },
         )
     }
@@ -433,9 +591,13 @@ class HidPeripheral(private val context: Context) {
         }
     }
 
-    /** Caps Lock state, from the LED output report the computer writes. */
-    @Volatile var capsLock = false
+    /** Keyboard LEDs (Num / Caps / Scroll Lock), from the output report the computer writes. */
+    @Volatile var leds = 0
         private set
+    val capsLock get() = (leds and LED_CAPS_LOCK) != 0
+
+    /** Whether the lock key with HID usage [key] is on, or null if [key] isn't a lock key. */
+    fun lockOn(key: Int): Boolean? = LOCK_LEDS[key]?.let { (leds and it) != 0 }
 
     private val stops = AtomicInteger()
 
@@ -477,7 +639,7 @@ class HidPeripheral(private val context: Context) {
                     pause(keyTiming.gapMs)
                 }
                 is Step.Scroll -> sendMouse(0, 0, wheel = step.amount)
-                is Step.Page, is Step.Tablet -> {} // handled on the tablet
+                is Step.Page, is Step.Tablet, is Step.Slide -> {} // handled on the tablet
             }
         }
     }
@@ -555,12 +717,20 @@ class HidPeripheral(private val context: Context) {
         return Step.Combo(mods, keys.distinct())
     }
 
-    private fun sendKeyboard(combo: Step.Combo) = notify(keyboardInput, HidReports.keyboard(combo.mods, combo.keys))
+    private fun sendKeyboard(combo: Step.Combo) =
+        send(HidReports.ID_KEYBOARD, HidReports.keyboard(combo.mods, combo.keys)) { keyboardInput }
 
-    private fun sendConsumer(usage: Int) = notify(consumerInput, HidReports.consumer(usage))
+    private fun sendConsumer(usage: Int) = send(HidReports.ID_CONSUMER, HidReports.consumer(usage)) { consumerInput }
 
     private fun sendMouse(dx: Int, dy: Int, buttons: Int = mouseButtons, wheel: Int = 0, pan: Int = 0) =
-        notify(mouseInput, HidReports.mouse(buttons, dx, dy, wheel, pan))
+        send(HidReports.ID_MOUSE, HidReports.mouse(buttons, dx, dy, wheel, pan)) { mouseInput }
+
+    /** One input report over the transport in use ([characteristic] only exists once the GATT server does). */
+    private fun send(reportId: Byte, value: ByteArray, characteristic: () -> BluetoothGattCharacteristic): Boolean {
+        classic?.let { return it.send(reportId, value) }
+        if (server == null) return false
+        return notify(characteristic(), value)
+    }
 
     /** Sends one notification and waits until the stack has queued it (worker thread only). */
     private fun notify(characteristic: BluetoothGattCharacteristic, value: ByteArray): Boolean {
@@ -610,9 +780,9 @@ class HidPeripheral(private val context: Context) {
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 if (device == host) {
                     event("Disconnected from $name (status $status, bond ${bondName(device.bondState)})")
-                    rebuildAfterDisconnect()
+                    advertiseAfterDisconnect()
                 } else if (host == null) {
-                    rebuildAfterDisconnect() // advertising stops when anyone connects, even an ignored host
+                    advertiseAfterDisconnect() // advertising stops when anyone connects, even an ignored host
                 }
             }
         }
@@ -646,7 +816,13 @@ class HidPeripheral(private val context: Context) {
             debug("write ${name(characteristic)} value=${value?.hex()} response=$responseNeeded")
             // Output report = keyboard LEDs (caps/num lock); protocol mode / control point = suspend etc.
             if (characteristic.uuid != HID_CONTROL_POINT) characteristic.value = value
-            if (characteristic === keyboardOutput) capsLock = ((value?.firstOrNull()?.toInt() ?: 0) and LED_CAPS_LOCK) != 0
+            if (characteristic === keyboardOutput) {
+                val newLeds = value?.firstOrNull()?.toInt() ?: 0
+                if (newLeds != leds) {
+                    leds = newLeds
+                    refreshListener() // the screen shows the lock states
+                }
+            }
             if (responseNeeded) server?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
         }
 
@@ -803,10 +979,13 @@ class HidPeripheral(private val context: Context) {
 
     companion object {
         private const val TAG = "HidPeripheral"
-        const val DEVICE_NAME = "Fire Macropad"
         private const val SCAN_MODE_NONE = 20
         private const val SCAN_MODE_CONNECTABLE = 21
         private const val PREFERRED_HOST = "preferred_host"
+        /** The computer served last; Classic Bluetooth reconnects to it. */
+        private const val LAST_HOST = "last_host"
+        private const val LOG_FILE = "bluetooth-events.log"
+        private const val LOG_FILE_MAX_BYTES = 200_000L
 
         private fun uuid16(short: Int): UUID =
             UUID.fromString(String.format("%08x-0000-1000-8000-00805f9b34fb", short))
@@ -827,7 +1006,11 @@ class HidPeripheral(private val context: Context) {
 
         const val REPORT_TYPE_INPUT: Byte = 1
         const val REPORT_TYPE_OUTPUT: Byte = 2
+        const val LED_NUM_LOCK = 0x01
         const val LED_CAPS_LOCK = 0x02
+        const val LED_SCROLL_LOCK = 0x04
+        /** HID usage of each lock key to its LED bit. */
+        val LOCK_LEDS = mapOf(0x53 to LED_NUM_LOCK, 0x39 to LED_CAPS_LOCK, 0x47 to LED_SCROLL_LOCK)
         const val LETTER_A = 0x04
         const val LETTER_Z = 0x1D
     }

@@ -15,6 +15,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Android 10+: open the macropad from the background (boot, charger); else a notification offers it. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Lets the user exempt the macropad from battery optimisation (Samsung puts unused apps to sleep). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Granted once via adb (pm grant): stops Fire OS treating the paired PC as headphones and
          keeps Classic Bluetooth hidden. See docs/bluetooth-troubleshooting.md. -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"

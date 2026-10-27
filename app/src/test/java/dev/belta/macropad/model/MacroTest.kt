@@ -117,6 +117,44 @@ class MacroTest {
         assertEquals(5, DefaultLayout.DESKTOP_ROW_UPGRADE.size)
     }
 
+    @Test
+    fun `slider presets and custom sliders parse`() {
+        assertEquals(listOf(Step.Slide(Step.Media(0xE9), Step.Media(0xEA), "volume", Step.Media(0xE2))), Macro.parse("slide:Volume"))
+        assertEquals(Step.Slide(Step.Scroll(1), Step.Scroll(-1), "scroll"), Macro.slider("slide:scroll"))
+        for (name in Macro.SLIDE_PRESETS.keys) assertEquals(name, Macro.slider("slide:$name")?.preset)
+        val ctrlTab = Step.Combo(HidKeys.CTRL, listOf(HidKeys.keys.getValue("tab")))
+        val ctrlShiftTab = Step.Combo(HidKeys.CTRL or HidKeys.SHIFT, listOf(HidKeys.keys.getValue("tab")))
+        assertEquals(Step.Slide(ctrlTab, ctrlShiftTab, null), Macro.slider("slide:ctrl+tab|ctrl+shift+tab"))
+        assertEquals(Step.Slide(ctrlTab, ctrlShiftTab, null), Macro.slider("slide: ctrl+tab | ctrl+shift+tab "))
+        assertEquals(null, Macro.slider("media:volup"))
+    }
+
+    @Test
+    fun `sliders take an optional tap step`() {
+        assertEquals(Step.Media(0xE2), Macro.slider("slide:volume")?.tap) // tap the icon = Mute
+        assertEquals(Step.Combo(HidKeys.CTRL, listOf(HidKeys.keys.getValue("0"))), Macro.slider("slide:zoom")?.tap)
+        assertEquals(null, Macro.slider("slide:scroll")?.tap)
+        assertEquals(null, Macro.slider("slide:right | left")?.tap)
+        assertEquals(Step.Combo(0, listOf(HidKeys.keys.getValue("space"))), Macro.slider("slide:right | left | space")?.tap)
+        assertEquals(Step.Click(HidKeys.mouseButtons.getValue("middle")), Macro.slider("slide:scroll:1 | scroll:-1 | click:middle")?.tap)
+        assertEquals("Slider · → / ←", Macro.describe("slide:right | left | space"))
+    }
+
+    @Test
+    fun `rejects bad sliders`() {
+        for (bad in listOf(
+            "slide:loudness", "slide:", "slide:right|", "slide:|left", "slide:a|b|c|d", "slide:a|b|",
+            "slide:a|b|text:hi", "slide:a|b|delay:100", "slide:right|click:left",
+            "slide:text:hi|left", "slide:page:next|left", "slide:slide:volume|left", "slide:volume\nctrl+c",
+        )) assertThrows(bad)
+    }
+
+    @Test
+    fun `describes sliders`() {
+        assertEquals("Slider · Volume", Macro.describe("slide:volume"))
+        assertEquals("Slider · → / ←", Macro.describe("slide:right | left"))
+    }
+
     private fun assertThrows(action: String) {
         try {
             Macro.parse(action)

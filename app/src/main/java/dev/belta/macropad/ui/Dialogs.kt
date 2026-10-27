@@ -1,6 +1,12 @@
 package dev.belta.macropad.ui
 
+import android.bluetooth.BluetoothAdapter
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -19,6 +25,7 @@ import android.widget.NumberPicker
 import android.widget.ScrollView
 import android.widget.TextView
 import dev.belta.macropad.MacropadService
+import dev.belta.macropad.hid.DeviceQuirks
 import dev.belta.macropad.hid.HidPeripheral
 import dev.belta.macropad.hid.KeyTiming
 import dev.belta.macropad.hid.KeyboardLayout
@@ -35,8 +42,8 @@ import dev.belta.macropad.model.TextVariables
 import dev.belta.macropad.ui.Ui.Companion.GREEN
 import dev.belta.macropad.ui.Ui.Companion.MUTED
 import dev.belta.macropad.ui.Ui.Companion.RED
-import dev.belta.macropad.ui.Ui.Companion.STROKE_STRONG
-import dev.belta.macropad.ui.Ui.Companion.SURFACE_HI
+import dev.belta.macropad.ui.Ui.Companion.HAIRLINE_STRONG
+import dev.belta.macropad.ui.Ui.Companion.RAISED
 
 /** What the dialogs need from the activity. */
 interface MacropadHost {
@@ -60,6 +67,8 @@ interface MacropadHost {
     fun placeSidebar()
     /** A computer's name or settings changed. */
     fun profilesChanged()
+    /** [AppSettings.screenShift] changed. */
+    fun screenShiftChanged()
     /** Runs [action] once the PIN (if any) has been entered. */
     fun withUnlock(action: () -> Unit)
 }
@@ -80,12 +89,19 @@ class Dialogs(private val host: MacropadHost) {
             "Default keyboard layout: ${host.settings.keyboardLayout.label}" to ::keyboardLayout,
             "Default key timing: ${host.settings.keyTiming.label}" to ::keyTiming,
             "Computers…" to ::computers,
+            "Connection…" to ::connection,
             "Tablet volume buttons…" to ::tabletButtons,
             "Saved values for logins…" to ::savedValues,
             "Pages…" to ::pages,
             "Backup and restore…" to ::backup,
             "Startup…" to ::startup,
             "Dim when idle: ${dimLabel(host.settings.idleDimMinutes)}" to ::idleDim,
+            "Screen protection: ${if (host.settings.screenShift) "on" else "off"}" to {
+                host.settings.screenShift = !host.settings.screenShift
+                host.screenShiftChanged()
+                ui.toast(if (host.settings.screenShift) "The screen moves a few pixels now and then (OLED burn-in)"
+                    else "Screen protection off")
+            },
             "PIN lock: ${if (host.settings.pinHash == null) "off" else "on"}" to ::pinLock,
             "Diagnostics…" to ::diagnostics,
             "Quit macropad" to { host.quit() },
@@ -113,16 +129,88 @@ class Dialogs(private val host: MacropadHost) {
                 .setMessage(
                     "${hid.diagnostics().detail}\n\n" +
                         "On your computer open Bluetooth settings → Add device, and pick " +
-                        "\"${HidPeripheral.DEVICE_NAME}\". Confirm the code on both screens.\n\n" +
+                        "\"${hid.deviceName}\". Confirm the code on both screens.\n\n" +
                         "The macropad shows up as a Bluetooth LE keyboard and mouse; no software is needed " +
                         "on the computer. Don't open Bluetooth settings on this tablet while pairing."
                 )
                 .setPositiveButton("OK", null)
                 .setNegativeButton("Diagnostics") { _, _ -> host.withUnlock { diagnostics() } }
-                .setNeutralButton("Restart Bluetooth") { _, _ -> hid.restart() }
+                .apply {
+                    // Over Classic Bluetooth the computer only finds the tablet while it is visible.
+                    if (hid.activeTransport == HidPeripheral.Transport.CLASSIC) setNeutralButton("Make visible") { _, _ -> makeVisible() }
+                    else setNeutralButton("Restart Bluetooth") { _, _ -> hid.restart() }
+                }
                 .show()
         }
     }
+
+    /** Lets computers find the tablet over Classic Bluetooth for two minutes (Android asks first). */
+    private fun makeVisible() = startSystemScreen(Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE)
+        .putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120))
+
+    private fun startSystemScreen(intent: Intent) {
+        try {
+            ui.context.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            ui.toast("This tablet has no screen for that")
+        }
+    }
+
+    // ---------------------------------------------------------------- connection settings
+
+    private fun connection() {
+        val hid = hid
+        val settings = host.settings
+        val inUse = hid?.activeTransport?.takeIf { settings.transport == HidPeripheral.Transport.AUTO }
+        val items = listOfNotNull(
+            "Bluetooth: ${settings.transport.label}${inUse?.let { " (${it.label})" } ?: ""}" to ::transport,
+            "Bluetooth name: ${settings.bluetoothName}" to {
+                promptText("Bluetooth name", settings.bluetoothName, allowEmpty = true,
+                    hint = "Empty = ${DeviceQuirks.defaultDeviceName}") { name ->
+                    settings.bluetoothName = name
+                    host.service?.applyConnectionSettings()
+                    ui.toast("Computers show \"${settings.bluetoothName}\" when pairing")
+                }
+            },
+            if (hid?.activeTransport == HidPeripheral.Transport.CLASSIC) "Make visible for pairing" to ::makeVisible else null,
+            "Run in the background: ${if (batteryUnrestricted()) "allowed" else "may be stopped"}" to {
+                if (batteryUnrestricted()) ui.toast("Already allowed")
+                else startSystemScreen(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:${ui.context.packageName}")))
+            },
+        )
+        ui.dialog()
+            .setTitle("Connection")
+            .setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }
+            .show()
+    }
+
+    private fun transport() {
+        val options = HidPeripheral.Transport.values()
+        val labels = options.map {
+            when (it) {
+                HidPeripheral.Transport.AUTO -> "Automatic — Classic where this tablet has it"
+                HidPeripheral.Transport.BLE -> "Bluetooth LE — any tablet"
+                HidPeripheral.Transport.CLASSIC -> "Classic Bluetooth — reconnects by itself"
+            }
+        }
+        ui.dialog()
+            .setTitle("Bluetooth")
+            .setMessage("Changing this makes the macropad a different keyboard: pair it with the computers once more.")
+            .setSingleChoiceItems(labels.toTypedArray(), options.indexOf(host.settings.transport)) { d, i ->
+                d.dismiss()
+                if (options[i] == host.settings.transport) return@setSingleChoiceItems
+                host.settings.transport = options[i]
+                host.service?.applyConnectionSettings()
+                ui.toast("Using ${options[i].label}; pair with the computer again")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Whether the system leaves the macropad running in the background (no battery optimisation). */
+    private fun batteryUnrestricted() =
+        ui.context.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(ui.context.packageName) != false
 
     /** Known computers; tap one for its settings. */
     fun computers() {
@@ -186,7 +274,7 @@ class Dialogs(private val host: MacropadHost) {
             },
             "Forget this computer…" to {
                 confirm("Forget ${computer.name}?",
-                    "The tablet unpairs it. Remove \"${HidPeripheral.DEVICE_NAME}\" on that computer too.") {
+                    "The tablet unpairs it. Remove \"${hid.deviceName}\" on that computer too.") {
                     hid.forgetHost(address)
                     profiles.remove(address)
                     host.profilesChanged()
@@ -272,6 +360,9 @@ class Dialogs(private val host: MacropadHost) {
         d.audioProfilesBlocked?.let { line("Audio profiles blocked", if (it) "yes" else "no", it) }
         line("Keyboard layout", hid.keyboardLayout.label)
         line("Key timing", hid.keyTiming.label)
+        line("Connection", d.transport?.label ?: "not running")
+        line("Run in the background", if (batteryUnrestricted()) "allowed" else "may be stopped — ⚙ → Connection",
+            batteryUnrestricted())
         text.append("\nRecent events\n")
         val eventsStart = text.length
         text.append(if (d.events.isEmpty()) "(none)" else d.events.joinToString("\n"))
@@ -295,8 +386,9 @@ class Dialogs(private val host: MacropadHost) {
     }
 
     private fun resetPairing() = confirm("Reset pairing?",
-        "The tablet forgets the computers it was paired with and restarts Bluetooth. " +
-            "Then remove \"${HidPeripheral.DEVICE_NAME}\" on each computer and add it again.") {
+        "The tablet forgets the computers it was paired with" +
+            (if (DeviceQuirks.canToggleBluetooth) " and restarts Bluetooth. " else ". Then turn Bluetooth off and on. ") +
+            "Then remove \"${hid?.deviceName}\" on each computer and add it again.") {
         hid?.resetPairing()
     }
 
@@ -392,7 +484,24 @@ class Dialogs(private val host: MacropadHost) {
             .setMultiChoiceItems(options, checked) { _, which, on ->
                 if (which == 0) s.openOnBoot = on else s.openOnCharge = on
             }
-            .setPositiveButton("Done", null)
+            .setPositiveButton("Done") { _, _ ->
+                if ((s.openOnBoot || s.openOnCharge) && !canOpenFromBackground()) askOverlayPermission()
+            }
+            .show()
+    }
+
+    private fun canOpenFromBackground() =
+        !DeviceQuirks.needsOverlayToOpenFromBackground || Settings.canDrawOverlays(ui.context)
+
+    private fun askOverlayPermission() {
+        ui.dialog()
+            .setTitle("Open by itself")
+            .setMessage("On this Android version the macropad can only come to the front by itself with " +
+                "\"Display over other apps\". Without it, a notification offers to open it instead.")
+            .setPositiveButton("Allow") { _, _ ->
+                startSystemScreen(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ui.context.packageName}")))
+            }
+            .setNegativeButton("Not now", null)
             .show()
     }
 
@@ -407,7 +516,9 @@ class Dialogs(private val host: MacropadHost) {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             addView(rows)
-            addView(TextView(context).apply { text = "  rows   ×   columns  "; setTextColor(Color.WHITE) })
+            addView(TextView(context).apply {
+                text = "  rows   ×   columns  "; setTextColor(Ui.TEXT); typeface = ui.fontLabel; textSize = 17f
+            })
             addView(cols)
         }
         ui.dialog()
@@ -466,9 +577,9 @@ class Dialogs(private val host: MacropadHost) {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(ui.dp(4), ui.dp(8), ui.dp(4), ui.dp(8))
-                background = if (current) ui.roundRect(SURFACE_HI, ui.dp(14).toFloat()).apply {
-                    setStroke(ui.dp(2), STROKE_STRONG)
-                } else ui.pressable(Color.TRANSPARENT, ui.dp(14).toFloat())
+                background = if (current) ui.roundRect(RAISED, ui.dp(12).toFloat()).apply {
+                    setStroke(ui.dp(2), HAIRLINE_STRONG)
+                } else ui.pressable(Color.TRANSPARENT, ui.dp(12).toFloat())
                 addView(ImageView(context).apply { setImageDrawable(AppIcons.drawable(ui, key, page.name)) },
                     LinearLayout.LayoutParams(ui.dp(36), ui.dp(36)))
                 addView(TextView(context).apply {

@@ -35,6 +35,8 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import dev.belta.macropad.hid.HidKeys
+import dev.belta.macropad.hid.DeviceQuirks
 import dev.belta.macropad.hid.HidPeripheral
 import dev.belta.macropad.model.AppSettings
 import dev.belta.macropad.model.DefaultLayout
@@ -58,18 +60,19 @@ import dev.belta.macropad.ui.MacropadHost
 import dev.belta.macropad.ui.Recorder
 import dev.belta.macropad.ui.TrackpadView
 import dev.belta.macropad.ui.Ui
-import dev.belta.macropad.ui.Ui.Companion.BG_BOTTOM
+import dev.belta.macropad.ui.Ui.Companion.AMBER
 import dev.belta.macropad.ui.Ui.Companion.BLUE
-import dev.belta.macropad.ui.Ui.Companion.BG_TOP
+import dev.belta.macropad.ui.Ui.Companion.CASE
+import dev.belta.macropad.ui.Ui.Companion.FAINT
+import dev.belta.macropad.ui.Ui.Companion.GREEN
+import dev.belta.macropad.ui.Ui.Companion.HAIRLINE
+import dev.belta.macropad.ui.Ui.Companion.HAIRLINE_STRONG
 import dev.belta.macropad.ui.Ui.Companion.MUTED
+import dev.belta.macropad.ui.Ui.Companion.PLATE
+import dev.belta.macropad.ui.Ui.Companion.RAISED
 import dev.belta.macropad.ui.Ui.Companion.RED
-import dev.belta.macropad.ui.Ui.Companion.STROKE
-import dev.belta.macropad.ui.Ui.Companion.SURFACE_HI
-import dev.belta.macropad.ui.Ui.Companion.STROKE_STRONG
-import dev.belta.macropad.ui.Ui.Companion.SURFACE
-import dev.belta.macropad.ui.Ui.Companion.SURFACE_ACTIVE
 import dev.belta.macropad.ui.Ui.Companion.TEXT
-import dev.belta.macropad.ui.Ui.Companion.blend
+import dev.belta.macropad.ui.Ui.Companion.lighten
 import dev.belta.macropad.ui.Ui.Companion.withAlpha
 
 /** The macropad screen. The Bluetooth keyboard itself lives in [MacropadService]. */
@@ -88,14 +91,22 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     private lateinit var tabs: LinearLayout
     private lateinit var tabScroller: HorizontalScrollView
-    private lateinit var offlineBanner: TextView
+    private lateinit var offlineBanner: LinearLayout
+    private lateinit var offlineIcon: ImageView
+    private lateinit var offlineTitle: TextView
+    private lateinit var offlineText: TextView
     private lateinit var typingBanner: TextView
     /** Long texts being typed (the stop banner shows while > 0). */
     private var typingRuns = 0
     private lateinit var content: FrameLayout
     private lateinit var statusChip: LinearLayout
     private lateinit var statusDot: View
+    private lateinit var statusTitle: TextView
+    /** The status's second line: the computer, or what the macropad is waiting for. */
     private lateinit var statusText: TextView
+    private lateinit var lockBadges: LinearLayout
+    private lateinit var capsBadge: TextView
+    private lateinit var numBadge: TextView
     private lateinit var switchButton: ImageView
     private lateinit var editButton: ImageView
     private lateinit var recordButton: ImageView
@@ -143,7 +154,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
         idleOverlay = buildIdleOverlay()
         setContentView(FrameLayout(this).apply {
-            addView(buildUi())
+            addView(buildUi().also { screen = it })
             addView(idleOverlay)
         })
         // Re-hide the status bar if something (e.g. the notification shade) brought it back.
@@ -154,7 +165,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         renderPage()
 
         registerReceiver(pairingReceiver, IntentFilter(BluetoothDevice.ACTION_PAIRING_REQUEST))
-        registerReceiver(quitReceiver, IntentFilter(MacropadService.ACTION_QUIT))
+        // Sent by the service only; Android 14 requires saying so for app broadcasts.
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(quitReceiver, IntentFilter(MacropadService.ACTION_QUIT), RECEIVER_NOT_EXPORTED)
+        else registerReceiver(quitReceiver, IntentFilter(MacropadService.ACTION_QUIT))
         if (!MacropadService.hasBluetoothPermissions(this)) requestPermissions()
         MacropadService.start(this)
         bindService(Intent(this, MacropadService::class.java), connection, Context.BIND_AUTO_CREATE)
@@ -166,8 +179,12 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         handleIntent(intent)
     }
 
-    /** `adb shell am start -n dev.belta.macropad/.MainActivity --ez reset_pairing true` */
+    /**
+     * `adb shell am start -n dev.belta.macropad/.MainActivity --ez reset_pairing true`; debug builds
+     * also take `--ez debug_disconnect true` (drops the link to test reconnecting).
+     */
     private fun handleIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("debug_disconnect", false) == true) hid?.debugDisconnect()
         if (intent?.getBooleanExtra("reset_pairing", false) != true) return
         hid?.resetPairing() ?: run { pendingResetPairing = true }
     }
@@ -184,10 +201,12 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     override fun onResume() {
         super.onResume()
         resetIdleTimer()
+        screenShiftChanged()
     }
 
     override fun onPause() {
         handler.removeCallbacks(dimRunnable)
+        handler.removeCallbacks(shiftScreen)
         super.onPause()
     }
 
@@ -221,19 +240,19 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             gravity = Gravity.CENTER_HORIZONTAL
         }
         idleTime = TextView(context).apply {
-            typeface = ui.fontBold
-            setTextColor(0xFF8A93A6.toInt())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 96f)
+            typeface = ui.fontHint
+            setTextColor(FAINT)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 128f)
         }
         idleDate = TextView(context).apply {
-            typeface = ui.fontMedium
-            setTextColor(0xFF5C6476.toInt())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+            typeface = ui.fontLabel
+            setTextColor(withAlpha(FAINT, 0.8f))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
         }
         idleStatus = TextView(context).apply {
-            typeface = ui.fontMedium
-            setTextColor(0xFF4A5163.toInt())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            typeface = ui.fontHint
+            setTextColor(withAlpha(FAINT, 0.6f))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
             setPadding(0, ui.dp(18), 0, 0)
         }
         for (line in listOf(idleTime, idleDate, idleStatus)) {
@@ -277,7 +296,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         val now = java.util.Date()
         idleTime.text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(now)
         idleDate.text = java.text.SimpleDateFormat("EEEE d MMMM", java.util.Locale.getDefault()).format(now)
-        idleStatus.text = if (connected) "● ${statusText.text}" else "○ Not connected"
+        idleStatus.text = if (connected) "Connected to ${statusText.text}" else "Not connected"
         // Drift a little so nothing stays lit on the same pixels.
         idleClock.translationX = ((Math.random() - 0.5) * ui.dp(160)).toFloat()
         idleClock.translationY = ((Math.random() - 0.5) * ui.dp(120)).toFloat()
@@ -390,18 +409,17 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     private fun buildUi(): View {
         // Main column (tabs, keys, dock) and, on the right, the sidebar shown on every page: status,
-        // app controls and the sidebar's action keys.
+        // app controls and the sidebar's action keys. Everything sits flat on the case except the
+        // keys, which are keycaps.
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(BG_TOP, BG_BOTTOM))
+            setBackgroundColor(CASE)
             setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(12))
         }
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         outer.addView(root, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         val sidebar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6))
-            background = ui.roundRect(SURFACE, ui.dp(24).toFloat()).apply { setStroke(ui.dp(1), STROKE) }
             isMotionEventSplittingEnabled = true
         }
         sidebarView = sidebar
@@ -416,8 +434,6 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         tabs = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(ui.dp(4), ui.dp(4), ui.dp(4), ui.dp(4))
-            background = ui.roundRect(SURFACE, ui.dp(24).toFloat())
         }
         tabScroller = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -427,44 +443,75 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         }
         bar.addView(tabScroller, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
+        // Status: a light, the state and, under it, the computer or what it's waiting for. Every line
+        // always takes its room, so the sidebar under it keeps its size as the status changes; the
+        // full text is in Diagnostics (tap the status).
         statusChip = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(ui.dp(12), ui.dp(8), ui.dp(10), ui.dp(8))
-            background = ui.pressable(SURFACE_HI, ui.dp(18).toFloat())
+            orientation = LinearLayout.VERTICAL
+            setPadding(ui.dp(10), ui.dp(8), ui.dp(8), ui.dp(8))
+            background = ui.pressable(Color.TRANSPARENT, ui.dp(12).toFloat())
             setOnClickListener { onStatusTapped() }
         }
         statusDot = View(this)
-        statusChip.addView(statusDot, LinearLayout.LayoutParams(ui.dp(10), ui.dp(10)))
-        statusText = TextView(this).apply {
+        statusTitle = TextView(this).apply {
             setTextColor(TEXT)
-            typeface = ui.fontMedium
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
-            setPadding(ui.dp(8), 0, 0, 0)
-            // Always two lines, so the chip (and the sidebar under it) keeps its size as the status
-            // changes; the full text is in Diagnostics (tap the chip).
-            setLines(2)
-            gravity = Gravity.CENTER_VERTICAL // one-line names sit level with the dot
+            typeface = ui.fontLabel
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            text = "Starting…"
+            text = "Starting"
         }
-        statusChip.addView(statusText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        statusChip.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(statusDot, LinearLayout.LayoutParams(ui.dp(8), ui.dp(8)).apply { marginEnd = ui.dp(8) })
+            addView(statusTitle, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        })
+        statusText = TextView(this).apply {
+            setTextColor(MUTED)
+            typeface = ui.fontHint
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(ui.dp(16), 0, 0, 0)
+        }
+        statusChip.addView(statusText)
+        // The computer's Caps / Num Lock as indicator lights, like a keyboard's. Always there (dark
+        // while off or disconnected), so nothing moves when they light.
+        fun lockBadge(text: String) = TextView(this).apply {
+            this.text = text
+            typeface = ui.fontHint
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            gravity = Gravity.CENTER_VERTICAL
+            compoundDrawablePadding = ui.dp(6)
+            maxLines = 1
+        }
+        capsBadge = lockBadge("Caps")
+        numBadge = lockBadge("Num")
+        lockBadges = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(ui.dp(16), ui.dp(6), 0, 0)
+            addView(capsBadge)
+            addView(numBadge, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = ui.dp(12) })
+        }
+        statusChip.addView(lockBadges)
         sidebar.addView(statusChip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = ui.dp(6) })
+            ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = ui.dp(4) })
 
-        // App controls, two per row: record · edit / settings · switch computer
-        switchButton = ui.iconButton("swap") { switchComputer() }.apply { visibility = View.GONE }
-        recordButton = ui.iconButton("record") {
+        // App controls, two per row: record, edit / settings, switch computer
+        switchButton = ui.iconButton("swap", "Switch computer") { switchComputer() }.apply { visibility = View.GONE }
+        recordButton = ui.iconButton("record", "Record a macro") {
             if (recorder.isRecording) stopRecording() else withUnlock { startRecording() }
         }
-        editButton = ui.iconButton("edit") { if (editing) toggleEdit() else withUnlock { toggleEdit() } }
-        val settingsButton = ui.iconButton("settings") { withUnlock { dialogs.settings() } }
+        editButton = ui.iconButton("edit", "Edit keys") { if (editing) toggleEdit() else withUnlock { toggleEdit() } }
+        val settingsButton = ui.iconButton("settings", "Settings") { withUnlock { dialogs.settings() } }
         for (pair in listOf(listOf(recordButton, editButton), listOf(settingsButton, switchButton))) {
             sidebar.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
-                for (button in pair) addView(button, LinearLayout.LayoutParams(0, ui.dp(44), 1f).apply {
-                    setMargins(ui.dp(3), ui.dp(3), ui.dp(3), ui.dp(3))
+                for (button in pair) addView(button, LinearLayout.LayoutParams(0, ui.dp(48), 1f).apply {
+                    setMargins(ui.dp(2), ui.dp(2), ui.dp(2), ui.dp(2))
                 })
             })
         }
@@ -475,34 +522,51 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             isMotionEventSplittingEnabled = true
         }
         sidebar.addView(sideKeys, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
-            topMargin = ui.dp(6)
+            topMargin = ui.dp(8)
         })
         root.addView(bar)
 
         // Takes the media dock's place while no computer is connected (the dock does nothing then),
         // so key presses that go nowhere are obvious without moving the keys.
-        offlineBanner = TextView(this).apply {
-            setTextColor(0xFFFF8FA3.toInt())
-            typeface = ui.fontSemiBold
+        offlineIcon = ui.icon("bluetooth", AMBER)
+        offlineTitle = TextView(this).apply {
+            setTextColor(TEXT)
+            typeface = ui.fontLabel
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            maxLines = 1
+        }
+        offlineText = TextView(this).apply {
+            setTextColor(MUTED)
+            typeface = ui.fontBody
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            gravity = Gravity.CENTER
-            setPadding(ui.dp(16), 0, ui.dp(16), 0)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        offlineBanner = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(ui.dp(20), 0, ui.dp(16), 0)
             visibility = View.GONE
-            background = ui.roundRect(blend(RED, SURFACE, 0.12f), ui.dp(22).toFloat()).apply {
-                setStroke(ui.dp(1), withAlpha(RED, 0.3f))
-            }
+            background = ui.roundRect(PLATE, ui.dp(12).toFloat()).apply { setStroke(ui.dp(1), HAIRLINE) }
+            addView(offlineIcon, LinearLayout.LayoutParams(ui.dp(24), ui.dp(24)).apply { marginEnd = ui.dp(16) })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(offlineTitle)
+                addView(offlineText)
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(ui.icon("chevron_right", MUTED), LinearLayout.LayoutParams(ui.dp(22), ui.dp(22)))
             setOnClickListener { onStatusTapped() }
         }
 
         // Shown over the dock while a long text is being typed; tapping it stops the typing.
         typingBanner = TextView(this).apply {
             setTextColor(TEXT)
-            typeface = ui.fontSemiBold
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            typeface = ui.fontLabel
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
             gravity = Gravity.CENTER
             setPadding(ui.dp(16), 0, ui.dp(16), 0)
             visibility = View.GONE
-            background = ui.pressable(blend(BLUE, SURFACE, 0.16f), ui.dp(22).toFloat())
+            background = ui.pressable(RAISED, ui.dp(12).toFloat())
             setOnClickListener {
                 hid?.stopTyping()
                 text = "Stopping…"
@@ -519,14 +583,14 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             gravity = Gravity.CENTER_VERTICAL
             visibility = View.GONE
             setPadding(ui.dp(16), ui.dp(6), ui.dp(6), ui.dp(6))
-            background = ui.roundRect(0xFF2A1219.toInt(), ui.dp(24).toFloat()).apply {
-                setStroke(ui.dp(1), withAlpha(RED, 0.45f))
+            background = ui.roundRect(PLATE, ui.dp(12).toFloat()).apply {
+                setStroke(ui.dp(1), withAlpha(RED, 0.5f))
             }
         }
         recordStatus = TextView(this).apply {
-            setTextColor(0xFFFF8FA3.toInt())
-            typeface = ui.fontSemiBold
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextColor(lighten(RED, 0.3f))
+            typeface = ui.fontLabel
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
         }
@@ -542,16 +606,14 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         // Media dock, shared by every page
         dockRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(ui.dp(5), ui.dp(5), ui.dp(5), ui.dp(5))
-            background = ui.roundRect(SURFACE, ui.dp(22).toFloat()).apply { setStroke(ui.dp(1), STROKE) }
             isMotionEventSplittingEnabled = true
         }
         root.addView(FrameLayout(this).apply {
             addView(dockRow, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             addView(offlineBanner, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             addView(typingBanner, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(76)).apply {
-            setMargins(ui.dp(5), ui.dp(10), ui.dp(5), 0)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.sdp(72)).apply {
+            setMargins(ui.dp(5), ui.dp(8), ui.dp(5), 0)
         })
         return outer
     }
@@ -562,7 +624,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         outer.removeView(sidebarView)
         val left = settings.sidebarLeft
         outer.addView(sidebarView, if (left) 0 else outer.childCount,
-            LinearLayout.LayoutParams(ui.dp(SIDEBAR_WIDTH_DP), ViewGroup.LayoutParams.MATCH_PARENT).apply {
+            LinearLayout.LayoutParams(ui.sdp(SIDEBAR_WIDTH_DP), ViewGroup.LayoutParams.MATCH_PARENT).apply {
                 if (left) marginEnd = ui.dp(10) else marginStart = ui.dp(10)
             })
     }
@@ -573,34 +635,30 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         layout.pages.forEachIndexed { i, p ->
             if (p.name in hidden) return@forEachIndexed
             val active = i == pageIndex
-            // App icon on every tab; the selected one also shows its name.
+            // App icon on every tab; the selected one also shows its name, on a raised patch of case.
             tabs.addView(LinearLayout(this).apply {
                 tag = p.name
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 contentDescription = p.name
-                setPadding(ui.dp(if (active) 8 else 9), 0, ui.dp(if (active) 16 else 9), 0)
+                isSelected = active
+                setPadding(ui.dp(if (active) 10 else 9), 0, ui.dp(if (active) 16 else 9), 0)
                 addView(ImageView(context).apply {
                     setImageDrawable(AppIcons.drawable(ui, p.icon ?: DefaultLayout.iconFor(p.name), p.name))
-                    alpha = if (active) 1f else 0.72f
-                }, LinearLayout.LayoutParams(ui.dp(if (active) 28 else 26), ui.dp(if (active) 28 else 26)))
+                    alpha = if (active) 1f else 0.6f
+                }, LinearLayout.LayoutParams(ui.dp(26), ui.dp(26)))
                 if (active) addView(TextView(context).apply {
                     text = p.name
-                    typeface = ui.fontBold
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-                    setTextColor(Color.WHITE)
+                    typeface = ui.fontTitle
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                    setTextColor(TEXT)
                     maxLines = 1
-                    setPadding(ui.dp(9), 0, 0, 0)
+                    setPadding(ui.dp(10), 0, 0, 0)
                 })
-                background = if (active) {
-                    ui.roundRect(blend(BLUE, SURFACE_ACTIVE, 0.22f), ui.dp(20).toFloat())
-                        .apply { setStroke(ui.dp(1), withAlpha(BLUE, 0.45f)) }
-                } else {
-                    ui.pressable(Color.TRANSPARENT, ui.dp(20).toFloat())
-                }
+                background = ui.pressable(if (active) RAISED else Color.TRANSPARENT, ui.dp(12).toFloat())
                 setOnClickListener { selectPage(i); renderPage() }
                 setOnLongClickListener { withUnlock { dialogs.pageMenu(i) }; true }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ui.dp(40)).apply {
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ui.dp(44)).apply {
                 marginEnd = ui.dp(2)
             })
         }
@@ -629,9 +687,11 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     /** Edit/record buttons and the recorder bar. */
     private fun renderChrome() {
-        ui.setIconButton(editButton, if (editing) "check" else "edit", if (editing) Palette.colors[1] else null)
-        ui.setIconButton(recordButton, if (recorder.isRecording) "stop" else "record", if (recorder.isRecording) RED else null)
-        recordButton.imageTintList = android.content.res.ColorStateList.valueOf(if (recorder.isRecording) Color.WHITE else RED)
+        ui.setIconButton(editButton, if (editing) "check" else "edit", if (editing) TEXT else null)
+        editButton.contentDescription = if (editing) "Done editing" else "Edit keys"
+        ui.setIconButton(recordButton, if (recorder.isRecording) "stop" else "record",
+            if (recorder.isRecording) RED else null, tint = RED)
+        recordButton.contentDescription = if (recorder.isRecording) "Stop recording" else "Record a macro"
         recordBar.visibility = if (recorder.isRecording) View.VISIBLE else View.GONE
         recordStatus.text = recorder.status()
     }
@@ -655,24 +715,33 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
         renderSidebar()
 
-        // Icon-only keys take one share of the width, labelled keys two; a divider separates the
-        // media keys from the rest.
+        // Icon-only keys take one share of the width, labelled keys two, sliders three; a divider
+        // separates the media keys from the rest.
         dockRow.removeAllViews()
         var previousMedia: Boolean? = null
         for (index in 0 until Layout.DOCK_SIZE) {
             val button = layout.button(layout.dock, index)
+            // Empty slots only take room while editing (to add a key there), as in the sidebar.
+            if (!editing && button == null) continue
             val iconOnly = dockIconOnly(button)
             val media = button == null || isMediaKey(button)
             if (previousMedia != null && media != previousMedia) {
-                dockRow.addView(View(this).apply { setBackgroundColor(STROKE) },
+                dockRow.addView(View(this).apply { setBackgroundColor(HAIRLINE_STRONG) },
                     LinearLayout.LayoutParams(ui.dp(1), ViewGroup.LayoutParams.MATCH_PARENT).apply {
                         setMargins(ui.dp(6), ui.dp(12), ui.dp(6), ui.dp(12))
                     })
             }
             previousMedia = media
+            // A slider is exactly three icon keys wide: three shares plus the two gaps between them.
+            val slider = button != null && Macro.slider(button.action) != null
+            val weight = when {
+                slider -> 3f
+                iconOnly -> 1f
+                else -> 2f
+            }
             dockRow.addView(keyView(layout.dock, index, compact = true),
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, if (iconOnly) 1f else 2f).apply {
-                    setMargins(ui.dp(3), 0, ui.dp(3), 0)
+                LinearLayout.LayoutParams(if (slider) 2 * ui.dp(DOCK_GAP_DP) else 0, ViewGroup.LayoutParams.MATCH_PARENT, weight).apply {
+                    setMargins(ui.dp(DOCK_GAP_DP) / 2, 0, ui.dp(DOCK_GAP_DP) / 2, 0)
                 })
         }
     }
@@ -693,7 +762,11 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private fun dockIconOnly(button: MacroButton?) = button == null || Icons.get(button.icon) != null
 
     private fun isMediaKey(button: MacroButton) =
-        runCatching { Macro.parse(button.action) }.getOrNull()?.singleOrNull() is Step.Media
+        when (val step = runCatching { Macro.parse(button.action) }.getOrNull()?.singleOrNull()) {
+            is Step.Media -> true
+            is Step.Slide -> step.up is Step.Media // e.g. a volume slider
+            else -> false
+        }
 
     private fun buildGrid(page: Page) = GridLayout(this).apply {
         isMotionEventSplittingEnabled = true
@@ -734,14 +807,47 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(72)))
     }
 
-    private fun keyView(page: Page, index: Int, compact: Boolean) = keyViews.build(
-        page, index, layout.button(page, index), compact, editing,
-        toggledOn = toggleKey(page, index) in toggledOn,
-        emphasize = page === layout.dock && index == 1,
-        iconOnly = page === layout.dock && dockIconOnly(layout.button(page, index)),
-        showHint = page !== layout.sidebar,
-        small = page === layout.sidebar,
-    )
+    private fun keyView(page: Page, index: Int, compact: Boolean): View {
+        val button = layout.button(page, index)
+        val lock = lockState(button)
+        return keyViews.build(
+            page, index, button, compact, editing,
+            toggledOn = lock ?: (toggleKey(page, index) in toggledOn),
+            emphasize = page === layout.dock && index == 1,
+            iconOnly = page === layout.dock && dockIconOnly(button),
+            showHint = page !== layout.sidebar,
+            small = page === layout.sidebar,
+            stateful = lock != null || button?.toggle == true,
+        ).apply { if (lock != null) tag = LockKey(page, index, compact) }
+    }
+
+    /** Tag of a lock key's view, so [refreshLockKeys] can find and redraw it. */
+    private class LockKey(val page: Page, val index: Int, val compact: Boolean)
+
+    /**
+     * A key that is just Caps / Num / Scroll Lock shows the computer's real state (from its keyboard
+     * LEDs, off while disconnected); null for any other key.
+     */
+    private fun lockState(button: MacroButton?): Boolean? {
+        val combo = button?.let { runCatching { Macro.parse(it.action) }.getOrNull()?.singleOrNull() } as? Step.Combo
+        val key = combo?.keys?.singleOrNull()?.takeIf { combo.mods == 0 && it in HidPeripheral.LOCK_LEDS } ?: return null
+        return connected && hid?.lockOn(key) == true
+    }
+
+    /** Redraws the lock keys on screen; one being touched redraws when it is released. */
+    private fun refreshLockKeys() {
+        fun visit(group: ViewGroup) {
+            for (i in group.childCount - 1 downTo 0) {
+                val child = group.getChildAt(i)
+                val lock = child.tag as? LockKey
+                when {
+                    lock != null -> if (!child.isPressed) keyViews.replace(child, keyView(lock.page, lock.index, lock.compact))
+                    child is ViewGroup -> visit(child)
+                }
+            }
+        }
+        for (root in listOf(content, dockRow, sideKeys)) visit(root)
+    }
 
     private fun toggleKey(page: Page, index: Int) = "${page.name}#$index"
 
@@ -759,13 +865,34 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     override fun onKeyReleased(view: View, page: Page, index: Int, button: MacroButton, cancelled: Boolean) {
         releaseKey(view, tapped = !cancelled)
-        // Toggle keys flip on press; redraw them once the finger lifts.
-        if (button.toggle) {
+        // Toggle keys flip on press, lock keys follow the computer's LEDs; redraw them once the finger lifts.
+        if (button.toggle || lockState(button) != null) {
             keyViews.replace(view, keyView(page, index, compact = page === layout.dock || page.kind == PageKind.TRACKPAD))
         }
     }
 
     override fun onEditKey(page: Page, index: Int) = editKey(page, index)
+
+    /** One tick of a slider key: its up or down step, sent like a tap. */
+    override fun onSlide(page: Page, index: Int, button: MacroButton, up: Boolean) {
+        val slide = Macro.slider(button.action) ?: return
+        val hid = hid
+        if (hid == null || !connected) return flashOfflineBanner()
+        hid.run(listOf(if (up) slide.up else slide.down))
+    }
+
+    /** The slider's icon was tapped: its tap step (Mute for the volume slider), sent like a tap. */
+    override fun onSlideTap(page: Page, index: Int, button: MacroButton) {
+        val tap = Macro.slider(button.action)?.tap ?: return
+        val hid = hid
+        if (hid == null || !connected) return flashOfflineBanner()
+        hid.run(listOf(tap))
+    }
+
+    private fun flashOfflineBanner() {
+        offlineBanner.animate().alpha(0.3f).setDuration(120)
+            .withEndAction { offlineBanner.animate().alpha(1f).setDuration(120) }
+    }
 
     /** A key with a long-press action, waiting to see whether it is tapped or held. */
     private class PendingPress(val page: Page, val index: Int, val button: MacroButton, val longPress: Runnable)
@@ -813,6 +940,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             ui.toast("${button.label}: ${e.message}")
             return
         }
+        // A slider assigned somewhere it can't be dragged (the tablet's volume buttons).
+        if (steps.any { it is Step.Slide }) return ui.toast("${button.label}: drag the slider")
         view?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
         val missing = steps.filterIsInstance<Step.Text>().flatMap { TextVariables.secretNames(it.text) }
             .distinct().filter { secrets[it] == null }
@@ -831,8 +960,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         }
         val hid = hid
         if (hid == null || !connected) {
-            if (!recorder.isRecording) offlineBanner.animate().alpha(0.3f).setDuration(120)
-                .withEndAction { offlineBanner.animate().alpha(1f).setDuration(120) }
+            if (!recorder.isRecording) flashOfflineBanner()
             return
         }
         if (primary && button.toggle) {
@@ -890,33 +1018,57 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     private fun showState(state: HidPeripheral.State, detail: String) {
         val color = when (state) {
-            HidPeripheral.State.CONNECTED -> Palette.colors[1]
-            HidPeripheral.State.ADVERTISING -> Palette.colors[0]
-            HidPeripheral.State.STARTING -> Palette.colors[2]
+            HidPeripheral.State.CONNECTED -> GREEN
+            HidPeripheral.State.ADVERTISING -> BLUE
+            HidPeripheral.State.STARTING -> AMBER
             HidPeripheral.State.OFF, HidPeripheral.State.UNAVAILABLE -> RED
         }
-        statusDot.background = ui.roundRect(color, ui.dp(5).toFloat())
+        statusDot.background = ui.roundRect(color, ui.dp(4).toFloat())
         val offline = state != HidPeripheral.State.CONNECTED
         offlineBanner.visibility = if (offline) View.VISIBLE else View.GONE
         dockRow.visibility = if (offline) View.INVISIBLE else View.VISIBLE
-        offlineBanner.text = when (state) {
-            HidPeripheral.State.ADVERTISING ->
-                "Not connected — keys won't reach a computer. " +
-                    (hid?.preferredHost()?.let { "Waiting for ${it.name}." } ?: "Waiting for any paired computer.")
-            HidPeripheral.State.OFF -> "Bluetooth is off — tap to turn it on"
-            else -> "Not connected — $detail"
+        offlineIcon.imageTintList = android.content.res.ColorStateList.valueOf(color)
+        offlineTitle.text = if (state == HidPeripheral.State.OFF) "Bluetooth is off" else "Not connected"
+        offlineText.text = when (state) {
+            HidPeripheral.State.ADVERTISING -> "Keys won't reach a computer. " +
+                (hid?.preferredHost()?.let { "Waiting for ${it.name}." } ?: "Waiting for any paired computer.")
+            HidPeripheral.State.OFF -> "Tap to turn it on."
+            else -> detail
+        }
+        val waitingFor = hid?.preferredHost()
+        statusTitle.text = when (state) {
+            HidPeripheral.State.CONNECTED -> "Connected"
+            HidPeripheral.State.ADVERTISING -> if (waitingFor != null) "Waiting" else "Ready to pair"
+            HidPeripheral.State.STARTING -> "Starting"
+            HidPeripheral.State.OFF -> "Bluetooth off"
+            HidPeripheral.State.UNAVAILABLE -> "Unavailable"
         }
         statusText.text = when (state) {
-            HidPeripheral.State.ADVERTISING -> if (hid?.preferredHost() != null) detail else "Ready to pair"
             HidPeripheral.State.CONNECTED -> detail.removePrefix("Connected to ")
+            HidPeripheral.State.ADVERTISING -> waitingFor?.name ?: "Tap for steps"
+            HidPeripheral.State.OFF -> "Tap to turn on"
             else -> detail
         }
         switchButton.visibility = if ((hid?.knownHosts()?.size ?: 0) >= 2) View.VISIBLE else View.GONE
+        showLocks()
         if (state == HidPeripheral.State.CONNECTED) hid?.currentHost()?.let { onComputerConnected(it.address) }
         if (state != HidPeripheral.State.CONNECTED && toggledOn.isNotEmpty()) {
             toggledOn.clear() // the computer's state is unknown after a reconnect
             renderPage()
         }
+    }
+
+    /** The status's Caps / Num lights (lit while on) and the lock keys on screen. */
+    private fun showLocks() {
+        for ((badge, key, accent) in listOf(Triple(capsBadge, "capslock", AMBER), Triple(numBadge, "numlock", BLUE))) {
+            val on = connected && hid?.lockOn(HidKeys.keys.getValue(key)) == true
+            badge.setTextColor(if (on) TEXT else FAINT)
+            badge.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                ui.roundRect(if (on) accent else RAISED, ui.dp(4).toFloat()).apply { setSize(ui.dp(8), ui.dp(8)) },
+                null, null, null)
+            badge.contentDescription = "${badge.text} Lock ${if (on) "on" else "off"}"
+        }
+        refreshLockKeys()
     }
 
     /** Shows the pages chosen for [address], opening its start page when a different computer connects. */
@@ -943,6 +1095,26 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             }
             else -> dialogs.computers()
         }
+    }
+
+    // ---------------------------------------------------------------- screen protection
+
+    private lateinit var screen: View
+
+    /** Moves the whole screen a couple of pixels every few minutes, so OLED pixels don't keep one image. */
+    private val shiftScreen = object : Runnable {
+        override fun run() {
+            val reach = ui.dp(2)
+            screen.translationX = (-reach..reach).random().toFloat()
+            screen.translationY = (-reach..reach).random().toFloat()
+            handler.postDelayed(this, SHIFT_EVERY_MS)
+        }
+    }
+
+    override fun screenShiftChanged() {
+        handler.removeCallbacks(shiftScreen)
+        if (settings.screenShift) handler.postDelayed(shiftScreen, SHIFT_EVERY_MS)
+        else { screen.translationX = 0f; screen.translationY = 0f }
     }
 
     override fun profilesChanged() {
@@ -1096,14 +1268,27 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         private const val REQUEST_EXPORT = 2
         private const val REQUEST_IMPORT = 3
         private const val TRACKPAD_KEYS = 5
-        private const val SIDEBAR_WIDTH_DP = 128
+        private const val SIDEBAR_WIDTH_DP = 140
+        /** Space between two dock keys. */
+        private const val DOCK_GAP_DP = 6
         /** Texts at least this long show the "tap to stop" banner. */
         private const val LONG_TEXT = 60
         private const val LONG_PRESS_MS = 450L
 
+        private const val SHIFT_EVERY_MS = 3 * 60_000L
+
+        /**
+         * Opens the macropad from the background (boot, charger). Android 10+ only allows that with
+         * "Display over other apps"; without it, a notification offers to open it.
+         */
         fun bringToFront(context: Context) {
-            context.startActivity(Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+            val intent = Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            if (DeviceQuirks.needsOverlayToOpenFromBackground && !android.provider.Settings.canDrawOverlays(context)) {
+                MacropadService.offerToOpen(context, intent)
+            } else {
+                context.startActivity(intent)
+            }
         }
     }
 }

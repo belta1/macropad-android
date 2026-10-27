@@ -19,8 +19,8 @@ android {
         applicationId = "dev.belta.macropad"
         minSdk = 28
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.4.0"
+        versionCode = 7
+        versionName = "1.6.0"
     }
 
     buildFeatures {

@@ -25,7 +25,7 @@ output report) and a consumer-control report (ID 2), Battery service and Device 
 |---|---|---|
 | Pairing fails after ~1 s; Windows shows a code but nothing on the tablet | Fire OS puts the numeric-comparison prompt in a notification when another app is in front; the PC times out | The app shows the code itself and pulls down the notification shade so **Pair** is visible |
 | Windows disconnects ~3 s after pairing | Right after bonding, Fire OS scans the PC's audio profiles and starts connecting A2DP/Hands-Free to it as if it were headphones | On connect, the app sets `bluetooth_a2dp_sink_priority_<addr>` and `bluetooth_headset_priority_<addr>` to 0 (needs `WRITE_SECURE_SETTINGS`) and disconnects those profiles |
-| After a disconnect, Windows never reconnects (until the app restarts) | Windows only re-recognises the keyboard when the GATT server and advertising start fresh | After every disconnect the app closes and rebuilds the GATT server and advertising |
+| After a disconnect (out of range, PC asleep, tablet Bluetooth off) Windows still lists the keyboard but never uses it again; only removing and re-adding it helps (1.0–1.5) | Rebuilding the GATT server after each disconnect made the tablet report "services changed"; Windows rediscovered them, came away without the keyboard service (its device then shows only the `1800` / `1801` services) and stopped using the keyboard | Since 1.6 the app keeps one GATT server for as long as it runs and only advertises again after a disconnect. Windows reconnects by itself within seconds, after app updates and Bluetooth restarts too. A keyboard paired while 1.5 or older was running must be removed and paired once more |
 | Bond silently deleted; link dies ~15 s later | Windows also tried Classic pairing (the tablet's Classic side has the same name); Fire OS answers "already bonded (removing)" and wipes the LE keys | While running, the app makes Classic Bluetooth non-connectable (`setScanMode(SCAN_MODE_NONE)`, needs `WRITE_SECURE_SETTINGS`); restored when the app stops |
 | Keys work, then the link drops every ~15 s ("L2CAP connection rejected") | The tablet has the PC cached as a *dual-mode* device and keeps opening Classic channels to it; the PC refuses, and Fire OS tears down every link to that PC | ⚙ → **Diagnostics… → Reset pairing**: unbonds the computers and restarts Bluetooth to clear the cache; then re-pair on the computer |
 | Windows doesn't re-enable notifications on reconnect | Bonded hosts expect CCCD values to persist | CCCD values are stored per host and survive reconnects |
@@ -50,6 +50,18 @@ It also has **Restart Bluetooth** and **Reset pairing** buttons.
 The Bluetooth keyboard runs in a foreground service (notification "Macropad"); updating the app
 restarts it and the computer reconnects by itself. When the HID report map changes (1.1 added the
 mouse), Windows keeps using its cached copy until the device is removed and re-added.
+
+## Bluetooth event log
+
+The diagnostics events are also written to a file that survives restarts (on Fire OS, logcat is
+overwritten within minutes):
+
+```bash
+adb pull /sdcard/Android/data/dev.belta.macropad/files/bluetooth-events.log
+```
+
+[tools/ble_scan.py](../tools/ble_scan.py) shows, from the computer, the address the tablet
+advertises with (`pip install bleak`, then `python tools/ble_scan.py --watch`).
 
 ## Clean re-pair procedure
 

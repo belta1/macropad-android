@@ -87,16 +87,48 @@ object DefaultLayout {
     /** Opens an app through the Windows Run box (Win+R), so it works for anything on the PATH. */
     private fun run(command: String) = "win+r\ndelay:400\ntext:$command\\n"
 
-    /** Media keys (shown as icons only) plus virtual-desktop navigation, below every page. */
-    fun dock() = Page("Media", (MEDIA_DOCK + DESKTOP_DOCK).toMutableList())
+    /** Media keys (shown as icons only) plus virtual-desktop navigation, below every page; one slot free. */
+    fun dock() = Page("Media", (MEDIA_DOCK + DESKTOP_DOCK).toMutableList<MacroButton?>()
+        .apply { while (size < Layout.DOCK_SIZE) add(null) })
 
     private val MEDIA_DOCK get() = listOf(
         b("Previous", "media:prev", GRAY, "prev"),
         b("Play / Pause", "media:playpause", BLUE, "play_pause"),
         b("Next", "media:next", GRAY, "next"),
-        b("Volume −", "media:voldown", GRAY, "volume_down"),
-        b("Volume +", "media:volup", GRAY, "volume_up"),
-    )
+    ) + VOLUME_DOCK
+
+    /** 1.5: a volume slider in place of the Volume − / Volume + keys; tapping its icon mutes (1.6). */
+    private val VOLUME_DOCK get() = listOf(VOLUME_SLIDER)
+
+    private val VOLUME_SLIDER get() = b("Volume", "slide:volume", GRAY, "volume_up")
+
+    /** The Mute key 1.5 put next to the volume slider. */
+    private val DOCK_MUTE get() = b("Mute", "media:mute", GRAY, "volume_off")
+
+    /**
+     * Swaps a dock's untouched Volume − / Volume + keys for the volume slider (in the first of the
+     * two slots; the second is freed). Returns whether anything changed.
+     */
+    fun upgradeVolumeDock(dock: Page): Boolean {
+        val down = dock.buttons.indexOfFirst { it?.action == "media:voldown" }
+        val up = dock.buttons.indexOfFirst { it?.action == "media:volup" }
+        if (down < 0 || up < 0) return false
+        dock.buttons[minOf(down, up)] = VOLUME_SLIDER
+        dock.buttons[maxOf(down, up)] = null
+        return true
+    }
+
+    /**
+     * 1.6: the volume slider's icon mutes, so the dock's Mute key from 1.5 goes, if it is still as
+     * 1.5 made it and a volume slider is in the dock. Returns whether anything changed.
+     */
+    fun dropDockMute(dock: Page): Boolean {
+        if (dock.buttons.none { it?.action?.trim()?.lowercase() == "slide:volume" }) return false
+        val at = dock.buttons.indexOfFirst { it == DOCK_MUTE }
+        if (at < 0) return false
+        dock.buttons[at] = null
+        return true
+    }
 
     /** Added to existing docks once by [MacroStore] (1.3). */
     val DESKTOP_DOCK get() = listOf(

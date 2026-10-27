@@ -8,7 +8,7 @@ all support it natively. Everything runs on the tablet.
 Built and tested on an **Amazon Fire HD 8 (8th gen, KFKAWI, Fire OS 7.3 / Android 9)** paired with
 Windows laptops/desktops.
 
-![Keys are dark, accent-tinted tiles with an icon, label and shortcut hint](docs/screenshot.png)
+![Keys are graphite keycaps with a colored icon, a label and the shortcut printed on them](docs/screenshot.png)
 
 ## Features
 
@@ -21,10 +21,12 @@ Windows laptops/desktops.
 - **Sidebar** on every page: status, Record, Edit, Settings, ⇄, and action keys (Away, Lock PC, Work
   Citrix — a login filled in from encrypted **saved values**, see ⚙ → Saved values).
 - **App icons on the tabs** (long-press a tab to rename it or change its icon).
-- **Dock** on every page: media keys as icons (Previous · Play/Pause · Next · Volume − · Volume +)
+- **Dock** on every page: media keys as icons (Previous · Play/Pause · Next), a volume slider and Mute,
   and virtual-desktop switching (Prev desktop · Task view · Next desktop).
 - **Trackpad page**: pointer with acceleration, tap / two-finger tap to click / right-click,
   two-finger or edge-strip scrolling, long-press to drag, plus editable click/scroll keys.
+- **Sliders**: drag a key instead of tapping it for PC volume, scrolling, zoom, brightness,
+  switching tabs or undo/redo, one step per tick (`slide:volume`, or any pair of keys).
 - **Toggle keys** (Teams mute, camera, hand, blur) show their ON/OFF state; any key can also have a
   **long-press action** (e.g. tap = toggle mute, hold = push to talk).
 - **Text variables** in typed text: `{date}`, `{time}`, custom date formats and `{clipboard}`.
@@ -53,13 +55,15 @@ Windows laptops/desktops.
 
 | | |
 |---|---|
-| Tablet | Android 9 (API 28) or newer with BLE **peripheral/advertising** support |
+| Tablet | Android 9 (API 28) or newer with BLE **peripheral/advertising** support, or the Classic HID Device profile (Samsung). Tested: Fire HD 8 (8th gen); Galaxy Tab S5e set-up in [docs/devices.md](docs/devices.md) |
 | Build machine | JDK 17, Android SDK (platform 34, build-tools 34). Gradle comes via the wrapper. |
 | Computer | Any OS with Bluetooth LE |
 
 > Many tablets — including Fire tablets — ship with the *Classic* Bluetooth HID-device profile
 > disabled (`profile_supported_hid_device=false`), which is why this app implements BLE HID over
-> GATT itself instead of using Android's `BluetoothHidDevice` API.
+> GATT itself. Where the profile exists (Samsung), ⚙ → Connection → Bluetooth: *Automatic* uses
+> Android's `BluetoothHidDevice` instead, and the tablet reconnects to the computer by itself.
+> See [docs/devices.md](docs/devices.md) for what differs between tablets.
 
 ## Install
 
@@ -102,7 +106,7 @@ Use a charger of at least 2 A — with the screen always on, a weak USB port can
 
 ## Pair with a computer
 
-1. Open **Macropad** on the tablet; the status chip shows **Ready to pair**.
+1. Open **Macropad** on the tablet; the status at the top of the sidebar shows **Ready to pair**.
 2. On the computer, add a Bluetooth device and choose **Fire Macropad**
    (Windows: *Settings → Bluetooth & devices → Add device → Bluetooth*).
 3. **Confirm the 6-digit code on both screens.** The tablet shows the code and opens its
@@ -110,7 +114,8 @@ Use a charger of at least 2 A — with the screen always on, a weak USB port can
 4. Windows connects, disconnects and reconnects within a few seconds (normal for BLE keyboards).
    The chip turns **green** with the computer's name.
 
-The computer reconnects automatically while the macropad runs. One computer is connected at a time:
+The computer reconnects automatically while the macropad runs, also after the tablet was out of
+range, the computer slept, the app was updated or the tablet's Bluetooth restarted. One computer is connected at a time:
 tap **⇄** to hand the macropad to the other one, or pick in ⚙ → **Computers…**, where each computer
 can also be renamed and given its own layout, key timing, pages and start page. **Avoid opening Bluetooth settings on the tablet** — its scan
 re-learns the PC as a Classic device. If connections drop, open ⚙ → **Diagnostics…**, and if needed
@@ -126,7 +131,7 @@ See [docs/bluetooth-troubleshooting.md](docs/bluetooth-troubleshooting.md).
 |---|---|
 | Tabs | Switch page. Long-press a tab to rename it. |
 | ⇄ | Switch to the other computer (shown once two are paired). |
-| Status chip | Connection state; tap for details, switching computer and diagnostics. |
+| Status | Connection state, plus the computer's Caps and Num Lock (lit while on); tap for details, switching computer and diagnostics. |
 | ● / ■ | Start / stop recording a macro. |
 | ✏️ / ✓ | Edit mode: tap a key to edit, tap an empty slot to add one. |
 | ⚙ | Settings (below). |
@@ -159,8 +164,8 @@ app/src/main/java/dev/belta/macropad/
   hid/                 HidPeripheral (GATT server, advertising, sending, Fire OS workarounds),
                        HidReports (report descriptor + builders), HidKeys, KeyboardLayout
   model/               Macro (parser), Layout + LayoutJson, DefaultLayout, MacroStore, AppSettings
-  ui/                  KeyViews, KeyEditor, Recorder, TrackpadView, Dialogs, MenuDialog (menu rows),
-                       Ui (theme), Icons, AppIcons
+  ui/                  KeyViews, KeyCap (keycap drawing), KeyEditor, Recorder, TrackpadView, SliderView,
+                       Dialogs, MenuDialog (menu rows), Ui (theme), Icons, AppIcons
 app/src/test/          Unit tests (macro parser, keyboard layouts, HID reports, layout JSON)
 tools/gen_icons.py     Regenerates res/drawable/ic_k_*.xml and ui/Icons.kt
 ```
@@ -191,5 +196,5 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
 
 ## Credits and licenses
 
-- [Inter](https://rsms.me/inter/) font — SIL Open Font License 1.1 ([licenses/Inter-OFL.txt](licenses/Inter-OFL.txt)).
+- [Barlow](https://github.com/jpt/barlow) and Barlow Semi Condensed fonts — SIL Open Font License 1.1 ([licenses/Barlow-OFL.txt](licenses/Barlow-OFL.txt)).
 - Most key icons use path data from Google's [Material Icons](https://fonts.google.com/icons) — Apache License 2.0.

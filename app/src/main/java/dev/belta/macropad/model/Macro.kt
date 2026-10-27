@@ -14,6 +14,7 @@ import dev.belta.macropad.hid.KeyboardLayout
  *   scroll:3            mouse wheel; positive = up, negative = down
  *   page:next           switches the tablet's page (next, prev or a page name); not sent
  *   tablet:dim          dims the tablet to its idle clock; not sent
+ *   slide:volume        makes the key a slider (a preset, or "up step | down step [| tap step]"); must be the only step
  *
  * Text may contain {date}, {time}, {date:<pattern>} and {clipboard}, filled in when the key runs
  * ([TextVariables]).
@@ -32,6 +33,11 @@ sealed class Step {
     data class Page(val target: String) : Step()
     /** Handled on the tablet: "dim". */
     data class Tablet(val command: String) : Step()
+    /**
+     * A slider key: each tick of drag sends [up] (up / right) or [down]. Tapping its icon sends
+     * [tap], if any (Mute for the volume slider). [preset] is its name, if any.
+     */
+    data class Slide(val up: Step, val down: Step, val preset: String?, val tap: Step? = null) : Step()
 }
 
 class MacroException(message: String) : Exception(message)
@@ -70,12 +76,17 @@ object Macro {
                         ?: throw MacroException("Bad scroll amount '$line'")
                     Step.Scroll(amount.coerceIn(-50, 50))
                 }
+                lower.startsWith("slide:") -> parseSlide(line.substring(6).trim())
                 else -> parseCombo(lower)
             }
         }
         if (steps.isEmpty()) throw MacroException("Macro is empty")
+        if (steps.size > 1 && steps.any { it is Step.Slide }) throw MacroException("A slider must be the key's only step")
         return steps
     }
+
+    /** The key's slider, or null when [action] isn't a (valid) slider. */
+    fun slider(action: String) = runCatching { parse(action) }.getOrNull()?.singleOrNull() as? Step.Slide
 
     /** True when the macro should behave like a physical key (down on touch, up on release). */
     fun isHoldable(steps: List<Step>) =
@@ -110,6 +121,11 @@ object Macro {
             lower.startsWith("media:") -> "Media key"
             lower.startsWith("click:") -> lower.substring(6).trim().replaceFirstChar { it.uppercase() } + " click"
             lower.startsWith("scroll:") -> "Scroll " + lower.substring(7).trim()
+            lower.startsWith("slide:") -> {
+                val spec = line.substring(6).trim()
+                "Slider · " + if (spec.lowercase() in SLIDE_PRESETS) spec.lowercase().replaceFirstChar { it.uppercase() }
+                else spec.split('|').take(2).joinToString(" / ") { describe(it.trim()) }
+            }
             lower.startsWith("page:") -> when (val target = line.substring(5).trim()) {
                 "next" -> "Next page"
                 "prev" -> "Previous page"
@@ -120,6 +136,42 @@ object Macro {
     }
 
     private val TABLET_COMMANDS = listOf("dim")
+
+    /** Slider presets: name to (up step, down step, tap step or null). */
+    val SLIDE_PRESETS = linkedMapOf(
+        "volume" to Triple("media:volup", "media:voldown", "media:mute"),
+        "scroll" to Triple("scroll:1", "scroll:-1", null),
+        "zoom" to Triple("ctrl+equal", "ctrl+minus", "ctrl+0"),
+        "brightness" to Triple("media:brightup", "media:brightdown", null),
+        "tabs" to Triple("ctrl+tab", "ctrl+shift+tab", null),
+        "undo" to Triple("ctrl+y", "ctrl+z", null),
+    )
+
+    /** A preset name, or "up step | down step [| tap step]" (each one combo, media key or scroll; tap may be a click). */
+    private fun parseSlide(spec: String): Step.Slide {
+        val name = spec.lowercase()
+        SLIDE_PRESETS[name]?.let { (up, down, tap) ->
+            return Step.Slide(slideStep(up), slideStep(down), name, tap?.let { slideStep(it, tap = true) })
+        }
+        val sides = spec.split('|')
+        if (sides.size !in 2..3) {
+            throw MacroException("Unknown slider '$spec' (use ${SLIDE_PRESETS.keys.joinToString()} or up | down [| tap])")
+        }
+        return Step.Slide(slideStep(sides[0]), slideStep(sides[1]), null, sides.getOrNull(2)?.let { slideStep(it, tap = true) })
+    }
+
+    private fun slideStep(spec: String, tap: Boolean = false): Step {
+        if (spec.isBlank()) {
+            throw MacroException(if (tap) "The slider's tap step is empty: up | down | tap" else "A slider needs an up and a down step: up | down")
+        }
+        val step = parse(spec.trim()).single()
+        val allowed = step is Step.Combo || step is Step.Media || step is Step.Scroll || (tap && step is Step.Click)
+        if (!allowed) {
+            throw MacroException(if (tap) "A slider's tap step must be a key combo, media key, scroll or click"
+                else "Slider steps must be key combos, media keys or scroll")
+        }
+        return step
+    }
 
     private val FOCUS_APP = Regex("""(win|super|gui|meta)\+[0-9]""")
 

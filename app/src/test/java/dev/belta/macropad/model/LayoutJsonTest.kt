@@ -30,6 +30,39 @@ class LayoutJsonTest {
     }
 
     @Test
+    fun `dock volume keys become a slider`() {
+        val dock = Page("Media", mutableListOf(
+            MacroButton("Play", "media:playpause", 1, null),
+            MacroButton("Vol -", "media:voldown", 1, null),
+            MacroButton("Vol +", "media:volup", 1, null),
+            MacroButton("Task view", "win+tab", 1, null),
+        ))
+        assertTrue(DefaultLayout.upgradeVolumeDock(dock))
+        assertEquals(listOf("media:playpause", "slide:volume", null, "win+tab"), dock.buttons.map { it?.action })
+        assertEquals(false, DefaultLayout.upgradeVolumeDock(dock)) // nothing left to change
+        // New docks already have the slider (its icon mutes), in the same 8 slots.
+        val fresh = DefaultLayout.dock()
+        assertEquals(Layout.DOCK_SIZE, fresh.buttons.size)
+        assertEquals(false, DefaultLayout.upgradeVolumeDock(fresh))
+        assertTrue(fresh.buttons.any { it?.action == "slide:volume" } && fresh.buttons.none { it?.action == "media:mute" })
+    }
+
+    @Test
+    fun `the dock's 1_5 mute key goes once the slider mutes`() {
+        val slider = MacroButton("Volume", "slide:volume", 1, "volume_up")
+        val mute = MacroButton("Mute", "media:mute", Palette.colors[7], "volume_off")
+        val dock = Page("Media", mutableListOf(slider, mute))
+        assertTrue(DefaultLayout.dropDockMute(dock))
+        assertEquals(listOf("slide:volume", null), dock.buttons.map { it?.action })
+        assertEquals(false, DefaultLayout.dropDockMute(dock))
+        // A Mute key the user changed stays, and so does any Mute without a volume slider.
+        val edited = Page("Media", mutableListOf(slider, mute.copy(label = "Silence")))
+        assertEquals(false, DefaultLayout.dropDockMute(edited))
+        val noSlider = Page("Media", mutableListOf<MacroButton?>(mute))
+        assertEquals(false, DefaultLayout.dropDockMute(noSlider))
+    }
+
+    @Test
     fun `reads files without optional fields`() {
         val json = JSONObject("""{"rows":2,"cols":3,"pages":[{"name":"P","buttons":[{"label":"L","action":"f1","color":5}]}]}""")
         val layout = LayoutJson.fromJson(json)
@@ -39,11 +72,12 @@ class LayoutJsonTest {
     }
 
     @Test
-    fun `default dock fills every dock slot, desktop keys last`() {
+    fun `default dock has every dock slot, desktop keys last, then one free slot`() {
         val dock = DefaultLayout.dock().buttons
         assertEquals(Layout.DOCK_SIZE, dock.size)
+        assertNull(dock.last()) // the slider's icon took over Mute; the slot is free for a key
         assertEquals(DefaultLayout.DESKTOP_DOCK.map { it.action },
-            dock.takeLast(DefaultLayout.DESKTOP_DOCK.size).map { it!!.action })
+            dock.dropLast(1).takeLast(DefaultLayout.DESKTOP_DOCK.size).map { it!!.action })
     }
 
     @Test(expected = IllegalArgumentException::class)

@@ -10,21 +10,20 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.AbsListView
 import android.widget.BaseAdapter
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ListAdapter
 import android.widget.TextView
 import dev.belta.macropad.R
-import dev.belta.macropad.ui.Ui.Companion.BLUE
+import dev.belta.macropad.ui.Ui.Companion.FAINT
 import dev.belta.macropad.ui.Ui.Companion.MUTED
+import dev.belta.macropad.ui.Ui.Companion.RAISED
 import dev.belta.macropad.ui.Ui.Companion.RED
 import dev.belta.macropad.ui.Ui.Companion.TEXT
 import dev.belta.macropad.ui.Ui.Companion.lighten
-import dev.belta.macropad.ui.Ui.Companion.withAlpha
 
 /**
  * The app's dialog builder. Plain item lists and single-choice lists are drawn as menu rows: an icon
- * (when every row has one), the title, its current value as a pill ("Grid size (3 × 5)",
+ * (when every row has one), the title, its current value on the right ("Grid size (3 × 5)",
  * "Sidebar: left", "laptop  ·  connected"), a chevron for entries that open another menu ("…"), and
  * a check on the chosen option. Callers keep using the standard [AlertDialog.Builder] calls.
  */
@@ -63,15 +62,16 @@ class MenuDialogBuilder(private val ui: Ui) : AlertDialog.Builder(ui.context, R.
                 setPadding(ui.dp(24), ui.dp(22), ui.dp(24), ui.dp(8))
                 title?.let { addView(TextView(context).apply {
                     text = it
-                    typeface = ui.fontBold
+                    typeface = ui.fontTitle
                     setTextColor(TEXT)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
                 }) }
                 addView(TextView(context).apply {
                     text = note
-                    typeface = ui.fontMedium
+                    typeface = ui.fontBody
                     setTextColor(MUTED)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                    setLineSpacing(0f, 1.2f)
                     setPadding(0, ui.dp(6), 0, 0)
                 })
             })
@@ -114,46 +114,42 @@ private class MenuAdapter(private val ui: Ui, labels: List<String>, var checked:
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
         val row = rows[position]
         val selected = position == checked
-        val tint = if (row.danger) lighten(RED, 0.25f) else lighten(BLUE, 0.3f)
+        val danger = lighten(RED, 0.25f)
         return FullWidthRow(ui.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             minimumHeight = ui.dp(52)
-            setPadding(ui.dp(14), ui.dp(6), ui.dp(12), ui.dp(6))
-            background = ui.pressable(if (selected) withAlpha(BLUE, 0.14f) else Color.TRANSPARENT, ui.dp(14).toFloat())
+            setPadding(ui.dp(16), ui.dp(6), ui.dp(14), ui.dp(6))
+            background = ui.pressable(if (selected) RAISED else Color.TRANSPARENT, ui.dp(12).toFloat())
             row.icon?.let { icon ->
-                addView(FrameLayout(context).apply {
-                    background = ui.roundRect(withAlpha(if (row.danger) RED else BLUE, 0.16f), ui.dp(10).toFloat())
-                    addView(ui.icon(icon, tint), FrameLayout.LayoutParams(ui.dp(18), ui.dp(18), Gravity.CENTER))
-                }, LinearLayout.LayoutParams(ui.dp(34), ui.dp(34)).apply { marginEnd = ui.dp(14) })
+                addView(ui.icon(icon, if (row.danger) danger else MUTED),
+                    LinearLayout.LayoutParams(ui.dp(22), ui.dp(22)).apply { marginEnd = ui.dp(16) })
             }
             addView(TextView(context).apply {
                 text = row.title
-                typeface = if (selected) ui.fontSemiBold else ui.fontMedium
-                setTextColor(if (row.danger) tint else TEXT)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                typeface = if (selected) ui.fontLabel else ui.fontBody
+                setTextColor(if (row.danger) danger else TEXT)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             row.value?.let { value ->
                 addView(TextView(context).apply {
                     text = value
-                    typeface = ui.fontMedium
+                    typeface = ui.fontBody
                     setTextColor(MUTED)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                     maxLines = 1
                     maxWidth = ui.dp(300)
                     ellipsize = TextUtils.TruncateAt.END
-                    setPadding(ui.dp(10), ui.dp(4), ui.dp(10), ui.dp(4))
-                    background = ui.roundRect(withAlpha(Color.WHITE, 0.06f), ui.dp(10).toFloat())
                 }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    marginStart = ui.dp(12)
+                    marginStart = ui.dp(16)
                 })
             }
             when {
-                selected -> addView(ui.icon("check", lighten(BLUE, 0.3f)),
-                    LinearLayout.LayoutParams(ui.dp(20), ui.dp(20)).apply { marginStart = ui.dp(10) })
-                row.submenu -> addView(ui.icon("chevron_right", MUTED),
-                    LinearLayout.LayoutParams(ui.dp(18), ui.dp(18)).apply { marginStart = ui.dp(8) })
+                selected -> addView(ui.icon("check", TEXT),
+                    LinearLayout.LayoutParams(ui.dp(20), ui.dp(20)).apply { marginStart = ui.dp(12) })
+                row.submenu -> addView(ui.icon("chevron_right", FAINT),
+                    LinearLayout.LayoutParams(ui.dp(20), ui.dp(20)).apply { marginStart = ui.dp(8) })
             }
         }
     }

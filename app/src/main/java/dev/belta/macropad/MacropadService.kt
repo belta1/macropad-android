@@ -45,6 +45,8 @@ class MacropadService : Service() {
         profiles = ComputerProfiles(this)
         hid = HidPeripheral(applicationContext)
         hid.customName = { profiles[it].name }
+        hid.deviceName = settings.bluetoothName
+        hid.transportSetting = settings.transport
         applySettings()
         hid.listener = HidPeripheral.Listener { state, detail ->
             if (state == HidPeripheral.State.CONNECTED) applySettings()
@@ -74,7 +76,7 @@ class MacropadService : Service() {
         unregisterReceiver(bluetoothReceiver)
         unregisterReceiver(powerReceiver)
         hid.listener = null
-        hid.stop()
+        hid.shutdown()
         super.onDestroy()
     }
 
@@ -92,6 +94,14 @@ class MacropadService : Service() {
         val profile = hid.currentHost()?.let { profiles[it.address] }
         hid.keyboardLayout = profile?.keyboardLayout ?: settings.keyboardLayout
         hid.keyTiming = profile?.keyTiming ?: settings.keyTiming
+    }
+
+    /** The Bluetooth name or transport changed in settings: restart the keyboard with them. */
+    fun applyConnectionSettings() {
+        if (hid.deviceName == settings.bluetoothName && hid.transportSetting == settings.transport) return
+        hid.deviceName = settings.bluetoothName
+        hid.transportSetting = settings.transport
+        hid.restart()
     }
 
     private val bluetoothReceiver = object : BroadcastReceiver() {
@@ -162,6 +172,29 @@ class MacropadService : Service() {
             listOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE).all {
                 context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
             }
+
+        private const val OPEN_CHANNEL = "open"
+        private const val OPEN_NOTIFICATION_ID = 2
+
+        /** "Tap to open the macropad", for when Android won't let it open by itself. */
+        fun offerToOpen(context: Context, intent: Intent) {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                manager.createNotificationChannel(NotificationChannel(OPEN_CHANNEL, "Open the macropad", NotificationManager.IMPORTANCE_HIGH))
+            }
+            val open = PendingIntent.getActivity(context, 2, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            @Suppress("DEPRECATION")
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, OPEN_CHANNEL)
+            else Notification.Builder(context)
+            manager.notify(OPEN_NOTIFICATION_ID, builder
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("Macropad")
+                .setContentText("Tap to open the macropad")
+                .setContentIntent(open)
+                .setFullScreenIntent(open, true)
+                .setAutoCancel(true)
+                .build())
+        }
 
         fun start(context: Context) {
             val intent = Intent(context, MacropadService::class.java)

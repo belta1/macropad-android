@@ -2,8 +2,11 @@ package dev.belta.macropad.ui
 
 import android.annotation.SuppressLint
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Shader
 import android.os.Handler
 import android.os.Looper
 import android.view.HapticFeedbackConstants
@@ -11,10 +14,11 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import dev.belta.macropad.hid.HidKeys
+import dev.belta.macropad.ui.Ui.Companion.CAP_SKIRT
 import dev.belta.macropad.ui.Ui.Companion.MUTED
-import dev.belta.macropad.ui.Ui.Companion.STROKE_STRONG
-import dev.belta.macropad.ui.Ui.Companion.SURFACE
-import dev.belta.macropad.ui.Ui.Companion.SURFACE_HI
+import dev.belta.macropad.ui.Ui.Companion.HAIRLINE
+import dev.belta.macropad.ui.Ui.Companion.PLATE
+import dev.belta.macropad.ui.Ui.Companion.TEXT
 import dev.belta.macropad.ui.Ui.Companion.withAlpha
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -53,41 +57,62 @@ class TrackpadView(private val ui: Ui, private val listener: Listener) : View(ui
     private var scrollAcc = 0f
     private var panAcc = 0f
 
-    private val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SURFACE }
-    private val stripPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SURFACE_HI }
+    // A well cut into the case: darker than the plate around it, with a shaded top lip. The scroll
+    // strip is ridged like a mouse wheel.
+    private val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = PLATE }
+    private val lip = Paint(Paint.ANTI_ALIAS_FLAG)
     private val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = ui.dp(1).toFloat()
-        color = STROKE_STRONG
+        color = HAIRLINE
+    }
+    private val ridge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeWidth = ui.dp(2).toFloat()
+        strokeCap = Paint.Cap.ROUND
+        color = CAP_SKIRT
     }
     private val hint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = MUTED
         textAlign = Paint.Align.CENTER
-        textSize = ui.dp(15).toFloat()
-        typeface = ui.fontMedium
+        textSize = ui.dp(14).toFloat()
+        typeface = ui.fontHint
     }
-    private val active = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(Ui.BLUE, 0.12f) }
+    private val dragHint = Paint(hint).apply {
+        color = TEXT
+        textSize = ui.dp(17).toFloat()
+        typeface = ui.fontLabel
+    }
+    private val active = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(TEXT, 0.05f) }
     private val rect = RectF()
 
     override fun onDraw(canvas: Canvas) {
-        val r = ui.dp(22).toFloat()
+        val r = ui.dp(14).toFloat()
         rect.set(0f, 0f, width.toFloat(), height.toFloat())
-        canvas.drawRoundRect(rect, r, r, if (dragging) active else bg)
+        canvas.drawRoundRect(rect, r, r, bg)
+        if (dragging) canvas.drawRoundRect(rect, r, r, active)
+        lip.shader = LinearGradient(0f, 0f, 0f, ui.dp(10).toFloat(), withAlpha(Color.BLACK, 0.45f),
+            withAlpha(Color.BLACK, 0f), Shader.TileMode.CLAMP)
+        canvas.drawRoundRect(rect, r, r, lip)
         canvas.drawRoundRect(rect, r, r, border)
-        rect.set(width - stripWidth, ui.dp(8).toFloat(), width - ui.dp(8).toFloat(), height - ui.dp(8).toFloat())
-        canvas.drawRoundRect(rect, r, r, stripPaint)
+
+        // Scroll strip: a column of ridges, closer together than the scroll step so they read as grip.
+        val sx0 = width - stripWidth + ui.dp(18)
+        val sx1 = width - ui.dp(18).toFloat()
+        canvas.drawLine(width - stripWidth, ui.dp(14).toFloat(), width - stripWidth, height - ui.dp(14).toFloat(), border)
+        var y = ui.dp(22).toFloat()
+        while (y < height - ui.dp(20)) {
+            canvas.drawLine(sx0, y, sx1, y, ridge)
+            y += ui.dp(9)
+        }
 
         val cx = (width - stripWidth) / 2
-        val cy = height / 2f
-        canvas.drawText(if (dragging) "Dragging — lift to drop" else "Trackpad", cx, cy - ui.dp(14), hint)
-        hint.textSize = ui.dp(12).toFloat()
-        canvas.drawText("tap = click · two-finger tap = right click", cx, cy + ui.dp(10), hint)
-        canvas.drawText("two fingers = scroll · long-press = drag", cx, cy + ui.dp(28), hint)
-        val sx = width - stripWidth / 2 - ui.dp(4)
-        canvas.drawText("▲", sx, ui.dp(32).toFloat(), hint)
-        canvas.drawText("scroll", sx, cy + ui.dp(4), hint)
-        canvas.drawText("▼", sx, height - ui.dp(22).toFloat(), hint)
-        hint.textSize = ui.dp(15).toFloat()
+        if (dragging) {
+            canvas.drawText("Dragging. Lift to drop.", cx, height / 2f, dragHint)
+        } else {
+            val base = height - ui.dp(36).toFloat()
+            canvas.drawText("Tap to click, two-finger tap to right-click", cx, base, hint)
+            canvas.drawText("Two fingers or the strip to scroll, long-press to drag", cx, base + ui.dp(20), hint)
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")

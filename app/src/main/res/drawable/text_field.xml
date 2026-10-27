@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Filled, rounded text field; the outline turns accent while typing. -->
+<!-- Text field: recessed into the dialog like the plate under the keys; outlined while typing. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="#FF222735" />
-            <corners android:radius="14dp" />
-            <stroke android:width="2dp" android:color="#FF4F8CFF" />
+            <solid android:color="#FF18191B" />
+            <corners android:radius="10dp" />
+            <stroke android:width="2dp" android:color="#FFEDEAE3" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#FF20242E" />
-            <corners android:radius="14dp" />
-            <stroke android:width="1dp" android:color="#14FFFFFF" />
+            <solid android:color="#FF18191B" />
+            <corners android:radius="10dp" />
+            <stroke android:width="1dp" android:color="#2BFFFFFF" />
         </shape>
     </item>
 </selector>

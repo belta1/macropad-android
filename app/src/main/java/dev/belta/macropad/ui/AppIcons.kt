@@ -83,7 +83,7 @@ object AppIcons {
             spec.letter?.let { letter ->
                 paint.color = Color.WHITE
                 paint.alpha = alpha
-                paint.typeface = ui.fontBold
+                paint.typeface = ui.fontTitle
                 paint.textSize = size * 0.58f
                 paint.textAlign = Paint.Align.CENTER
                 val baseline = box.centerY() - (paint.descent() + paint.ascent()) / 2

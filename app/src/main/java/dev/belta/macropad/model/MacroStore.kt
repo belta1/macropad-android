@@ -24,6 +24,8 @@ class MacroStore(private val context: Context) {
         upgradeTeamsKeys(layout)
         addDesktopDockKeys(layout)
         upgradeDesktopRow(layout)
+        upgradeVolumeDock(layout)
+        dropDockMute(layout)
         addPageIcons(layout)
         if (backupFile?.exists() == false) writeBackup(export(layout))
         return layout
@@ -46,7 +48,18 @@ class MacroStore(private val context: Context) {
     fun export(layout: Layout): String =
         LayoutJson.toJson(layout).put("computers", computers.toJson()).toString(2)
 
-    fun import(text: String): Layout = LayoutJson.fromJson(JSONObject(text))
+    /**
+     * Files from before 1.5 (format version < 3) get the dock's volume slider, and files from before
+     * 1.6 (< 4) lose its separate Mute key, like a stored layout does.
+     */
+    fun import(text: String): Layout {
+        val json = JSONObject(text)
+        return LayoutJson.fromJson(json).also {
+            val version = json.optInt("version", 1)
+            if (version < 3) DefaultLayout.upgradeVolumeDock(it.dock)
+            if (version < 4) DefaultLayout.dropDockMute(it.dock)
+        }
+    }
 
     /** Restores the per-computer settings of an export file, if it has them (version 2+). */
     fun importComputers(text: String) {
@@ -112,6 +125,22 @@ class MacroStore(private val context: Context) {
         if (changed) save(layout)
     }
 
+    /** 1.5: the dock's Volume − / Volume + keys become a volume slider and Mute. */
+    private fun upgradeVolumeDock(layout: Layout) {
+        if (prefs.getBoolean(VOLUME_DOCK_FLAG, false)) return
+        val changed = DefaultLayout.upgradeVolumeDock(layout.dock)
+        prefs.edit().putBoolean(VOLUME_DOCK_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
+    /** 1.6: the volume slider's icon mutes; the dock's separate Mute key goes. */
+    private fun dropDockMute(layout: Layout) {
+        if (prefs.getBoolean(DOCK_MUTE_FLAG, false)) return
+        val changed = DefaultLayout.dropDockMute(layout.dock)
+        prefs.edit().putBoolean(DOCK_MUTE_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
     /** Stores a tab icon for pages without one, so it survives renaming. */
     private fun addPageIcons(layout: Layout) {
         var changed = false
@@ -125,6 +154,8 @@ class MacroStore(private val context: Context) {
         const val TEAMS_UPGRADE_FLAG = "upgraded_teams_focus"
         const val DOCK_UPGRADE_FLAG = "upgraded_desktop_dock"
         const val DESKTOP_ROW_FLAG = "upgraded_desktop_row"
+        const val VOLUME_DOCK_FLAG = "upgraded_volume_dock"
+        const val DOCK_MUTE_FLAG = "upgraded_dock_mute"
         const val KEY = "layout_v3"
         const val BACKUP_NAME = "macropad-layout.json"
     }
