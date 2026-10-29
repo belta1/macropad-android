@@ -183,6 +183,11 @@ class Dialogs(private val host: MacropadHost) {
                 else startSystemScreen(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                     Uri.parse("package:${ui.context.packageName}")))
             },
+            "Follow the computer's app: ${if (settings.followPcApp) "on" else "off"}" to {
+                settings.followPcApp = !settings.followPcApp
+                ui.toast(if (settings.followPcApp) "Pages follow the app in front on the computer (PC link)"
+                    else "Pages no longer follow the computer's app")
+            },
         )
         ui.dialog()
             .setTitle("Connection")
@@ -366,6 +371,13 @@ class Dialogs(private val host: MacropadHost) {
         line("Keyboard layout", hid.keyboardLayout.label)
         line("Key timing", hid.keyTiming.label)
         line("Connection", d.transport?.label ?: "not running")
+        val pc = host.service?.pc?.status
+        line("PC link", when {
+            pc != null -> "${pc.host ?: "connected"} (Teams ${if (pc.teams != null) "✓" else "—"}, Outlook ${if (pc.hasOutlook) "✓" else "—"}" +
+                (pc.app?.let { ", in front: $it" } ?: "") + ")"
+            d.transport == HidPeripheral.Transport.CLASSIC -> "waiting for tools/macropad-link.ps1"
+            else -> "needs Classic Bluetooth"
+        }, pc?.let { true })
         line("Run in the background", if (batteryUnrestricted()) "allowed" else "may be stopped — ⚙ → Connection",
             batteryUnrestricted())
         text.append("\nRecent events\n")
@@ -605,10 +617,25 @@ class Dialogs(private val host: MacropadHost) {
         val page = host.layout.pages[index]
         ui.dialog()
             .setTitle(page.name)
-            .setItems(arrayOf("Rename", "Change icon")) { _, which ->
-                if (which == 0) renamePage(index) else pageIcon(index)
+            .setItems(arrayOf("Rename", "Change icon", "Show for apps…")) { _, which ->
+                when (which) {
+                    0 -> renamePage(index)
+                    1 -> pageIcon(index)
+                    else -> pageApps(index)
+                }
             }
             .show()
+    }
+
+    /** The computer's apps that bring this page up when they come to the front (PC link). */
+    private fun pageApps(index: Int) {
+        val page = host.layout.pages[index]
+        val front = host.service?.pc?.status?.app
+        promptText("Show \"${page.name}\" for apps", page.appNames.joinToString(", "), allowEmpty = true,
+            hint = front?.let { "e.g. $it (in front now)" } ?: "Process names, e.g. ms-teams, outlook") { apps ->
+            page.apps = apps
+            host.saveAndRender()
+        }
     }
 
     private fun pageIcon(index: Int) {

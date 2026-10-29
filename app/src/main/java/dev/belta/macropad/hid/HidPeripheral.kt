@@ -516,7 +516,8 @@ class HidPeripheral(private val context: Context) {
 
     // ---------------------------------------------------------------- diagnostics
 
-    private fun event(message: String) {
+    /** Adds [message] to the Bluetooth events (Diagnostics and bluetooth-events.log). */
+    fun event(message: String) {
         Log.i(TAG, message)
         val line = "${timeFormat.format(Date())}  $message"
         synchronized(events) {
@@ -639,7 +640,7 @@ class HidPeripheral(private val context: Context) {
                     pause(keyTiming.gapMs)
                 }
                 is Step.Scroll -> sendMouse(0, 0, wheel = step.amount)
-                is Step.Page, is Step.Tablet, is Step.Slide, is Step.Http, is Step.Wol, is Step.Ha -> {} // handled on the tablet
+                is Step.Page, is Step.Tablet, is Step.Slide, is Step.Http, is Step.Wol, is Step.Ha, is Step.Pc -> {} // handled on the tablet
             }
         }
     }

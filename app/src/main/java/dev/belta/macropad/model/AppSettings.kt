@@ -37,6 +37,11 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("screen_shift", DeviceQuirks.defaultScreenShift)
         set(value) = prefs.edit().putBoolean("screen_shift", value).apply()
 
+    /** Show the page for the computer's app in front, as the PC link reports it. */
+    var followPcApp: Boolean
+        get() = prefs.getBoolean("follow_pc_app", true)
+        set(value) = prefs.edit().putBoolean("follow_pc_app", value).apply()
+
     /** Start the macropad when the tablet boots. */
     var openOnBoot: Boolean
         get() = prefs.getBoolean("open_on_boot", true)

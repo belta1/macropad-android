@@ -272,6 +272,11 @@ object KeyEditor {
   slide:volume     drag strip: volume, scroll,
                    zoom, brightness, tabs, undo,
                    or up | down (e.g. right | left)
+  pc:teams mute    Teams via the PC link: mute,
+                   camera, hand, blur, leave,
+                   react like (love, applause…)
+  pc:run lock      a command in the computer's
+                   commands.json (PC link)
 
 In text: {date} {time} {clipboard}
   {date:dd/MM/yyyy} custom format

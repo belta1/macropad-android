@@ -18,8 +18,11 @@ import dev.belta.macropad.hid.KeyboardLayout
  *   http:POST https://… | {"a":1}   web request from the tablet (GET by default; "| body" is optional)
  *   wol:AA:BB:CC:DD:EE:FF           Wake-on-LAN packet from the tablet
  *   ha:light.toggle light.desk      calls a Home Assistant service (ha_url / ha_token saved values)
+ *   pc:teams mute       Teams command over the PC link (mute, camera, hand, blur, leave, react like…)
+ *   pc:run lock         runs a command named in the computer's commands.json (PC link)
  *
  * Network steps run on the tablet at once, beside the keys, and work with no computer connected.
+ * PC steps go over the PC link (docs/pc-link.md); without it, Teams steps send their shortcut.
  *
  * Text may contain {date}, {time}, {date:<pattern>} and {clipboard}, filled in when the key runs
  * ([TextVariables]).
@@ -49,6 +52,11 @@ sealed class Step {
     data class Wol(val mac: String) : Step()
     /** Handled on the tablet: Home Assistant service [domain].[service], for [entity] if any. */
     data class Ha(val domain: String, val service: String, val entity: String?) : Step()
+    /**
+     * Sent over the PC link: [command] "teams" with [name] a Teams action ([param] = the reaction
+     * for "react"), or "run" with [name] a command from the computer's commands.json.
+     */
+    data class Pc(val command: String, val name: String, val param: String? = null) : Step()
 
     /** Steps the tablet sends over the network instead of to the computer. */
     val isNetwork get() = this is Http || this is Wol || this is Ha
@@ -94,6 +102,7 @@ object Macro {
                 lower.startsWith("http:") -> parseHttp(line.substring(5).trim())
                 lower.startsWith("wol:") -> parseWol(line.substring(4).trim())
                 lower.startsWith("ha:") -> parseHa(line.substring(3).trim())
+                lower.startsWith("pc:") -> parsePc(lower.substring(3).trim())
                 else -> parseCombo(lower)
             }
         }
@@ -146,6 +155,10 @@ object Macro {
             lower.startsWith("http:") -> "Web request"
             lower.startsWith("wol:") -> "Wake on LAN"
             lower.startsWith("ha:") -> "Home Assistant"
+            lower.startsWith("pc:") -> runCatching { parsePc(lower.substring(3).trim()) }.getOrNull()?.let { pc ->
+                if (pc.command == "teams") "Teams · " + (TEAMS_ACTIONS[pc.name] ?: pc.name) + (pc.param?.let { " $it" } ?: "")
+                else "PC · ${pc.name}"
+            } ?: "PC link"
             lower.startsWith("page:") -> when (val target = line.substring(5).trim()) {
                 "next" -> "Next page"
                 "prev" -> "Previous page"
@@ -225,6 +238,58 @@ object Macro {
             throw MacroException("Home Assistant step: ha:domain.service entity, e.g. ha:light.toggle light.desk")
         }
         return Step.Ha(service.groupValues[1], service.groupValues[2], parts.getOrNull(1)?.lowercase())
+    }
+
+    /** Teams actions of `pc:teams`, with their names. */
+    val TEAMS_ACTIONS = linkedMapOf(
+        "mute" to "Mute", "camera" to "Camera", "hand" to "Hand", "blur" to "Blur", "leave" to "Leave", "react" to "React",
+    )
+    val TEAMS_REACTIONS = listOf("like", "love", "applause", "laugh", "wow")
+
+    /** Teams' taskbar slot: Win+8 focuses it. */
+    const val TEAMS_SLOT = 8
+
+    /** Sends a Teams shortcut from any window: focus Teams, send it, return to the previous window. */
+    fun inTeams(shortcut: String) = "win+$TEAMS_SLOT\ndelay:300\n$shortcut\ndelay:150\nalt+tab"
+
+    /** Focuses Teams and sends a shortcut that should leave Teams in front (navigation). */
+    fun toTeams(shortcut: String) = "win+$TEAMS_SLOT\ndelay:300\n$shortcut"
+
+    /**
+     * What a `pc:teams` action sends without the PC link: its keyboard shortcut (mute uses
+     * Windows 11's call mute, which works from any window). Reactions have none.
+     */
+    val TEAMS_FALLBACK = mapOf(
+        "mute" to "win+alt+k",
+        "camera" to inTeams("ctrl+shift+o"),
+        "hand" to inTeams("ctrl+shift+k"),
+        "blur" to inTeams("ctrl+shift+p"),
+        "leave" to inTeams("ctrl+shift+h"),
+    )
+
+    /** "teams <action> [reaction]" or "run <name>" (already lowercase). */
+    private fun parsePc(spec: String): Step.Pc {
+        val parts = spec.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        return when (parts.firstOrNull()) {
+            "teams" -> {
+                val action = parts.getOrNull(1)
+                if (action !in TEAMS_ACTIONS) {
+                    throw MacroException("Teams step: pc:teams ${TEAMS_ACTIONS.keys.joinToString("|")}")
+                }
+                if (action == "react") {
+                    val reaction = parts.getOrNull(2)
+                    if (reaction !in TEAMS_REACTIONS) throw MacroException("Reaction: pc:teams react ${TEAMS_REACTIONS.joinToString("|")}")
+                    Step.Pc("teams", action!!, reaction)
+                } else {
+                    if (parts.size > 2) throw MacroException("pc:teams $action takes nothing after it")
+                    Step.Pc("teams", action!!)
+                }
+            }
+            "run" -> Step.Pc("run", parts.drop(1).joinToString(" ").ifEmpty {
+                throw MacroException("pc:run needs a command name from the computer's commands.json")
+            })
+            else -> throw MacroException("PC step: pc:teams <action> or pc:run <name>")
+        }
     }
 
     private val FOCUS_APP = Regex("""(win|super|gui|meta)\+[0-9]""")

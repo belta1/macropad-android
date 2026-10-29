@@ -16,6 +16,8 @@ Every key has an **action**: one step per line. Lines starting with `#` are comm
 | Web request | `http:POST https://… \| {"on":true}` | Sent by the tablet over Wi-Fi (see [Network steps](#network-steps)) |
 | Wake on LAN | `wol:AA:BB:CC:DD:EE:FF` | Wakes a computer on the tablet's network |
 | Home Assistant | `ha:light.toggle light.desk` | Calls a Home Assistant service |
+| Teams (PC link) | `pc:teams mute` | A Teams command through the [PC link](pc-link.md): `mute`, `camera`, `hand`, `blur`, `leave`, `react like` (`love`, `applause`, `laugh`, `wow`). Without the link, sends the Teams shortcut |
+| PC command (PC link) | `pc:run lock` | Runs a command named in the computer's `commands.json` ([PC link](pc-link.md)) |
 
 ### Text variables
 
@@ -114,6 +116,23 @@ access token: Home Assistant → your profile → Security → Long-lived access
 **Next meeting on the idle clock**: set the saved value `ha_calendar` to a Home Assistant calendar
 entity (e.g. `calendar.work`). The clock shows `Next: Standup · 10:30 (in 4 min)`, `Now: …` or
 tomorrow's first event, refreshed every 5 minutes. Any calendar Home Assistant can read works.
+With the [PC link](pc-link.md) and classic Outlook open on the computer, the clock shows Outlook's
+next meeting instead.
+
+## PC steps
+
+`pc:` steps go to the computer over the [PC link](pc-link.md) (a Bluetooth serial port next to
+the keyboard, Classic Bluetooth tablets only) instead of being typed:
+
+| Step | Without the PC link |
+|---|---|
+| `pc:teams mute` (Windows 11 call mute) | `win+alt+k` |
+| `pc:teams camera` / `hand` / `blur` / `leave` | Focus Teams (Win+8), its shortcut, Alt+Tab back |
+| `pc:teams react like` (`love`, `applause`, `laugh`, `wow`) | — (a message says it needs the link) |
+| `pc:run <name>` | — |
+
+A key that is just `pc:teams mute`, `camera`, `hand` or `blur` lights up from Teams' real state
+while the PC link reaches Teams, like Caps Lock; otherwise it is an ordinary toggle key.
 
 ## Keyboard layouts
 

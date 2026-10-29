@@ -1,7 +1,19 @@
 # Changelog
 
-## Unreleased
+## 1.7.0
 
+- **PC link** ([docs/pc-link.md](docs/pc-link.md)), on tablets with Classic Bluetooth (Galaxy Tab
+  S5e): the macropad adds a Bluetooth serial port next to the keyboard, which Windows shows as a
+  COM port, and [tools/macropad-link.ps1](tools/macropad-link.ps1) keeps it open on the computer.
+  - **Teams**: Mute, Camera, Raise hand, Blur and Leave are Teams commands (`pc:teams mute`, …)
+    through Teams' third-party app API: no window jumping, and their lights follow Teams (also when
+    you click in Teams). Without the link they send the shortcuts as before. Reactions:
+    `pc:teams react like`. Existing Teams keys change once, if they were unchanged.
+  - **Pages follow the app in front**: Teams, Outlook, Citrix, … (long-press a tab → Show for
+    apps; ⚙ → Connection → Follow the computer's app).
+  - **Next meeting from Outlook** (classic) on the idle clock, in place of Home Assistant's.
+  - **`pc:run <name>`** runs a command you list in `%APPDATA%\Macropad\commands.json`.
+  - Diagnostics shows the PC link. **Pair once more** after updating, so Windows sees the port.
 - **Network steps** (the tablet uses its Wi-Fi): `http:` web requests, `wol:` Wake-on-LAN and
   `ha:` Home Assistant services, with `ha_url` / `ha_token` saved values. They work with no
   computer connected. See [docs/macro-language.md](docs/macro-language.md#network-steps).

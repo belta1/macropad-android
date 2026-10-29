@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -19,6 +20,8 @@ import android.os.IBinder
 import dev.belta.macropad.hid.HidPeripheral
 import dev.belta.macropad.model.AppSettings
 import dev.belta.macropad.model.ComputerProfiles
+import dev.belta.macropad.pc.PcLink
+import dev.belta.macropad.pc.PcStatus
 
 /**
  * Owns the Bluetooth keyboard so the connection survives the UI being recreated, backgrounded
@@ -33,6 +36,10 @@ class MacropadService : Service() {
     lateinit var profiles: ComputerProfiles
         private set
     private val listeners = LinkedHashSet<HidPeripheral.Listener>()
+    /** The PC link (serial port beside the Classic keyboard); null until it first starts. */
+    var pc: PcLink? = null
+        private set
+    private val pcListeners = LinkedHashSet<PcLink.Listener>()
     private val binder = LocalBinder()
 
     inner class LocalBinder : Binder() {
@@ -50,6 +57,7 @@ class MacropadService : Service() {
         applySettings()
         hid.listener = HidPeripheral.Listener { state, detail ->
             if (state == HidPeripheral.State.CONNECTED) applySettings()
+            updatePcLink(state)
             updateNotification(state, detail)
             listeners.toList().forEach { it.onStateChanged(state, detail) }
         }
@@ -76,6 +84,7 @@ class MacropadService : Service() {
         unregisterReceiver(bluetoothReceiver)
         unregisterReceiver(powerReceiver)
         hid.listener = null
+        pc?.stop()
         hid.shutdown()
         super.onDestroy()
     }
@@ -87,6 +96,34 @@ class MacropadService : Service() {
 
     fun removeListener(listener: HidPeripheral.Listener) {
         listeners -= listener
+    }
+
+    /** Also tells [listener] the current status at once. */
+    fun addPcListener(listener: PcLink.Listener) {
+        pcListeners += listener
+        listener.onPcStatus(pc?.status)
+    }
+
+    fun removePcListener(listener: PcLink.Listener) {
+        pcListeners -= listener
+    }
+
+    /** The PC link runs beside the Classic keyboard only: a serial port needs Classic Bluetooth. */
+    private fun updatePcLink(state: HidPeripheral.State) {
+        if (state == HidPeripheral.State.OFF || state == HidPeripheral.State.UNAVAILABLE) return run { pc?.stop() }
+        val ready = state == HidPeripheral.State.ADVERTISING || state == HidPeripheral.State.CONNECTED
+        if (!ready || hid.activeTransport != HidPeripheral.Transport.CLASSIC) return
+        val link = pc ?: getSystemService(BluetoothManager::class.java)?.adapter
+            ?.let { PcLink(it, BuildConfig.VERSION_NAME, hid::event) }
+            ?.also { it.listener = pcFanOut; pc = it }
+            ?: return
+        link.start()
+    }
+
+    private val pcFanOut = object : PcLink.Listener {
+        override fun onPcStatus(status: PcStatus?) = pcListeners.toList().forEach { it.onPcStatus(status) }
+        override fun onPcResult(id: Int, ok: Boolean, error: String?) =
+            pcListeners.toList().forEach { it.onPcResult(id, ok, error) }
     }
 
     /** App-wide defaults, overridden by the connected computer's profile. */

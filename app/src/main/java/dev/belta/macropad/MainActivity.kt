@@ -54,6 +54,8 @@ import dev.belta.macropad.model.Step
 import dev.belta.macropad.model.TextVariables
 import dev.belta.macropad.net.NetActions
 import dev.belta.macropad.net.Updater
+import dev.belta.macropad.pc.PcLink
+import dev.belta.macropad.pc.PcStatus
 import dev.belta.macropad.ui.AppIcons
 import dev.belta.macropad.ui.Dialogs
 import dev.belta.macropad.ui.Icons
@@ -137,6 +139,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     private val page get() = layout.pages[pageIndex.coerceIn(0, layout.pages.lastIndex)]
     private val hid get() = service?.hid
+    /** What the PC link reports; null while no computer has it open. */
+    private val pcStatus get() = service?.pc?.status
     private val connected get() = hid?.state == HidPeripheral.State.CONNECTED
 
     // ---------------------------------------------------------------- lifecycle
@@ -211,6 +215,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     override fun onDestroy() {
         (heldSteps.keys + pendingPresses.keys).toList().forEach { releaseKey(it) }
         service?.removeListener(stateListener)
+        service?.removePcListener(pcListener)
         unbindService(connection)
         unregisterReceiver(pairingReceiver)
         unregisterReceiver(quitReceiver)
@@ -327,7 +332,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         idleTime.text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(now)
         idleDate.text = java.text.SimpleDateFormat("EEEE d MMMM", java.util.Locale.getDefault()).format(now)
         idleStatus.text = if (connected) "Connected to ${statusText.text}" else "Not connected"
-        val event = describeEvent(nextEvent, now)
+        // The computer's Outlook (PC link) when it reads it, else the Home Assistant calendar.
+        val pc = pcStatus
+        val event = describeEvent(if (pc?.hasOutlook == true) pc.meeting else nextEvent, now)
         idleEvent.text = event
         idleEvent.visibility = if (event == null) View.GONE else View.VISIBLE
         refreshNextEvent()
@@ -419,6 +426,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             service = s
             profileAddress = s.hid.currentHost()?.address ?: s.hid.preferredHost()?.address
             s.addListener(stateListener)
+            s.addPcListener(pcListener)
             renderPage()
             if (pendingResetPairing) {
                 pendingResetPairing = false
@@ -432,6 +440,56 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     }
 
     private val stateListener = HidPeripheral.Listener { state, detail -> showState(state, detail) }
+
+    // ---------------------------------------------------------------- PC link
+
+    /** The app the PC link last reported in front, so only changes switch pages. */
+    private var pcApp: String? = null
+    /** Labels of keys whose PC command is waiting for its result, by request id. */
+    private val pcRequests = HashMap<Int, String>()
+
+    private val pcListener = object : PcLink.Listener {
+        override fun onPcStatus(status: PcStatus?) {
+            val app = status?.app
+            if (app != null && app != pcApp) followPcApp(app)
+            pcApp = app
+            if (status == null) pcRequests.clear()
+            refreshLiveKeys()
+            if (dimmed) updateIdleClock()
+        }
+
+        override fun onPcResult(id: Int, ok: Boolean, error: String?) {
+            val label = pcRequests.remove(id) ?: return
+            if (!ok) ui.toast("$label: ${error ?: "the computer couldn't do it"}")
+        }
+    }
+
+    /** Shows the page that lists [app] (page menu → Show for apps), if any and not hidden. */
+    private fun followPcApp(app: String) {
+        if (!settings.followPcApp || editing || recorder.isRecording) return
+        val hidden = hiddenPages()
+        val index = layout.pages.indexOfFirst { it.name !in hidden && app in it.appNames }
+        if (index < 0 || index == pageIndex) return
+        selectPage(index)
+        renderPage()
+    }
+
+    /** Sends a `pc:` step over the PC link; its result comes back to [pcListener]. */
+    private fun sendPc(label: String, link: PcLink, step: Step.Pc) {
+        val id = if (step.command == "teams") link.teams(step.name, step.param) else link.run(step.name)
+        if (id != null) pcRequests[id] = label
+    }
+
+    /** What a `pc:` step sends as keys without the PC link or Teams (Teams shortcuts); empty if nothing. */
+    private fun pcFallback(label: String, step: Step.Pc): List<Step> {
+        val shortcut = if (step.command == "teams") Macro.TEAMS_FALLBACK[step.name] else null
+        if (shortcut == null) {
+            ui.toast(if (service?.pc?.connected == true) "$label: the PC link can't reach Teams"
+                else "$label: needs the PC link (docs/pc-link.md)")
+            return emptyList()
+        }
+        return Macro.parse(shortcut)
+    }
 
     private val quitReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) = finishAndRemoveTask()
@@ -877,7 +935,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     private fun keyView(page: Page, index: Int, compact: Boolean): View {
         val button = layout.button(page, index)
-        val lock = lockState(button)
+        val lock = liveState(button)
         return keyViews.build(
             page, index, button, compact, editing,
             toggledOn = lock ?: (toggleKey(page, index) in toggledOn),
@@ -886,28 +944,43 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             showHint = page !== layout.sidebar,
             small = page === layout.sidebar,
             stateful = lock != null || button?.toggle == true,
-        ).apply { if (lock != null) tag = LockKey(page, index, compact) }
+        ).apply { if (lock != null || isTeamsKey(button)) tag = LiveKey(page, index, compact) }
     }
 
-    /** Tag of a lock key's view, so [refreshLockKeys] can find and redraw it. */
-    private class LockKey(val page: Page, val index: Int, val compact: Boolean)
+    /** Tag of a live key's view (lock or Teams key), so [refreshLiveKeys] can find and redraw it. */
+    private class LiveKey(val page: Page, val index: Int, val compact: Boolean)
 
     /**
-     * A key that is just Caps / Num / Scroll Lock shows the computer's real state (from its keyboard
-     * LEDs, off while disconnected); null for any other key.
+     * A key that shows the computer's real state, or null for any other key: Caps / Num / Scroll
+     * Lock (from its keyboard LEDs, off while disconnected), and Teams' mute, camera, hand and blur
+     * while the PC link reports Teams (otherwise those are ordinary toggle keys).
      */
-    private fun lockState(button: MacroButton?): Boolean? {
-        val combo = button?.let { runCatching { Macro.parse(it.action) }.getOrNull()?.singleOrNull() } as? Step.Combo
+    private fun liveState(button: MacroButton?): Boolean? {
+        val step = button?.let { runCatching { Macro.parse(it.action) }.getOrNull()?.singleOrNull() }
+        if (step is Step.Pc) {
+            val teams = pcStatus?.teams?.takeIf { step.command == "teams" } ?: return null
+            return when (step.name) {
+                "mute" -> teams.muted
+                "camera" -> teams.camera
+                "hand" -> teams.hand
+                "blur" -> teams.blur
+                else -> null
+            }
+        }
+        val combo = step as? Step.Combo
         val key = combo?.keys?.singleOrNull()?.takeIf { combo.mods == 0 && it in HidPeripheral.LOCK_LEDS } ?: return null
         return connected && hid?.lockOn(key) == true
     }
 
-    /** Redraws the lock keys on screen; one being touched redraws when it is released. */
-    private fun refreshLockKeys() {
+    /** A `pc:teams` key: redrawn when Teams' state comes and goes. */
+    private fun isTeamsKey(button: MacroButton?) = button != null && button.action.trim().lowercase().startsWith("pc:teams")
+
+    /** Redraws the live keys on screen; one being touched redraws when it is released. */
+    private fun refreshLiveKeys() {
         fun visit(group: ViewGroup) {
             for (i in group.childCount - 1 downTo 0) {
                 val child = group.getChildAt(i)
-                val lock = child.tag as? LockKey
+                val lock = child.tag as? LiveKey
                 when {
                     lock != null -> if (!child.isPressed) keyViews.replace(child, keyView(lock.page, lock.index, lock.compact))
                     child is ViewGroup -> visit(child)
@@ -918,6 +991,11 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     }
 
     private fun toggleKey(page: Page, index: Int) = "${page.name}#$index"
+
+    private fun flipToggle(page: Page, index: Int) {
+        val key = toggleKey(page, index)
+        if (!toggledOn.remove(key)) toggledOn += key
+    }
 
     override val toggledKeys: Int get() = toggledOn.size
 
@@ -933,8 +1011,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     override fun onKeyReleased(view: View, page: Page, index: Int, button: MacroButton, cancelled: Boolean) {
         releaseKey(view, tapped = !cancelled)
-        // Toggle keys flip on press, lock keys follow the computer's LEDs; redraw them once the finger lifts.
-        if (button.toggle || lockState(button) != null) {
+        // Toggle keys flip on press, live keys follow the computer; redraw them once the finger lifts.
+        if (button.toggle || liveState(button) != null) {
             keyViews.replace(view, keyView(page, index, compact = page === layout.dock || page.kind == PageKind.TRACKPAD))
         }
     }
@@ -1025,10 +1103,21 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         // block them.
         if (steps.any { it is Step.Tablet && it.command == "dim" }) handler.postDelayed({ dim() }, 600)
         steps.filter { it.isNetwork }.takeIf { it.isNotEmpty() }?.let { runNetwork(button.label, it) }
-        val remote = steps.filterNot { it is Step.Page || it is Step.Tablet || it.isNetwork }.map { step ->
+        // PC steps go over the PC link; Teams steps only while it reaches Teams. Otherwise Teams steps
+        // become their shortcut, in place.
+        val link = service?.pc?.takeIf { it.connected }
+        fun overLink(step: Step.Pc) = link != null && (step.command != "teams" || link.status?.teams != null)
+        val sent = steps.filterIsInstance<Step.Pc>().filter { overLink(it) }
+        sent.forEach { sendPc(button.label, link!!, it) }
+        val remote = steps.flatMap { step ->
+            if (step is Step.Pc && !overLink(step)) pcFallback(button.label, step) else listOf(step)
+        }.filterNot { it is Step.Page || it is Step.Tablet || it is Step.Pc || it.isNetwork }.map { step ->
             if (step is Step.Text) Step.Text(expandText(step.text)) else step
         }
-        if (remote.isEmpty()) return
+        if (remote.isEmpty()) {
+            if (primary && button.toggle && sent.isNotEmpty()) flipToggle(page, index)
+            return
+        }
         if (action.contains("{clipboard}") && clipboardText().isNullOrEmpty()) {
             return ui.toast("The tablet's clipboard is empty — copy something on the tablet first")
         }
@@ -1037,10 +1126,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             if (!recorder.isRecording) flashOfflineBanner()
             return
         }
-        if (primary && button.toggle) {
-            val key = toggleKey(page, index)
-            if (!toggledOn.remove(key)) toggledOn += key
-        }
+        if (primary && button.toggle) flipToggle(page, index)
         if (hold && Macro.isHoldable(remote) && steps.none { it is Step.Tablet }) {
             heldSteps[token] = remote[0]
             hid.press(token, remote[0])
@@ -1158,7 +1244,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
                 null, null, null)
             badge.contentDescription = "${badge.text} Lock ${if (on) "on" else "off"}"
         }
-        refreshLockKeys()
+        refreshLiveKeys()
     }
 
     /** Shows the pages chosen for [address], opening its start page when a different computer connects. */

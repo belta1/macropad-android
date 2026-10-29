@@ -45,13 +45,33 @@ object DefaultLayout {
     private const val REMOTE_SLOT = 4
     private const val EXPLORER_SLOT = 6
     private const val EDGE_SLOT = 7
-    private const val TEAMS_SLOT = 8
 
-    /** Sends a Teams shortcut from any window: focus Teams, send it, return to the previous window. */
-    private fun inTeams(shortcut: String) = "win+$TEAMS_SLOT\ndelay:300\n$shortcut\ndelay:150\nalt+tab"
+    private fun inTeams(shortcut: String) = Macro.inTeams(shortcut)
+    private fun toTeams(shortcut: String) = Macro.toTeams(shortcut)
 
-    /** Focuses Teams and sends a shortcut that should leave Teams in front (navigation). */
-    private fun toTeams(shortcut: String) = "win+$TEAMS_SLOT\ndelay:300\n$shortcut"
+    /**
+     * Apps (process names, without ".exe") whose window in front shows a page, by the page's
+     * default name; the PC link reports the app in front ([Page.apps]).
+     */
+    fun appsFor(name: String): String? = when (name.lowercase()) {
+        "teams" -> "ms-teams, teams"
+        "citrix" -> "wfica32, cdviewer"
+        "outlook" -> "outlook, olk"
+        "vs code", "vscode" -> "code"
+        "chrome" -> "chrome"
+        "edge" -> "msedge"
+        "excel" -> "excel"
+        "word" -> "winword"
+        else -> null
+    }
+
+    /**
+     * 1.7: the Teams keys of 1.2–1.6 (shortcuts sent to a focused Teams) -> Teams commands over the
+     * PC link, which still send those shortcuts without it ([Macro.TEAMS_FALLBACK]); applied once to
+     * existing layouts by [MacroStore], only to keys still set to the old defaults.
+     */
+    val TEAMS_API_UPGRADE: Map<String, String> =
+        Macro.TEAMS_FALLBACK.entries.associate { (action, shortcut) -> shortcut to "pc:teams $action" }
 
     /** Focuses Outlook and sends a shortcut, leaving Outlook in front. */
     private fun toOutlook(shortcut: String) = "win+$OUTLOOK_SLOT\ndelay:300\n$shortcut"
@@ -300,17 +320,18 @@ object DefaultLayout {
             b("Archive", "backspace", TEAL, "download"),
             b("Delete", "delete", RED, "delete"),
         )),
-        // New Microsoft Teams on Windows. Teams runs on the PC itself, so every key first focuses it
-        // (Win+number) — they work while a Citrix session has the keyboard. Mute uses Windows 11's
-        // call mute (Win+Alt+K), which works from any window. Push to talk needs Teams in front.
+        // New Microsoft Teams on Windows. Mute, camera, hand, leave and blur are Teams commands over
+        // the PC link, and their lights follow Teams; without the link they send the shortcut. Teams
+        // runs on the PC itself, so the other keys first focus it (Win+number) — they work while a
+        // Citrix session has the keyboard. Push to talk needs Teams in front.
         Page(TEAMS_PAGE, mutableListOf(
-            b("Mute / Unmute", "win+alt+k", RED, "mic_off", toggle = true),
-            b("Camera on / off", inTeams("ctrl+shift+o"), BLUE, "videocam", toggle = true),
-            b("Raise hand", inTeams("ctrl+shift+k"), YELLOW, "hand", toggle = true),
+            b("Mute / Unmute", "pc:teams mute", RED, "mic_off", toggle = true),
+            b("Camera on / off", "pc:teams camera", BLUE, "videocam", toggle = true),
+            b("Raise hand", "pc:teams hand", YELLOW, "hand", toggle = true),
             b("Share screen", toTeams("ctrl+shift+e"), TEAL, "screen_share"),
-            b("Leave call", inTeams("ctrl+shift+h"), RED, "call_end"),
+            b("Leave call", "pc:teams leave", RED, "call_end"),
             b("Push to talk", "ctrl+space", GREEN, "mic"),
-            b("Blur background", inTeams("ctrl+shift+p"), PURPLE, "blur", toggle = true),
+            b("Blur background", "pc:teams blur", PURPLE, "blur", toggle = true),
             b("Admit from lobby", inTeams("ctrl+shift+y"), ORANGE, "group"),
             b("Accept call", inTeams("ctrl+shift+a"), GREEN, "call"),
             b("Decline call", inTeams("ctrl+shift+d"), RED, "call_end"),
@@ -325,7 +346,7 @@ object DefaultLayout {
         // that it translates into the key inside the session.
         Page(CITRIX_PAGE, mutableListOf(
             b("Remote desktop", "win+$REMOTE_SLOT", BLUE, "desktop"),
-            b("Teams", "win+$TEAMS_SLOT", PURPLE, "group"),
+            b("Teams", "win+${Macro.TEAMS_SLOT}", PURPLE, "group"),
             b("Outlook", "win+$OUTLOOK_SLOT", BLUE, "mail"),
             b("Edge", "win+$EDGE_SLOT", TEAL, "globe"),
             b("Explorer (local)", "win+$EXPLORER_SLOT", YELLOW, "folder"),

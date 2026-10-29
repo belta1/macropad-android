@@ -10,6 +10,7 @@ a few Fire OS workarounds, and what the tablet needs so Android leaves the macro
 | Name computers see | Fire Macropad | Macropad (⚙ → Connection → Bluetooth name) |
 | Classic Bluetooth while running | Hidden (Fire OS workaround) | Left alone (earbuds etc. keep working) |
 | Screen | LCD, 600 dp | OLED, ~800 dp: keys scale up; Screen protection on |
+| [PC link](pc-link.md) (Teams, app in front, Outlook) | — (needs Classic Bluetooth) | Yes |
 
 The app detects a Fire tablet by its manufacturer and only applies the Fire OS workarounds
 ([bluetooth-troubleshooting.md](bluetooth-troubleshooting.md)) there.

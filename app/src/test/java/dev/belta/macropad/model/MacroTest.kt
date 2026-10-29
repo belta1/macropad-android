@@ -174,9 +174,54 @@ class MacroTest {
     @Test
     fun `old Teams keys upgrade to focus-safe ones`() {
         val upgrade = DefaultLayout.TEAMS_FOCUS_UPGRADE
-        assertEquals("win+alt+k", upgrade["ctrl+shift+m"])
-        assertEquals("win+8\ndelay:300\nctrl+shift+o\ndelay:150\nalt+tab", upgrade["ctrl+shift+o"])
+        assertEquals("pc:teams mute", upgrade["ctrl+shift+m"])
+        assertEquals("win+8\ndelay:300\nctrl+shift+e", upgrade["ctrl+shift+e"])
         assertEquals(null, upgrade["ctrl+space"]) // push to talk stays a held key
+    }
+
+    @Test
+    fun `1_6 Teams keys upgrade to PC link commands`() {
+        val upgrade = DefaultLayout.TEAMS_API_UPGRADE
+        assertEquals("pc:teams mute", upgrade["win+alt+k"])
+        assertEquals("pc:teams camera", upgrade["win+8\ndelay:300\nctrl+shift+o\ndelay:150\nalt+tab"])
+        assertEquals("pc:teams leave", upgrade["win+8\ndelay:300\nctrl+shift+h\ndelay:150\nalt+tab"])
+        assertEquals(null, upgrade["win+8\ndelay:300\nctrl+shift+e"]) // share screen has no command
+    }
+
+    @Test
+    fun `parses PC link steps`() {
+        assertEquals(listOf(Step.Pc("teams", "mute")), Macro.parse("pc:teams mute"))
+        assertEquals(listOf(Step.Pc("teams", "react", "like")), Macro.parse("pc:Teams  React LIKE"))
+        assertEquals(listOf(Step.Pc("run", "lock")), Macro.parse("pc:run lock"))
+        assertEquals(listOf(Step.Pc("run", "open notes")), Macro.parse("pc:run open notes"))
+        assertFalse(Macro.parse("pc:teams mute").single().isNetwork)
+    }
+
+    @Test
+    fun `rejects bad PC link steps`() {
+        assertThrows("pc:teams")
+        assertThrows("pc:teams dance")
+        assertThrows("pc:teams react")
+        assertThrows("pc:teams react boo")
+        assertThrows("pc:teams mute now")
+        assertThrows("pc:run")
+        assertThrows("pc:lock")
+    }
+
+    @Test
+    fun `describes PC link steps`() {
+        assertEquals("Teams · Mute", Macro.describe("pc:teams mute"))
+        assertEquals("Teams · React like", Macro.describe("pc:teams react like"))
+        assertEquals("PC · lock", Macro.describe("pc:run lock"))
+        assertEquals("PC link", Macro.describe("pc:nonsense"))
+    }
+
+    @Test
+    fun `Teams fallbacks are valid macros`() {
+        for ((action, shortcut) in Macro.TEAMS_FALLBACK) {
+            assertTrue(action, Macro.parse(shortcut).isNotEmpty())
+        }
+        assertEquals(null, Macro.TEAMS_FALLBACK["react"])
     }
 
     @Test

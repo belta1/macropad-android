@@ -30,6 +30,21 @@ class LayoutJsonTest {
     }
 
     @Test
+    fun `page apps round trip and default by name`() {
+        val layout = DefaultLayout.layout()
+        layout.pages += Page("Mine", mutableListOf(), apps = "Notepad.exe, code")
+        layout.pages += Page("None", mutableListOf(), apps = "")
+        val copy = LayoutJson.fromJson(LayoutJson.toJson(layout))
+        assertEquals(listOf("notepad", "code"), copy.pages.first { it.name == "Mine" }.appNames)
+        assertEquals("", copy.pages.first { it.name == "None" }.apps)
+        assertEquals(emptyList<String>(), copy.pages.first { it.name == "None" }.appNames)
+        // No "apps" stored: the default for the page's name.
+        val teams = copy.pages.first { it.name == DefaultLayout.TEAMS_PAGE }
+        assertNull(teams.apps)
+        assertEquals(listOf("ms-teams", "teams"), teams.appNames)
+    }
+
+    @Test
     fun `dock volume keys become a slider`() {
         val dock = Page("Media", mutableListOf(
             MacroButton("Play", "media:playpause", 1, null),

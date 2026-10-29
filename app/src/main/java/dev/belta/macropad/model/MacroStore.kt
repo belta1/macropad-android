@@ -26,6 +26,7 @@ class MacroStore(private val context: Context) {
         upgradeDesktopRow(layout)
         upgradeVolumeDock(layout)
         dropDockMute(layout)
+        upgradeTeamsApi(layout)
         addPageIcons(layout)
         if (backupFile?.exists() == false) writeBackup(export(layout))
         return layout
@@ -141,11 +142,23 @@ class MacroStore(private val context: Context) {
         if (changed) save(layout)
     }
 
-    /** Stores a tab icon for pages without one, so it survives renaming. */
+    /** 1.7: the Teams keys become Teams commands over the PC link (shortcuts without it). Only untouched keys change. */
+    private fun upgradeTeamsApi(layout: Layout) {
+        if (prefs.getBoolean(TEAMS_API_FLAG, false)) return
+        var changed = false
+        layout.pages.firstOrNull { it.name == DefaultLayout.TEAMS_PAGE }?.buttons?.forEach { b ->
+            DefaultLayout.TEAMS_API_UPGRADE[b?.action]?.let { b!!.action = it; changed = true }
+        }
+        prefs.edit().putBoolean(TEAMS_API_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
+    /** Stores a tab icon and the apps that show it for pages without them, so they survive renaming. */
     private fun addPageIcons(layout: Layout) {
         var changed = false
-        for (page in layout.pages) if (page.icon == null) {
-            DefaultLayout.iconFor(page.name)?.let { page.icon = it; changed = true }
+        for (page in layout.pages) {
+            if (page.icon == null) DefaultLayout.iconFor(page.name)?.let { page.icon = it; changed = true }
+            if (page.apps == null) DefaultLayout.appsFor(page.name)?.let { page.apps = it; changed = true }
         }
         if (changed) save(layout)
     }
@@ -156,6 +169,7 @@ class MacroStore(private val context: Context) {
         const val DESKTOP_ROW_FLAG = "upgraded_desktop_row"
         const val VOLUME_DOCK_FLAG = "upgraded_volume_dock"
         const val DOCK_MUTE_FLAG = "upgraded_dock_mute"
+        const val TEAMS_API_FLAG = "upgraded_teams_api"
         const val KEY = "layout_v3"
         const val BACKUP_NAME = "macropad-layout.json"
     }

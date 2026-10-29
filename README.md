@@ -29,6 +29,10 @@ Windows laptops/desktops.
   switching tabs or undo/redo, one step per tick (`slide:volume`, or any pair of keys).
 - **Toggle keys** (Teams mute, camera, hand, blur) show their ON/OFF state; any key can also have a
   **long-press action** (e.g. tap = toggle mute, hold = push to talk).
+- **PC link** (Classic Bluetooth tablets, e.g. Galaxy Tab S5e): a Bluetooth serial port next to the
+  keyboard and a PowerShell script on the computer. Teams keys light up from Teams' real state and
+  work without focusing Teams, pages follow the app in front, the idle clock shows the next Outlook
+  meeting, and `pc:run` keys start commands you list. See [docs/pc-link.md](docs/pc-link.md).
 - **Text variables** in typed text: `{date}`, `{time}`, custom date formats and `{clipboard}`.
 - `page:` actions to change page from a key or the tablet's volume buttons.
 - **Idle clock**: dims to a clock when not used; the waking touch never presses a key. The

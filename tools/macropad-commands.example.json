@@ -1,0 +1,8 @@
+{
+  "_help": "Commands the macropad may run with pc:run <name>. Each value runs with cmd /c, hidden. Names starting with _ are ignored.",
+  "lock": "rundll32.exe user32.dll,LockWorkStation",
+  "notepad": "notepad.exe",
+  "calculator": "calc.exe",
+  "downloads": "explorer.exe shell:Downloads",
+  "sleep": "rundll32.exe powrprof.dll,SetSuspendState 0,1,0"
+}

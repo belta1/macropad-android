@@ -19,11 +19,20 @@ data class MacroButton(
 
 enum class PageKind { KEYS, TRACKPAD }
 
-/** [icon] is the tab's app icon (see [DefaultLayout.APP_ICONS]); null picks one from the name. */
+/**
+ * [icon] is the tab's app icon (see [DefaultLayout.APP_ICONS]); null picks one from the name.
+ * [apps] lists the computer's apps (process names, comma-separated) that show this page when they
+ * come to the front (PC link); null = the default for the page's name, "" = none.
+ */
 class Page(
     var name: String, val buttons: MutableList<MacroButton?>, val kind: PageKind = PageKind.KEYS,
-    var icon: String? = null,
-)
+    var icon: String? = null, var apps: String? = null,
+) {
+    /** The apps that show this page, lowercase and without ".exe". */
+    val appNames: List<String>
+        get() = (apps ?: DefaultLayout.appsFor(name)).orEmpty().split(',')
+            .map { it.trim().lowercase().removeSuffix(".exe") }.filter { it.isNotEmpty() }
+}
 
 /**
  * [dock] is a row of keys (media controls and desktop switching by default) shown below every page.
@@ -97,6 +106,7 @@ object LayoutJson {
         put("name", page.name)
         if (page.kind != PageKind.KEYS) put("kind", page.kind.name)
         page.icon?.let { put("icon", it) }
+        page.apps?.let { put("apps", it) }
         put("buttons", JSONArray().apply {
             for (b in page.buttons) put(b?.let {
                 JSONObject().put("label", it.label).put("action", it.action).put("color", it.color)
@@ -120,6 +130,7 @@ object LayoutJson {
             }
         }
         val kind = PageKind.values().firstOrNull { it.name == p.optString("kind") } ?: PageKind.KEYS
-        return Page(p.getString("name"), buttons, kind, p.optString("icon").ifBlank { null })
+        return Page(p.getString("name"), buttons, kind, p.optString("icon").ifBlank { null },
+            if (p.has("apps")) p.optString("apps") else null)
     }
 }
