@@ -25,6 +25,10 @@
 .PARAMETER Uninstall
     Remove that shortcut, then exit.
 
+.PARAMETER TeamsDump
+    List the buttons of Teams' windows (automation id | name), then exit. For adjusting the UI
+    Automation fallback when Teams' third-party API is off.
+
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File tools\macropad-link.ps1 -Verbose
 #>
@@ -35,7 +39,8 @@ param(
     [switch]$Install,
     [switch]$Uninstall,
     [switch]$NoTeams,
-    [switch]$NoOutlook
+    [switch]$NoOutlook,
+    [switch]$TeamsDump
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,7 +79,7 @@ if ($Uninstall) {
 
 # One copy at a time (the Startup shortcut and a manual run would fight over the port).
 $mutex = New-Object System.Threading.Mutex($false, 'Local\MacropadPcLink')
-if (-not $mutex.WaitOne(0)) {
+if (-not $TeamsDump -and -not $mutex.WaitOne(0)) {
     Write-Host 'The PC link is already running (see the Startup shortcut or Task Manager).'
     return
 }
@@ -289,7 +294,7 @@ function Connect-Teams {
         $ws.Dispose()
         if (-not $script:TeamsHintShown) {
             $why = if ($_.Exception.InnerException) { $_.Exception.InnerException.Message } else { $_.Exception.Message }
-            Write-Log "Teams API not reachable on 127.0.0.1:8124 ($why). In new Teams: Settings > Privacy > Third-party app API > Manage API. Retrying every 15 s."
+            Write-Log "Teams API not reachable on 127.0.0.1:8124 ($why); reading Teams' window instead. (New Teams: Settings > Privacy > Third-party app API > Manage API, if your organisation allows it.)"
             $script:TeamsHintShown = $true
         }
         return
@@ -336,6 +341,7 @@ function Read-Teams {
     if ($NoTeams) { return }
     if (-not $script:Teams) {
         if ((Get-Date) -ge $script:TeamsNextTry) { Connect-Teams }
+        if (-not $script:Teams) { Read-TeamsUi }
         return
     }
     while ($script:TeamsReceive -and $script:TeamsReceive.IsCompleted) {
@@ -383,9 +389,7 @@ function Use-TeamsMessage($Message) {
 function Invoke-TeamsCommand($Request) {
     $action = $script:TeamsActions[[string]$Request.do]
     if (-not $action) { return Send-Result $Request.id $false "Unknown Teams action '$($Request.do)'" }
-    if (-not $script:Teams) {
-        return Send-Result $Request.id $false 'Teams is not running, or its API is off (Teams > Settings > Privacy > Third-party app API)'
-    }
+    if (-not $script:Teams) { return Invoke-TeamsUi $Request }
     $script:TeamsRequest++
     $parameters = @{}
     if ($Request.do -eq 'react') { $parameters = @{ type = [string]$Request.param } }
@@ -397,6 +401,154 @@ function Invoke-TeamsCommand($Request) {
         Send-Result $Request.id $false 'Lost the connection to Teams'
         Disconnect-Teams 'send failed'
     }
+}
+
+# ------------------------------------------------------------------ Teams without its API (UI Automation)
+
+# When Teams' third-party API is off (e.g. blocked by the organisation), read and press the
+# buttons of Teams' meeting window instead, the way screen readers do. Mute, camera, hand and
+# leave work this way; blur and reactions need the API.
+
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+
+$TeamsUiIds = @{ mic = 'microphone-button'; camera = 'video-button'; hand = 'raisehands-button'; hangup = 'hangup-button' }
+# Button names (English and Spanish) for builds without those automation ids.
+$TeamsUiNames = @{
+    mic = '^(mute|unmute|silenciar|reactivar|activar (el )?(audio|sonido|micr))'
+    camera = '(turn )?camera (on|off)|c.mara'
+    hand = '(raise|lower|levantar|bajar).*(hand|mano)'
+    hangup = '^(leave|hang up|salir|abandonar|colgar)'
+}
+$TeamsUiActions = @{ mute = 'mic'; camera = 'camera'; hand = 'hand'; leave = 'hangup' }
+$TeamsUiControls = $null          # the meeting window's buttons while in a meeting
+$TeamsUiNext = Get-Date
+$TeamsUiSearchNext = Get-Date
+$TeamsUiDeepSearchNext = Get-Date
+$TeamsUiMode = ''                 # last mode logged
+
+$UiaButton = New-Object System.Windows.Automation.PropertyCondition (
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+$UiaDescendants = [System.Windows.Automation.TreeScope]::Descendants
+
+# Teams' top-level windows; $null when Teams isn't running.
+function Get-TeamsWindows {
+    $ids = @(Get-Process -Name 'ms-teams', 'Teams' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+    if ($ids.Count -eq 0) { return $null }
+    $windows = New-Object System.Collections.ArrayList
+    foreach ($id in $ids) {
+        $condition = New-Object System.Windows.Automation.PropertyCondition (
+            [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $id)
+        foreach ($w in [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $condition)) {
+            [void]$windows.Add($w)
+        }
+    }
+    return @{ windows = $windows }
+}
+
+# The meeting controls (mic, camera, hand, hangup) of the first window that has them, or $null.
+# [ByName] also scans every button's name, which is slower.
+function Find-TeamsControls($Windows, [bool]$ByName) {
+    foreach ($w in $Windows) {
+        $controls = @{}
+        foreach ($key in $TeamsUiIds.Keys) {
+            $condition = New-Object System.Windows.Automation.PropertyCondition (
+                [System.Windows.Automation.AutomationElement]::AutomationIdProperty, $TeamsUiIds[$key])
+            $found = $w.FindFirst($UiaDescendants, $condition)
+            if ($found) { $controls[$key] = $found }
+        }
+        if ($ByName -and -not ($controls.ContainsKey('hangup') -and $controls.ContainsKey('mic'))) {
+            foreach ($button in $w.FindAll($UiaDescendants, $UiaButton)) {
+                $name = $button.Current.Name
+                if (-not $name) { continue }
+                foreach ($key in $TeamsUiNames.Keys) {
+                    if (-not $controls.ContainsKey($key) -and $name -match $TeamsUiNames[$key]) { $controls[$key] = $button }
+                }
+            }
+        }
+        if ($controls.ContainsKey('hangup') -and $controls.ContainsKey('mic')) { return $controls }
+    }
+    return $null
+}
+
+# Reads the state from the buttons' names ("Unmute" while muted, "Turn camera off" while on, ...).
+# Throws when the buttons are gone (the meeting ended).
+function Get-TeamsUiState($Controls) {
+    $mic = $Controls.mic.Current.Name
+    [void]$Controls.hangup.Current.Name
+    $camera = if ($Controls.camera) { $Controls.camera.Current.Name } else { '' }
+    $hand = if ($Controls.hand) { $Controls.hand.Current.Name } else { '' }
+    return [ordered]@{
+        t = 'teams'
+        meeting = $true
+        muted = [bool]($mic -match 'unmute|reactivar|(?<!des)activar')
+        camera = [bool]($camera -match '\boff\b|desactivar|apagar')
+        hand = [bool]($hand -match 'lower|bajar')
+        blur = $false
+    }
+}
+
+$NoMeeting = [ordered]@{ t = 'teams'; meeting = $false; muted = $false; camera = $false; hand = $false; blur = $false }
+
+function Set-TeamsUiMode([string]$Mode, [string]$Message) {
+    if ($script:TeamsUiMode -ne $Mode) {
+        $script:TeamsUiMode = $Mode
+        Write-Log $Message
+    }
+}
+
+function Read-TeamsUi {
+    $now = Get-Date
+    if ($now -lt $script:TeamsUiNext) { return }
+    $script:TeamsUiNext = $now.AddSeconds(1)
+    if (-not $script:TeamsUiControls) {
+        if ($now -lt $script:TeamsUiSearchNext) { return }
+        $script:TeamsUiSearchNext = $now.AddSeconds(5)
+        $teams = Get-TeamsWindows
+        if (-not $teams) {
+            Set-TeamsUiMode 'off' 'Teams is not running'
+            return Set-TeamsState $null
+        }
+        $deep = $now -ge $script:TeamsUiDeepSearchNext
+        if ($deep) { $script:TeamsUiDeepSearchNext = $now.AddSeconds(30) }
+        try {
+            $script:TeamsUiControls = Find-TeamsControls $teams.windows $deep
+        } catch {
+            $script:TeamsUiControls = $null
+        }
+        if (-not $script:TeamsUiControls) {
+            Set-TeamsUiMode 'idle' 'Teams: reading its window (UI Automation); no meeting open'
+            return Set-TeamsState $NoMeeting
+        }
+        $c = $script:TeamsUiControls
+        Set-TeamsUiMode 'meeting' ("Teams meeting found: mic '{0}', camera '{1}', hand '{2}'" -f
+            $c.mic.Current.Name, $(if ($c.camera) { $c.camera.Current.Name } else { '-' }), $(if ($c.hand) { $c.hand.Current.Name } else { '-' }))
+    }
+    try {
+        Set-TeamsState (Get-TeamsUiState $script:TeamsUiControls)
+    } catch {
+        $script:TeamsUiControls = $null
+        $script:TeamsUiSearchNext = $now
+        Set-TeamsState $NoMeeting
+    }
+}
+
+# Presses a meeting button for a tablet request; replies with a result.
+function Invoke-TeamsUi($Request) {
+    $key = $TeamsUiActions[[string]$Request.do]
+    if (-not $key) { return Send-Result $Request.id $false "Teams $($Request.do) needs Teams' third-party API" }
+    $button = if ($script:TeamsUiControls) { $script:TeamsUiControls[$key] } else { $null }
+    if (-not $button) { return Send-Result $Request.id $false 'No Teams meeting open' }
+    try {
+        $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    } catch {
+        $script:TeamsUiControls = $null
+        return Send-Result $Request.id $false "Couldn't press Teams' button: $($_.Exception.Message)"
+    }
+    Send-Result $Request.id $true $null
+    # Show the new state at once rather than on the next poll.
+    Start-Sleep -Milliseconds 300
+    $script:TeamsUiNext = Get-Date
+    Read-TeamsUi
 }
 
 # ------------------------------------------------------------------ named commands (pc:run)
@@ -481,6 +633,28 @@ function Read-Tablet {
     }
     # The tablet pings every 30 s; silence means the link is gone even if Windows hasn't noticed.
     if (((Get-Date) - $script:LastHeard).TotalSeconds -gt 90) { throw 'no word from the tablet for 90 s' }
+}
+
+# ------------------------------------------------------------------ -TeamsDump
+
+if ($TeamsDump) {
+    $teams = Get-TeamsWindows
+    if (-not $teams) { Write-Host 'Teams is not running.'; return }
+    foreach ($w in $teams.windows) {
+        Write-Host "== $($w.Current.Name)"
+        foreach ($button in $w.FindAll($UiaDescendants, $UiaButton)) {
+            Write-Host ('  {0} | {1}' -f $button.Current.AutomationId, $button.Current.Name)
+        }
+    }
+    $found = Find-TeamsControls $teams.windows $true
+    if ($found) {
+        Write-Host ''
+        foreach ($key in $found.Keys) { Write-Host ('{0,-7} -> {1} | {2}' -f $key, $found[$key].Current.AutomationId, $found[$key].Current.Name) }
+    } else {
+        Write-Host ''
+        Write-Host 'No meeting controls found (join a meeting and run this again).'
+    }
+    return
 }
 
 # ------------------------------------------------------------------ main loop

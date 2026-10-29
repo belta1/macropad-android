@@ -46,6 +46,13 @@ before. Teams keys send their keyboard shortcuts, and their lights are ordinary 
    Join a meeting (a test call works) and press Mute on the macropad. Teams asks to allow
    "Macropad": click **Allow**. Teams remembers it; the token is in
    `%APPDATA%\Macropad\teams-token.txt`.
+
+   **No "Third-party app API" in Teams' settings** (organisations can turn it off): the script
+   then reads Teams' meeting window instead (UI Automation, like a screen reader). Mute, camera,
+   raise hand and leave work this way, and their lights follow Teams; blur and reactions need the
+   API. If a meeting isn't recognised, join one and run
+   `macropad-link.ps1 -TeamsDump`: it lists Teams' buttons, so the names it looks for can be
+   adjusted.
 6. **Outlook**: classic Outlook just needs to be open. The script never starts it. The new
    Outlook has no calendar access for scripts; the clock then keeps using Home Assistant's
    calendar (saved value `ha_calendar`), if set.
