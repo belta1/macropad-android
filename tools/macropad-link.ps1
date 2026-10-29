@@ -264,6 +264,7 @@ $TeamsNextTry = Get-Date
 $TeamsState = $null       # last state sent to the tablet (ordered hashtable), $null = no Teams
 $TeamsRequest = 0
 $TeamsPending = @{}       # Teams requestId -> tablet id
+$TeamsHintShown = $false
 
 $TeamsActions = @{
     mute = 'toggle-mute'; camera = 'toggle-video'; hand = 'toggle-hand'
@@ -286,8 +287,14 @@ function Connect-Teams {
         }
     } catch {
         $ws.Dispose()
+        if (-not $script:TeamsHintShown) {
+            $why = if ($_.Exception.InnerException) { $_.Exception.InnerException.Message } else { $_.Exception.Message }
+            Write-Log "Teams API not reachable on 127.0.0.1:8124 ($why). In new Teams: Settings > Privacy > Third-party app API > Manage API. Retrying every 15 s."
+            $script:TeamsHintShown = $true
+        }
         return
     }
+    $script:TeamsHintShown = $false
     $script:Teams = $ws
     $script:TeamsMessage.SetLength(0)
     Write-Log 'Connected to Teams'
