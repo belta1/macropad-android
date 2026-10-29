@@ -488,7 +488,16 @@ try {
             $Link = Open-Link
             if (-not $Link) { Start-Sleep -Seconds 10; continue }
             $LastHeard = Get-Date
-            try { Send-All } catch { Close-Link; continue }
+            try {
+                Send-All
+            } catch {
+                # Usually an Incoming port (it opens at once but nobody is on the other end), or a
+                # tablet without the PC link (before 1.7, or on Bluetooth LE).
+                Write-Log "Can't talk to the tablet on $($Link.PortName): $($_.Exception.Message). Use the Outgoing port in More Bluetooth settings > COM Ports, and check the tablet runs 1.7+ on Classic Bluetooth (Diagnostics)."
+                Close-Link
+                Start-Sleep -Seconds 10
+                continue
+            }
         }
         try {
             Read-Tablet
