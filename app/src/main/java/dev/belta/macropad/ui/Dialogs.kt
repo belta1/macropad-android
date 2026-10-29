@@ -363,7 +363,8 @@ class Dialogs(private val host: MacropadHost) {
         line("Computer", d.host?.let { "${it.name} (${it.address})" } ?: "none")
         d.bonded?.let { line("Paired with it", if (it) "yes" else "no", it) }
         line("Use with", d.preferredHost?.name ?: "any computer")
-        d.classicConnectable?.let { line("Classic Bluetooth", if (it) "connectable" else "hidden", !it) }
+        // Only Fire tablets hide Classic Bluetooth on purpose; elsewhere connectable is normal.
+        d.classicConnectable?.let { line("Classic Bluetooth", if (it) "connectable" else "hidden", if (DeviceQuirks.hideClassicBluetooth) !it else null) }
         line("Secure-settings permission", if (d.secureSettingsGranted) "granted" else
             "missing — adb shell pm grant ${ui.context.packageName} android.permission.WRITE_SECURE_SETTINGS",
             d.secureSettingsGranted)
