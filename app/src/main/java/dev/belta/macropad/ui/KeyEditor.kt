@@ -134,9 +134,10 @@ object KeyEditor {
             for (i in 0 until swatches.childCount) {
                 val c = Palette.colors[i]
                 // The chosen color gets a ring, set off from the swatch by a gap of dialog color.
+                // Shown as the theme draws it; the key keeps the palette's color.
                 swatches.getChildAt(i).background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(c)
+                    setColor(Ui.accent(c))
                     if (c == color) setStroke(ui.dp(3), DIALOG)
                 }
                 swatches.getChildAt(i).foreground = if (c == color) GradientDrawable().apply {
@@ -149,7 +150,7 @@ object KeyEditor {
                 val selected = v.tag == iconName
                 v.background = ui.pressable(if (selected) RAISED else PLATE, ui.dp(10).toFloat())
                 v.foreground = if (selected) ui.roundRect(0, ui.dp(10).toFloat()).apply { setStroke(ui.dp(2), TEXT) } else null
-                v.imageTintList = ColorStateList.valueOf(if (selected) legendTone(color) else MUTED)
+                v.imageTintList = ColorStateList.valueOf(if (selected) legendTone(Ui.accent(color)) else MUTED)
             }
             preview()
         }

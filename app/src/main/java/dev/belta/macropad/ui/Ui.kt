@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
 import android.util.TypedValue
@@ -22,18 +23,22 @@ import dev.belta.macropad.model.Palette
 /**
  * Theme, fonts and small view/drawable helpers shared by the UI classes.
  *
- * The look is a keyboard in a graphite colorway: keys are keycaps ([KeyCap]) on a dark case, and
- * only things that send keystrokes look like keys. Tabs, app controls and banners are flat.
+ * The look is a keyboard: keys are keycaps ([KeyCap]) on a dark case, and only things that send
+ * keystrokes look like keys. Tabs, app controls and banners are flat. The colors, the caps and the
+ * fonts come from the [theme] chosen in ⚙ → Theme (Graphite by default).
  */
 class Ui(val context: Context) {
+    private fun font(barlow: Int, monoStyle: Int): Typeface =
+        if (theme.mono) Typeface.create(Typeface.MONOSPACE, monoStyle) else context.resources.getFont(barlow)
+
     /** Dialog text and messages. */
-    val fontBody: Typeface = context.resources.getFont(R.font.barlow_medium)
+    val fontBody: Typeface = font(R.font.barlow_medium, Typeface.NORMAL)
     /** Key legends, tab names, buttons. */
-    val fontLabel: Typeface = context.resources.getFont(R.font.barlow_sc_semibold)
+    val fontLabel: Typeface = font(R.font.barlow_sc_semibold, Typeface.BOLD)
     /** Shortcut hints and other secondary legends. */
-    val fontHint: Typeface = context.resources.getFont(R.font.barlow_sc_medium)
+    val fontHint: Typeface = font(R.font.barlow_sc_medium, Typeface.NORMAL)
     /** Titles and the selected tab. */
-    val fontTitle: Typeface = context.resources.getFont(R.font.barlow_sc_bold)
+    val fontTitle: Typeface = font(R.font.barlow_sc_bold, Typeface.BOLD)
 
     fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
 
@@ -133,35 +138,68 @@ class Ui(val context: Context) {
         setLineSpacing(0f, 1.25f)
     }
 
+    /**
+     * A key's icon legend. On themes whose legends glow ([Theme.glow]) it is lit from within: a
+     * halo of [halo] (null: none, e.g. on a lit key's bright face).
+     */
+    fun legendIcon(name: String, tint: Int, halo: Int? = tint) = ImageView(context).apply {
+        Icons.get(name)?.let { setImageDrawable(glowing(context.getDrawable(it)!!.mutate().apply { setTint(tint) }, halo)) }
+    }
+
+    /** [icon] with a halo of [halo] on themes that glow; [icon] itself otherwise. */
+    fun glowing(icon: Drawable, halo: Int?): Drawable =
+        if (halo != null && theme.glow > 0f) GlowIcon(icon, halo, dpf(theme.glow)) else icon
+
+    /** A text legend lit like a neon sign, on themes that glow. */
+    fun glow(view: TextView, halo: Int?) {
+        if (halo != null && theme.glow > 0f) view.setShadowLayer(dpf(theme.glow), 0f, 0f, withAlpha(halo, 0.85f))
+    }
+
     companion object {
-        // Graphite colorway. Case and plate are what the keys sit on; caps are a step lighter.
-        const val CASE = 0xFF1B1C1E.toInt()
-        const val PLATE = 0xFF141516.toInt()
-        const val CAP_SKIRT = 0xFF1F2023.toInt()
-        const val CAP_TOP = 0xFF37393D.toInt()
+        /** The look in use; set once, before any view is built (a new theme rebuilds the activity). */
+        var theme: Theme = Themes.GRAPHITE
+
+        // Case and plate are what the keys sit on; caps are a step lighter.
+        val CASE get() = theme.case
+        val PLATE get() = theme.plate
+        val CAP_SKIRT get() = theme.capSkirt
+        val CAP_TOP get() = theme.capTop
         /** Flat controls: pressed buttons, the selected tab, dialogs. */
-        const val RAISED = 0xFF2A2B2E.toInt()
-        const val DIALOG = 0xFF242528.toInt()
-        const val HAIRLINE = 0x14FFFFFF
-        const val HAIRLINE_STRONG = 0x2BFFFFFF
-        /** Legends: warm white like PBT plastic, and the dimmer secondary legend. */
-        const val TEXT = 0xFFEDEAE3.toInt()
-        const val MUTED = 0xFFA29E96.toInt()
+        val RAISED get() = theme.raised
+        val DIALOG get() = theme.dialog
+        val HAIRLINE get() = theme.hairline
+        val HAIRLINE_STRONG get() = theme.hairlineStrong
+        /** Legends (Graphite: warm white like PBT plastic), and the dimmer secondary legend. */
+        val TEXT get() = theme.text
+        val MUTED get() = theme.muted
         /** Decorative or non-essential text only (below 4.5:1). */
-        const val FAINT = 0xFF6F6C67.toInt()
+        val FAINT get() = theme.faint
         /** Dark legend on bright surfaces (lit keys, the main button). */
-        const val INK = 0xFF18191B.toInt()
-        val BLUE = Palette.colors[0]
-        val GREEN = Palette.colors[1]
-        val AMBER = Palette.colors[2]
-        val RED = Palette.colors[3]
+        val INK get() = theme.ink
+        val BLUE get() = theme.accents[0]
+        val GREEN get() = theme.accents[1]
+        val AMBER get() = theme.accents[2]
+        val RED get() = theme.accents[3]
+        /** The theme's colors for the palette's slots, e.g. to color apps by name. */
+        val ACCENTS: IntArray get() = theme.accents
+
+        /** How a key's stored [color] looks in this theme: palette colors become the theme's. */
+        fun accent(color: Int): Int {
+            val slot = Palette.colors.indexOf(color)
+            return if (slot >= 0) theme.accents[slot] else color
+        }
 
         fun withAlpha(color: Int, alpha: Float) = (color and 0x00FFFFFF) or ((alpha * 255).toInt() shl 24)
 
+        // Channel arithmetic rather than android.graphics.Color, so themes can be checked in unit tests.
+        private fun red(c: Int) = (c shr 16) and 0xFF
+        private fun green(c: Int) = (c shr 8) and 0xFF
+        private fun blue(c: Int) = c and 0xFF
+
         fun blend(top: Int, bottom: Int, amount: Float): Int {
             fun ch(a: Int, b: Int) = (b + (a - b) * amount).toInt()
-            return Color.rgb(ch(Color.red(top), Color.red(bottom)), ch(Color.green(top), Color.green(bottom)),
-                ch(Color.blue(top), Color.blue(bottom)))
+            return (0xFF shl 24) or (ch(red(top), red(bottom)) shl 16) or (ch(green(top), green(bottom)) shl 8) or
+                ch(blue(top), blue(bottom))
         }
 
         fun lighten(color: Int, amount: Float) = blend(Color.WHITE, color, amount)
@@ -170,7 +208,7 @@ class Ui(val context: Context) {
         /** WCAG relative luminance. */
         fun luminance(color: Int): Double {
             fun ch(v: Int) = (v / 255.0).let { if (it <= 0.03928) it / 12.92 else Math.pow((it + 0.055) / 1.055, 2.4) }
-            return 0.2126 * ch(Color.red(color)) + 0.7152 * ch(Color.green(color)) + 0.0722 * ch(Color.blue(color))
+            return 0.2126 * ch(red(color)) + 0.7152 * ch(green(color)) + 0.0722 * ch(blue(color))
         }
 
         fun contrast(a: Int, b: Int): Double {

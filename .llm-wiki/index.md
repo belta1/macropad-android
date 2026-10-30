@@ -39,7 +39,7 @@ volume, screen mirror, PowerPoint…). **Read this first, then open the files it
 | Bluetooth HID | `…/hid/` (`HidPeripheral.kt`, `ClassicHidLink.kt`, `HidReports.kt`, `KeyboardLayout.kt`) | BLE/Classic HID transports, send engine, typing per keyboard layout | [hid](modules/hid.md) |
 | Macro language | `…/model/Macro.kt` `TextVariables.kt` `LiveLabels.kt` `Dictation.kt` `NotesCommands.kt` | parse key actions into `Step`s; `{vars}`; live labels | [macro-language](modules/macro-language.md) |
 | Layout & persistence | `…/model/Layout.kt` `DefaultLayout.kt` `MacroStore.kt` `AppSettings.kt` `ComputerProfiles.kt` `SecretStore.kt` `PageUsage.kt` | pages/keys model, defaults, JSON store + one-shot upgrades, settings, secrets | [layout-and-storage](modules/layout-and-storage.md) |
-| UI views | `…/ui/` | key grid, editor, dialogs, trackpad, sliders, PC pages (Switcher, Mixer, Screen, Presenter), Home | [ui](modules/ui.md) |
+| UI views | `…/ui/` | key grid, editor, dialogs, trackpad, sliders, PC pages (Switcher, Mixer, Screen, Presenter), Home, themes | [ui](modules/ui.md) |
 | PC link (app side) | `…/pc/PcLink.kt` `PcProtocol.kt` `LinkScript.kt` | SPP server, protocol parse/build, script self-update | [pc-link](modules/pc-link.md) |
 | Network | `…/net/` (`NetActions.kt`, `HomeAssistant.kt`, `HaSocket.kt`, `Updater.kt`) | `http:`/`wol:`/`ha:` steps, Home page, calendar, GitHub updates | [net](modules/net.md) |
 | User docs | `docs/macro-language.md` `docs/pc-link.md` `docs/bluetooth-troubleshooting.md` `docs/devices.md` `docs/citrix.md` | end-user reference; keep in sync with features | [conventions](conventions.md#docs--changelog) |
@@ -55,6 +55,7 @@ volume, screen mirror, PowerPoint…). **Read this first, then open the files it
 - **Fix a Bluetooth / pairing bug** → [hid](modules/hid.md), `docs/bluetooth-troubleshooting.md`
 - **Fix a PC-side bug (Teams, Outlook, screen…)** → [link-script](modules/link-script.md)
 - **Add a key icon** → [recipes](recipes.md#add-a-key-icon)
+- **Add / change a theme (colours, caps, backdrop)** → [recipes](recipes.md#add-a-theme), `ui/Theme.kt`, [ui](modules/ui.md)
 - **Ship a release** → [recipes](recipes.md#release)
 - **Build & try on the tablet** → [recipes](recipes.md#build-and-install-on-a-tablet)
 

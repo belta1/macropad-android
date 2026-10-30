@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Themes** (⚙ → Theme), each with its own keycaps, colors and scenery behind the keys:
+  *Graphite* (as before), *Synthwave* (neon-tube keys whose icons and labels glow, over a striped
+  sun and a neon grid), *Phosphor* (a green-screen terminal: outlined keys, scanlines, monospaced
+  labels), *Arctic* (frosted slate under the northern lights), *Ember* (charcoal over glowing
+  coals) and *Sakura* (plum night, falling blossoms). Every page and dialog follows the theme; the
+  eight key colors become the theme's own, so your layout stays as it is and looks right in each.
 - **Python page** for classes and demos: create / activate / deactivate a `.venv`, install from
   `requirements.txt`, freeze, pip list / install / upgrade, run a script, the Python shell, clear,
   Ctrl+C. Hold *Create venv* to also activate it, hold *Activate venv* to first allow scripts in
@@ -24,6 +30,11 @@
 More through the PC link ([docs/pc-link.md](docs/pc-link.md)); update
 `tools/macropad-link.ps1` on the computer too.
 
+- **Only computers you allow get the PC link.** Any device paired with the tablet could open its
+  serial port; now a computer not seen before waits while the tablet asks *Allow … to use the PC
+  link?*, and refused ones are turned away. ⚙ → Connection → *PC link computers* lists them. Your
+  own computer is asked about once after updating. The script is unchanged.
+
 - **PC clipboard** page: your last copies on the computer, each key showing its text and typing it
   (so it also reaches a Citrix session without a shared clipboard). `{pcclipboard}` /
   `{pcclipboard:N}` in any `text:` step. Copies a password manager or an incognito window marks
@@ -36,7 +47,8 @@ More through the PC link ([docs/pc-link.md](docs/pc-link.md)); update
 - **Real volume**: with the PC link the dock's volume slider sits at the computer's level and drags
   to a level. **Mixer** page: a slider per app playing sound.
 - **Media card** in the dock: what's playing (title over artist) with ⏮ ⏯ ⏭; tapping the text
-  plays / pauses too. It replaces the dock's Previous / Play / Pause / Next keys.
+  plays / pauses too. It replaces the dock's Previous / Play / Pause / Next keys. A bar under the
+  artist shows how far the song or video has played ("1:23 / 3:45"), when its app tells Windows.
 - **The dock runs along the whole bottom**, under the sidebar too: desktop switching, the volume
   slider, the media card. Existing docks change once (repeated desktop keys go).
 - **The terminal's venv and folder** on the Python page's *Which Python* key, with the new shell

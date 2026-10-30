@@ -13,7 +13,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import dev.belta.macropad.model.MacroButton
-import dev.belta.macropad.model.Palette
 import dev.belta.macropad.pc.PcStatus
 import dev.belta.macropad.ui.Ui.Companion.MUTED
 import dev.belta.macropad.ui.Ui.Companion.TEXT
@@ -89,7 +88,7 @@ class MixerView(
     private fun column(index: Int, c: Channel) = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER_HORIZONTAL
-        val color = if (c.app == null) Palette.colors[0] else Palette.colors[Math.floorMod(c.app.hashCode(), Palette.colors.size)]
+        val color = if (c.app == null) Ui.ACCENTS[0] else Ui.ACCENTS[Math.floorMod(c.app.hashCode(), Ui.ACCENTS.size)]
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL

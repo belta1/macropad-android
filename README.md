@@ -30,9 +30,12 @@ Windows laptops/desktops.
 - **Sidebar** on every page: status, Record, Edit, Settings, ⇄, and action keys (Away, Lock PC, Work
   Citrix — a login filled in from encrypted **saved values**, see ⚙ → Saved values).
 - **App icons on the tabs** (long-press a tab to rename it or change its icon).
+- **Themes** (⚙ → Theme): *Graphite*, *Synthwave* (glowing neon keys over a sunset grid),
+  *Phosphor* (green-screen terminal), *Arctic*, *Ember* and *Sakura*. A theme restyles the keycaps,
+  colors, fonts and the backdrop behind the keys; your layout doesn't change.
 - **Dock** along the whole bottom, on every page: virtual-desktop switching (Prev desktop · Task
   view · Next desktop), a volume slider (its speaker mutes), the media card: what's playing on
-  the computer (PC link) with ⏮ ⏯ ⏭, and **Dictate**: speak, check the text, type it on the
+  the computer (PC link) and how far it has played, with ⏮ ⏯ ⏭, and **Dictate**: speak, check the text, type it on the
   computer (into Citrix too).
 - **Trackpad page**: pointer with acceleration, tap / two-finger tap to click / right-click,
   two-finger or edge-strip scrolling, long-press to drag, plus editable click/scroll keys.
@@ -183,7 +186,8 @@ app/src/main/java/dev/belta/macropad/
                        HidReports (report descriptor + builders), HidKeys, KeyboardLayout
   model/               Macro (parser), Layout + LayoutJson, DefaultLayout, MacroStore, AppSettings
   ui/                  KeyViews, KeyCap (keycap drawing), KeyEditor, Recorder, TrackpadView, SliderView,
-                       Dialogs, MenuDialog (menu rows), Ui (theme), Icons, AppIcons
+                       Dialogs, MenuDialog (menu rows), Ui (colors of the theme in use), Theme (the
+                       themes), ThemeDrawables (glowing icons, backdrops, picker samples), Icons, AppIcons
 app/src/test/          Unit tests (macro parser, keyboard layouts, HID reports, layout JSON)
 tools/gen_icons.py     Regenerates res/drawable/ic_k_*.xml and ui/Icons.kt
 ```

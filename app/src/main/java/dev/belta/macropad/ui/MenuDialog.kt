@@ -2,7 +2,11 @@ package dev.belta.macropad.ui
 
 import android.app.AlertDialog
 import android.content.DialogInterface
+import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.drawable.InsetDrawable
+import android.graphics.drawable.RippleDrawable
+import android.graphics.drawable.StateListDrawable
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
@@ -10,15 +14,22 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.AbsListView
 import android.widget.BaseAdapter
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ListAdapter
 import android.widget.TextView
 import dev.belta.macropad.R
+import dev.belta.macropad.ui.Ui.Companion.DIALOG
 import dev.belta.macropad.ui.Ui.Companion.FAINT
+import dev.belta.macropad.ui.Ui.Companion.HAIRLINE
+import dev.belta.macropad.ui.Ui.Companion.HAIRLINE_STRONG
+import dev.belta.macropad.ui.Ui.Companion.INK
 import dev.belta.macropad.ui.Ui.Companion.MUTED
+import dev.belta.macropad.ui.Ui.Companion.PLATE
 import dev.belta.macropad.ui.Ui.Companion.RAISED
 import dev.belta.macropad.ui.Ui.Companion.RED
 import dev.belta.macropad.ui.Ui.Companion.TEXT
+import dev.belta.macropad.ui.Ui.Companion.blend
 import dev.belta.macropad.ui.Ui.Companion.lighten
 
 /**
@@ -76,7 +87,48 @@ class MenuDialogBuilder(private val ui: Ui) : AlertDialog.Builder(ui.context, R.
                 })
             })
         }
-        return super.create()
+        return super.create().also(::applyTheme)
+    }
+
+    /**
+     * themes.xml holds one set of dialog colors (Graphite's); the theme in use recolors the dialog
+     * here. Creating it now builds its title, message and buttons, so they can be recolored too.
+     */
+    private fun applyTheme(dialog: AlertDialog) {
+        dialog.create()
+        dialog.window?.setBackgroundDrawable(InsetDrawable(ui.roundRect(DIALOG, ui.dpf(20f)).apply {
+            setStroke(ui.dp(1), HAIRLINE)
+        }, ui.dp(16)))
+        val titleId = ui.context.resources.getIdentifier("alertTitle", "id", "android")
+        if (titleId != 0) dialog.findViewById<TextView>(titleId)?.apply { setTextColor(TEXT); typeface = ui.fontTitle }
+        dialog.findViewById<TextView>(android.R.id.message)?.apply { setTextColor(TEXT); typeface = ui.fontBody }
+        for (which in listOf(DialogInterface.BUTTON_POSITIVE, DialogInterface.BUTTON_NEGATIVE, DialogInterface.BUTTON_NEUTRAL)) {
+            val button = dialog.getButton(which) ?: continue
+            button.typeface = ui.fontLabel
+            if (which == DialogInterface.BUTTON_POSITIVE) {
+                // The main button: the brightest thing in the dialog, in dark ink.
+                button.setTextColor(INK)
+                button.background = RippleDrawable(ColorStateList.valueOf(0x33000000),
+                    InsetDrawable(ui.roundRect(TEXT, ui.dpf(12f)), 0, ui.dp(6), 0, ui.dp(6)), null)
+            } else {
+                button.setTextColor(TEXT)
+            }
+        }
+        dialog.window?.decorView?.let(::applyThemeToFields)
+    }
+
+    private fun applyThemeToFields(view: View) {
+        when (view) {
+            is EditText -> {
+                view.setTextColor(TEXT)
+                view.setHintTextColor(blend(MUTED, FAINT, 0.5f))
+                view.background = StateListDrawable().apply {
+                    addState(intArrayOf(android.R.attr.state_focused), ui.roundRect(PLATE, ui.dpf(10f)).apply { setStroke(ui.dp(2), TEXT) })
+                    addState(intArrayOf(), ui.roundRect(PLATE, ui.dpf(10f)).apply { setStroke(ui.dp(1), HAIRLINE_STRONG) })
+                }
+            }
+            is ViewGroup -> for (i in 0 until view.childCount) applyThemeToFields(view.getChildAt(i))
+        }
     }
 
     override fun setItems(items: Array<out CharSequence>?, listener: DialogInterface.OnClickListener?): AlertDialog.Builder =
@@ -178,7 +230,7 @@ private class MenuAdapter(private val ui: Ui, labels: List<String>, var checked:
 
         /** Matched in order against the lower-case title; the first hit wins. */
         val ICONS = listOf(
-            "reset on/off" to "refresh", "grid" to "table", "sidebar" to "sidebar",
+            "reset on/off" to "refresh", "theme" to "palette", "grid" to "table", "sidebar" to "sidebar",
             "keyboard layout" to "keyboard", "key timing" to "tune", "computers" to "desktop",
             "volume" to "volume_up", "saved values" to "bookmark", "pages shown" to "document",
             "pages" to "document", "start page" to "star", "backup" to "save", "startup" to "bolt",

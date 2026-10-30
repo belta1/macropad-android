@@ -93,6 +93,11 @@ class AppSettings(context: Context) {
         get() = prefs.getInt("screen_monitor", 0)
         set(value) = prefs.edit().putInt("screen_monitor", value).apply()
 
+    /** The look of the macropad (`ui.Themes` id); null = the original Graphite. */
+    var theme: String?
+        get() = prefs.getString("theme", null)
+        set(value) = prefs.edit().putString("theme", value).apply()
+
     var sidebarLeft: Boolean
         get() = prefs.getBoolean("sidebar_left", false)
         set(value) = prefs.edit().putBoolean("sidebar_left", value).apply()

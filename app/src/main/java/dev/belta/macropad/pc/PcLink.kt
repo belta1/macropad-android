@@ -24,10 +24,16 @@ import java.util.concurrent.atomic.AtomicInteger
  * venv, runs the tablet's `pc:` steps and switches windows / sets volumes ([PcProtocol],
  * docs/pc-link.md).
  *
- * One computer at a time; when it goes away the port waits for the next one.
+ * One computer at a time; when it goes away the port waits for the next one. Only computers
+ * allowed on the tablet ([PcComputers]) get the link; a new one waits while the tablet asks.
  */
 @SuppressLint("MissingPermission")
-class PcLink(private val adapter: BluetoothAdapter, private val appVersion: String, private val log: (String) -> Unit) {
+class PcLink(
+    private val adapter: BluetoothAdapter,
+    private val appVersion: String,
+    private val computers: PcComputers,
+    private val log: (String) -> Unit,
+) {
 
     interface Listener {
         /** Null when no computer has the port open. */
@@ -42,6 +48,24 @@ class PcLink(private val adapter: BluetoothAdapter, private val appVersion: Stri
         fun onSlideImage() {}
         /** The file asked for with [typeFile] request [id]. */
         fun onFileText(id: Int, name: String, text: String) {}
+        /** A computer not asked about yet opened the port and waits ([decide]); null once it no longer does. */
+        fun onPcApproval(computer: PcComputer?) {}
+    }
+
+    /** The computer waiting to be allowed or refused, if any. */
+    @Volatile var pending: PcComputer? = null
+        private set
+
+    /** Allows or refuses [computer] for good (⚙ → Connection → PC link computers changes it). */
+    fun decide(computer: PcComputer, allow: Boolean) {
+        computers.set(computer.address, computer.name, allow)
+        recheck()
+    }
+
+    /** The decisions changed: a connected computer no longer allowed loses the link. */
+    fun recheck() {
+        val client = socket ?: return
+        if (computers.allowed(client.remoteDevice.address) != true) runCatching { client.close() }
     }
 
     /** Pictures of PowerPoint's slides by number (1-based), for the presentation and version in [PcStatus.slides]. */
@@ -279,9 +303,36 @@ class PcLink(private val adapter: BluetoothAdapter, private val appVersion: Stri
             // One computer at a time: stop listening while it's connected.
             runCatching { listening.close() }
             if (gen != generation) { runCatching { client.close() }; break }
-            serve(client)
+            if (admit(client, gen)) serve(client) else runCatching { client.close() }
         }
         stopped(gen)
+    }
+
+    /**
+     * Whether [client] gets the link: allowed before, or allowed on the tablet within [ASK_MS]. Until
+     * then nothing is sent to it and what it sends waits unread; the port stays taken meanwhile.
+     */
+    private fun admit(client: BluetoothSocket, gen: Int): Boolean {
+        val device = client.remoteDevice
+        val name = runCatching { device.name }.getOrNull() ?: device.address
+        when (computers.allowed(device.address)) {
+            true -> return true
+            false -> { log("PC link: turned $name away (refused on the tablet)"); return false }
+            null -> {}
+        }
+        log("PC link: $name opened the port; asking on the tablet whether to allow it")
+        val computer = PcComputer(device.address, name)
+        pending = computer
+        main.post { listener?.onPcApproval(computer) }
+        val until = SystemClock.uptimeMillis() + ASK_MS
+        while (gen == generation && computers.allowed(device.address) == null && SystemClock.uptimeMillis() < until) {
+            runCatching { Thread.sleep(250) }
+        }
+        pending = null
+        main.post { listener?.onPcApproval(null) }
+        val allowed = gen == generation && computers.allowed(device.address) == true
+        if (!allowed) log("PC link: $name not allowed; closed")
+        return allowed
     }
 
     private fun stopped(gen: Int) {
@@ -364,5 +415,7 @@ class PcLink(private val adapter: BluetoothAdapter, private val appVersion: Stri
         val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         const val PING_MS = 30_000L
         const val RETRY_MS = 5_000L
+        /** How long a new computer waits to be allowed; under the script's 90 s silence timeout. */
+        const val ASK_MS = 80_000L
     }
 }

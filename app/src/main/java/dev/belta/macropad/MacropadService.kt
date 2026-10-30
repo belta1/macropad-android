@@ -22,6 +22,8 @@ import dev.belta.macropad.hid.KeyboardLayout
 import dev.belta.macropad.hid.keyboardLayoutForWindowsId
 import dev.belta.macropad.model.AppSettings
 import dev.belta.macropad.model.ComputerProfiles
+import dev.belta.macropad.pc.PcComputer
+import dev.belta.macropad.pc.PcComputers
 import dev.belta.macropad.pc.PcLink
 import dev.belta.macropad.pc.PcStatus
 
@@ -41,6 +43,9 @@ class MacropadService : Service() {
     /** The PC link (serial port beside the Classic keyboard); null until it first starts. */
     var pc: PcLink? = null
         private set
+    /** Computers allowed or refused the PC link. */
+    lateinit var pcComputers: PcComputers
+        private set
     private val pcListeners = LinkedHashSet<PcLink.Listener>()
     private val binder = LocalBinder()
 
@@ -52,7 +57,8 @@ class MacropadService : Service() {
         super.onCreate()
         settings = AppSettings(this)
         profiles = ComputerProfiles(this)
-        hid = HidPeripheral(applicationContext)
+        pcComputers = PcComputers(this)
+        hid =HidPeripheral(applicationContext)
         hid.customName = { profiles[it].name }
         hid.deviceName = settings.bluetoothName
         hid.transportSetting = settings.transport
@@ -100,10 +106,11 @@ class MacropadService : Service() {
         listeners -= listener
     }
 
-    /** Also tells [listener] the current status at once. */
+    /** Also tells [listener] the current status, and the computer waiting to be allowed, at once. */
     fun addPcListener(listener: PcLink.Listener) {
         pcListeners += listener
         listener.onPcStatus(pc?.status)
+        pc?.pending?.let { listener.onPcApproval(it) }
     }
 
     fun removePcListener(listener: PcLink.Listener) {
@@ -116,7 +123,7 @@ class MacropadService : Service() {
         val ready = state == HidPeripheral.State.ADVERTISING || state == HidPeripheral.State.CONNECTED
         if (!ready || hid.activeTransport != HidPeripheral.Transport.CLASSIC) return
         val link = pc ?: getSystemService(BluetoothManager::class.java)?.adapter
-            ?.let { PcLink(it, BuildConfig.VERSION_NAME, hid::event) }
+            ?.let { PcLink(it, BuildConfig.VERSION_NAME, pcComputers, hid::event) }
             ?.also { it.listener = pcFanOut; pc = it }
             ?: return
         link.start()
@@ -134,6 +141,7 @@ class MacropadService : Service() {
         override fun onRecorded(step: String) = pcListeners.toList().forEach { it.onRecorded(step) }
         override fun onSlideImage() = pcListeners.toList().forEach { it.onSlideImage() }
         override fun onFileText(id: Int, name: String, text: String) = pcListeners.toList().forEach { it.onFileText(id, name, text) }
+        override fun onPcApproval(computer: PcComputer?) = pcListeners.toList().forEach { it.onPcApproval(computer) }
     }
 
     /** The layout the PC link last reported (one this app can type with), else null. */

@@ -9,7 +9,6 @@ import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
-import dev.belta.macropad.model.Palette
 import dev.belta.macropad.ui.Ui.Companion.darken
 import dev.belta.macropad.ui.Ui.Companion.lighten
 
@@ -61,7 +60,7 @@ object AppIcons {
 
     /** Icon [key], or a tile with the page name's first letter when it is unknown. */
     fun drawable(ui: Ui, key: String?, pageName: String): Drawable = AppIconDrawable(ui,
-        specs[key] ?: Spec.Tile(Palette.colors[Math.floorMod(pageName.hashCode(), Palette.colors.size)],
+        specs[key] ?: Spec.Tile(Ui.ACCENTS[Math.floorMod(pageName.hashCode(), Ui.ACCENTS.size)],
             letter = pageName.trim().take(1).uppercase().ifEmpty { "?" }))
 
     private class AppIconDrawable(private val ui: Ui, private val spec: Spec) : Drawable() {

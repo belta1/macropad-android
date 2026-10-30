@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothAdapter
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Outline
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -14,6 +15,9 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.text.InputType
 import android.text.method.PasswordTransformationMethod
 import android.util.TypedValue
@@ -28,6 +32,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import dev.belta.macropad.BuildConfig
 import dev.belta.macropad.MacropadService
+import dev.belta.macropad.R
 import dev.belta.macropad.hid.DeviceQuirks
 import dev.belta.macropad.hid.HidPeripheral
 import dev.belta.macropad.hid.KeyTiming
@@ -44,6 +49,7 @@ import dev.belta.macropad.model.PageUsage
 import dev.belta.macropad.model.SecretStore
 import dev.belta.macropad.model.TextVariables
 import dev.belta.macropad.net.Updater
+import dev.belta.macropad.pc.PcComputer
 import dev.belta.macropad.ui.Ui.Companion.GREEN
 import dev.belta.macropad.ui.Ui.Companion.MUTED
 import dev.belta.macropad.ui.Ui.Companion.RED
@@ -74,6 +80,8 @@ interface MacropadHost {
     fun profilesChanged()
     /** [AppSettings.screenShift] changed. */
     fun screenShiftChanged()
+    /** [AppSettings.theme] changed: everything is built again in the new look. */
+    fun themeChanged()
     /** Runs [action] once the PIN (if any) has been entered. */
     fun withUnlock(action: () -> Unit)
     /** How much each page is used. */
@@ -92,6 +100,7 @@ class Dialogs(private val host: MacropadHost) {
     fun settings() {
         val items = listOfNotNull(
             if (host.toggledKeys > 0) "Reset ON/OFF keys (${host.toggledKeys} on)" to host::resetToggles else null,
+            "Theme: ${Ui.theme.name}…" to ::themes,
             "Grid size (${host.layout.rows} × ${host.layout.cols})" to ::gridSize,
             "Sidebar: ${if (host.settings.sidebarLeft) "left" else "right"}" to {
                 host.settings.sidebarLeft = !host.settings.sidebarLeft
@@ -206,11 +215,48 @@ class Dialogs(private val host: MacropadHost) {
                     else "New mail no longer shows on the tablet")
             },
             "Record the computer's keyboard and mouse (experimental): ${if (settings.recordPcKeyboard) "on" else "off"}" to ::recordPcKeyboard,
+            host.service?.pcComputers?.let { computers ->
+                "PC link computers (${computers.all().count { it.allowed == true }} allowed)…" to ::pcComputers
+            },
             host.pcScriptState()?.let { "PC link script: $it" to host::updatePcScript },
         )
         ui.dialog()
             .setTitle("Connection")
             .setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }
+            .show()
+    }
+
+    /** Computers allowed or refused the PC link; tap one to change it. */
+    private fun pcComputers() {
+        val service = host.service ?: return
+        val computers = service.pcComputers.all()
+        if (computers.isEmpty()) {
+            return ui.toast("No computer has opened the PC link yet; the tablet asks when one does")
+        }
+        val labels = computers.map { "${it.name}  ·  ${if (it.allowed == true) "allowed" else "refused"}" }
+        ui.dialog()
+            .setTitle("PC link computers")
+            .setMessage("A computer paired with the tablet gets the PC link only once allowed here; a new one is asked about when it opens the port.")
+            .setItems(labels.toTypedArray()) { _, i -> pcComputer(computers[i]) }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun pcComputer(computer: PcComputer) {
+        val service = host.service ?: return
+        val change = { allow: Boolean? ->
+            if (allow == null) service.pcComputers.forget(computer.address)
+            else service.pcComputers.set(computer.address, computer.name, allow)
+            service.pc?.recheck()
+            pcComputers()
+        }
+        ui.dialog()
+            .setTitle(computer.name)
+            .setMessage("${computer.address} · ${if (computer.allowed == true) "allowed" else "refused"} to use the PC link. " +
+                "Forgotten, it is asked about again the next time it opens the port.")
+            .setPositiveButton(if (computer.allowed == true) "Refuse" else "Allow") { _, _ -> change(computer.allowed != true) }
+            .setNeutralButton("Forget") { _, _ -> change(null) }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
@@ -644,6 +690,65 @@ class Dialogs(private val host: MacropadHost) {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    /** Every theme with a few of its keys; picking one rebuilds the screen in it. */
+    private fun themes() {
+        val list = LinearLayout(ui.context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ui.dp(12), ui.dp(4), ui.dp(12), ui.dp(4))
+        }
+        val dialog = ui.dialog()
+            .setTitle("Theme")
+            .setView(ScrollView(ui.context).apply { addView(list) })
+            .setNegativeButton("Close", null)
+            .create()
+        for (theme in Themes.all) {
+            val current = theme.id == Ui.theme.id
+            list.addView(LinearLayout(ui.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(ui.dp(10), ui.dp(8), ui.dp(14), ui.dp(8))
+                background = ui.pressable(if (current) RAISED else Color.TRANSPARENT, ui.dp(14).toFloat())
+                contentDescription = "${theme.name}: ${theme.blurb}"
+                addView(View(context).apply {
+                    background = ThemeSample(ui, theme)
+                    clipToOutline = true
+                    outlineProvider = object : ViewOutlineProvider() {
+                        override fun getOutline(view: View, outline: Outline) =
+                            outline.setRoundRect(0, 0, view.width, view.height, ui.dpf(10f))
+                    }
+                }, LinearLayout.LayoutParams(ui.dp(200), ui.dp(68)))
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(ui.dp(16), 0, ui.dp(8), 0)
+                    addView(TextView(context).apply {
+                        text = theme.name
+                        // Each name in its theme's own font.
+                        typeface = if (theme.mono) Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                            else context.resources.getFont(R.font.barlow_sc_semibold)
+                        setTextColor(Ui.TEXT)
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
+                    })
+                    addView(TextView(context).apply {
+                        text = theme.blurb
+                        typeface = ui.fontBody
+                        setTextColor(MUTED)
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                    })
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                if (current) addView(ui.icon("check", Ui.TEXT), LinearLayout.LayoutParams(ui.dp(22), ui.dp(22)))
+                setOnClickListener {
+                    dialog.dismiss()
+                    if (current) return@setOnClickListener
+                    host.settings.theme = theme.id
+                    host.themeChanged()
+                }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = ui.dp(4)
+            })
+        }
+        dialog.show()
     }
 
     // ---------------------------------------------------------------- pages

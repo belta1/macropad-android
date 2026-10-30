@@ -15,7 +15,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import dev.belta.macropad.model.Palette
 import dev.belta.macropad.pc.PcStatus
 import dev.belta.macropad.pc.PcWindow
 import dev.belta.macropad.ui.Ui.Companion.MUTED
@@ -94,7 +93,7 @@ class WindowSwitcherView(
     @SuppressLint("ClickableViewAccessibility")
     private fun tile(window: PcWindow, front: Boolean): View {
         // Each app has its own color, like the fallback tab icons.
-        val color = Palette.colors[Math.floorMod(window.exe.hashCode(), Palette.colors.size)]
+        val color = Ui.ACCENTS[Math.floorMod(window.exe.hashCode(), Ui.ACCENTS.size)]
         val cap = KeyCap(ui, color, lit = front)
         val ink = if (front) inkOn(color) else TEXT
         val key = LinearLayout(context).apply {

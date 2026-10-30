@@ -99,6 +99,7 @@ object Icons {
         "swap" to R.drawable.ic_k_swap,
         "bolt" to R.drawable.ic_k_bolt,
         "star" to R.drawable.ic_k_star,
+        "palette" to R.drawable.ic_k_palette,
         "settings" to R.drawable.ic_k_settings,
         "record" to R.drawable.ic_k_record,
         "check" to R.drawable.ic_k_check,

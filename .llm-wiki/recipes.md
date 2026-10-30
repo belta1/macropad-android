@@ -76,8 +76,18 @@ New installs get `DefaultLayout.layout()`; existing users keep their saved layou
 
 ## Add a key icon
 
-1. Add `"name": "<24x24 SVG path>"` to `icons` in `tools/gen_icons.py`.
+1. Add `"name": "<24x24 SVG path>"` to `icons` in `tools/gen_icons.py` (one path; join subpaths).
 2. `python3 tools/gen_icons.py` → regenerates `app/src/main/res/drawable/ic_k_*.xml` and `ui/Icons.kt`.
+   It **deletes** every `ic_k_*.xml` first, so an icon missing from `icons` disappears — check
+   `git status` afterwards.
+
+## Add a theme
+
+1. `ui/Theme.kt`: a `Theme(...)` in `Themes` (all colours, 8 `accents` in palette order: blue, green,
+   amber, red, purple, cyan, yellow, grey) and add it to `Themes.all`.
+2. New cap style → `Caps` + a `draw…` branch in `ui/KeyCap.kt` (and `ThemeSample`); new scenery →
+   `Backdrop` + a branch in `ThemeBackdrop`.
+3. `./gradlew testDebugUnitTest --tests "dev.belta.macropad.ui.ThemesTest"` (contrast checks).
 
 ## Debug a Bluetooth reconnect problem
 

@@ -174,6 +174,17 @@ class PcProtocolTest {
         assertEquals(PcMessage.Media(PcMedia("Song", null, playing = true)), PcProtocol.parse("""{"t":"media","title":"Song","playing":true}"""))
         assertEquals(PcMessage.Media(null), PcProtocol.parse("""{"t":"media"}"""))
         assertTrue(PcProtocol.apply(PcStatus(), PcMessage.Media(null)).hasMedia)
+        // How far it has played, moving on from when the tablet heard it while playing.
+        val song = (PcProtocol.parse("""{"t":"media","title":"Song","playing":true,"length":200.5,"position":61.2}""") as PcMessage.Media).media!!
+        val timeline = song.timeline!!
+        assertEquals(200.5, timeline.length, 0.0)
+        assertEquals(61.2, timeline.position, 0.0)
+        assertEquals(71.2, timeline.positionAt(timeline.at + 10_000, playing = true), 1e-9)
+        assertEquals(61.2, timeline.positionAt(timeline.at + 10_000, playing = false), 0.0)
+        assertEquals(200.5, timeline.positionAt(timeline.at + 1_000_000, playing = true), 0.0)
+        // No timeline (a length of 0, or none); a position past the end is the end.
+        assertNull((PcProtocol.parse("""{"t":"media","title":"Live","playing":true,"length":0,"position":5}""") as PcMessage.Media).media!!.timeline)
+        assertEquals(30.0, (PcProtocol.parse("""{"t":"media","title":"S","length":30,"position":45}""") as PcMessage.Media).media!!.timeline!!.position, 0.0)
 
         assertEquals(PcMessage.Shell(PcShell("E:\\shop", "E:\\shop\\.venv", "3.12.1")),
             PcProtocol.parse("""{"t":"shell","cwd":"E:\\shop","venv":"E:\\shop\\.venv","python":"3.12.1"}"""))

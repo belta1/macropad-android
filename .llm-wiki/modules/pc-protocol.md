@@ -15,6 +15,9 @@ description: `docs/pc-link.md`. **A change here usually lands on both sides in t
 - Bluetooth **SPP** (UUID `00001101-…-00805F9B34FB`, service name in `PcLink`). The tablet is the
   RFCOMM **server** (`PcLink.acceptLoop`); Windows exposes it as an **Outgoing** COM port that the
   script opens (`Find-Port` / `Open-Link`). Only on Classic-Bluetooth tablets, not Fire.
+- Secure RFCOMM: Bluetooth encrypts it and only paired devices connect. The tablet additionally
+  admits only computers allowed on it (`PcComputers`, see [pc-link](pc-link.md)) — no handshake
+  on the wire; an unknown computer just gets silence until allowed.
 - **One JSON object per line, UTF-8; `"t"` names the message.** Requests that want an answer carry
   an integer `id`; the script answers `{"t":"result","id":N,"ok":bool,"error":str?}`.
 - `$ProtocolVersion` (script) = `PcProtocol.VERSION` (app) = 1. Compatibility comes from
@@ -33,7 +36,7 @@ description: `docs/pc-link.md`. **A change here usually lands on both sides in t
 | `clip` | `text` | clipboard history (max 20) |
 | `windows` / `icon` | `list[{id,exe,app,title}], front` / `exe, png`(b64, sent once before first use) | Switcher page |
 | `volume` | `level, muted, apps[]` | dock slider, Mixer |
-| `media` / `shell` | `title, artist, playing` / `cwd, venv, python` | media card, `{venv}` |
+| `media` / `shell` | `title, artist, playing`, `length`+`position` s (only when the app reports a timeline; resent on change/seek, not while playing — the tablet extrapolates via `PcTimeline.positionAt`) / `cwd, venv, python` | media card + `ui/MediaProgressView.kt`, `{venv}` |
 | `monitors` / `frame` | `list[{n,w,h,primary}]` / `seq, w, h, tiles[], end, cx, cy, view` | Screen page; tablet acks `screen-ack` with `seq` after `end` (flow control) |
 | `lock`, `keyboard`, `badges`, `mail` | `locked` / `klid` / `counts{}` / `from, subject, count` | dim, typing layout, tab badges, mail banner |
 | `slides` / `slide-image` | `file, slide, count, title, notes, state, show, v`, `kind` (`"html"` = browser deck, absent = PowerPoint), `app` (exe showing it) / `file, n, v, jpg` | Presenter page (`PcSlides.html`, `.app`) |

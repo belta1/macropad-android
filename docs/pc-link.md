@@ -49,7 +49,8 @@ Through it:
   **Mixer** page has a slider per app playing sound (Teams, Spotify, a browser…), like Windows'
   volume mixer.
 - **What's playing** (title and artist, from Windows' media controls) on the dock's media card,
-  next to its ⏮ ⏯ ⏭.
+  next to its ⏮ ⏯ ⏭, with a bar of how far it has played and its length ("1:23 / 3:45") when the
+  app tells Windows (Spotify, YouTube and most players in Chrome or Edge do; a live stream has none).
 - **The terminal's venv and folder** on the Python page, with the [shell hook](#the-terminals-venv).
 
 Without the script (or on a Fire tablet, which has no Classic Bluetooth) everything works as
@@ -71,8 +72,10 @@ before. Teams keys send their keyboard shortcuts, and their lights are ordinary 
    powershell -ExecutionPolicy Bypass -File tools\macropad-link.ps1 -Verbose
    ```
 
-   It finds the port by itself; use `-Port COM5` if it doesn't. ⚙ → Diagnostics on the tablet then
-   shows `PC link: <computer> ✓`.
+   It finds the port by itself; use `-Port COM5` if it doesn't. The first time, the tablet asks
+   **Allow <computer> to use the PC link?**: tap *Allow* (see [Which computers get the
+   link](#which-computers-get-the-link)). ⚙ → Diagnostics on the tablet then shows
+   `PC link: <computer> ✓`.
 4. **Start it with Windows:**
 
    ```powershell
@@ -94,6 +97,22 @@ before. Teams keys send their keyboard shortcuts, and their lights are ordinary 
 6. **Outlook**: classic Outlook just needs to be open. The script never starts it. The new
    Outlook has no calendar access for scripts; the clock then keeps using Home Assistant's
    calendar (saved value `ha_calendar`), if set.
+
+## Which computers get the link
+
+The link travels over Bluetooth, which encrypts it and only lets devices paired with the tablet
+open the port. Any of them could, though: another computer you paired once, a colleague's
+laptop. So the tablet keeps its own list:
+
+- A computer it hasn't seen before waits (up to 80 s, nothing is sent to it) while the tablet
+  asks **Allow <computer> to use the PC link?** *Allow* (the PIN, if set, is asked first) lets it
+  in from then on; *Refuse* turns it away from then on, without asking; *Not now* asks again
+  when it next opens the port.
+- ⚙ → Connection → **PC link computers** lists them; tap one to allow, refuse or forget it.
+  Refusing the connected computer closes its link at once.
+
+The script needs no changes: a computer turned away just keeps trying, as when the tablet is out
+of reach.
 
 ## Pages for apps
 
@@ -356,7 +375,8 @@ once more.
   device whose name contains `Macropad`; use `-Device "<name>"` if you renamed it (⚙ →
   Connection → Bluetooth name).
 - The port opens but nothing happens: check that ⚙ → Diagnostics → Connection is *Classic
-  Bluetooth*. The PC link needs the Classic keyboard.
+  Bluetooth*. The PC link needs the Classic keyboard. Then check ⚙ → Connection → PC link
+  computers: a computer refused there is turned away (the tablet's log says so).
 - Teams keys still jump to Teams: the script isn't connected to Teams (Diagnostics shows
   `Teams —`). Check step 5 and that new Teams is running.
 - Only one copy runs at a time. A second one says so and exits.

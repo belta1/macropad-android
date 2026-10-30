@@ -21,6 +21,7 @@ import dev.belta.macropad.model.LiveLabels
 import dev.belta.macropad.model.MacroButton
 import dev.belta.macropad.model.Macro
 import dev.belta.macropad.model.Page
+import dev.belta.macropad.pc.PcMedia
 import dev.belta.macropad.ui.Ui.Companion.HAIRLINE_STRONG
 import dev.belta.macropad.ui.Ui.Companion.MUTED
 import dev.belta.macropad.ui.Ui.Companion.PLATE
@@ -59,7 +60,8 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
     /**
      * [stateful] keys (toggles, and lock keys showing the computer's Caps / Num Lock) get the
      * indicator light; [toggledOn] lights it and fills the cap. A slider with a [sliderLevel]
-     * (0–100) is absolute and shows that level ([SliderView]).
+     * (0–100) is absolute and shows that level ([SliderView]). The media card shows how far
+     * [media] has played, when its app says.
      */
     @SuppressLint("ClickableViewAccessibility")
     fun build(
@@ -67,11 +69,11 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
         compact: Boolean, editing: Boolean, toggledOn: Boolean = false, emphasize: Boolean = false,
         iconOnly: Boolean = false, showHint: Boolean = true, small: Boolean = false,
         stateful: Boolean = button?.toggle == true, sliderLevel: Int? = null, sliderMuted: Boolean = false,
-        card: Boolean = false,
+        card: Boolean = false, media: PcMedia? = null,
     ): View {
         // Sliders are dragged; in edit mode they show as a normal key so a tap opens the editor.
         if (button != null && !editing && Macro.slider(button.action) != null) {
-            return SliderView(ui, button, KeyCap(ui, button.color, lit = false), compact,
+            return SliderView(ui, button, KeyCap(ui, Ui.accent(button.color), lit = false), compact,
                 onTap = { listener.onSlideTap(page, index, button) },
                 level = sliderLevel, muted = sliderMuted,
                 onLevel = { level, done -> listener.onSlideLevel(page, index, button, level, done) }) { up ->
@@ -93,44 +95,52 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
             key.addView(ui.icon("add", MUTED), LinearLayout.LayoutParams(ui.sdp(26), ui.sdp(26)))
         } else {
             val lit = stateful && toggledOn
-            key.background = KeyCap(ui, button.color, lit, led = if (stateful) toggledOn else null, editing = editing,
+            val color = Ui.accent(button.color)
+            key.background = KeyCap(ui, color, lit, led = if (stateful) toggledOn else null, editing = editing,
                 dye = if (emphasize) 0.16f else 0.035f)
             // Legends sit on the cap's face, not its skirt.
             val side = cap.insetSide.toInt() + ui.dp(if (compact) 8 else 12)
             key.setPadding(side, cap.insetTop.toInt() + ui.dp(if (compact) 4 else 11), side,
                 cap.insetBottom.toInt() + ui.dp(if (compact) 2 else 9))
 
-            val ink = inkOn(button.color)
-            val iconTint = if (lit) ink else legendTone(button.color)
+            val ink = inkOn(color)
+            val iconTint = if (lit) ink else legendTone(color)
             val textColor = if (lit) ink else TEXT
             val hintColor = if (lit) withAlpha(ink, 0.75f) else MUTED
+            // On themes that glow, legends glow in the key's color (not on a lit key's bright face).
+            val halo = if (lit) null else color
             val iconRes = Icons.get(button.icon)
             var alignStart = false
             when {
                 compact && iconOnly && iconRes != null ->
-                    key.addView(ui.icon(button.icon!!, iconTint), LinearLayout.LayoutParams(ui.sdp(28), ui.sdp(28)))
+                    key.addView(ui.legendIcon(button.icon!!, iconTint, halo), LinearLayout.LayoutParams(ui.sdp(28), ui.sdp(28)))
                 compact && (card || '\n' in button.label) -> {
                     // A card (what's playing): the icon, then the first line over the second, muted.
                     // The media card has ⏮ ⏯ ⏭ at its end instead of the icon.
                     val transport = card && button.action.trim().lowercase() == "media:playpause"
                     key.gravity = Gravity.CENTER_VERTICAL or Gravity.START
-                    if (iconRes != null && !transport) key.addView(ui.icon(button.icon!!, iconTint),
+                    if (iconRes != null && !transport) key.addView(ui.legendIcon(button.icon!!, iconTint, halo),
                         LinearLayout.LayoutParams(ui.sdp(24), ui.sdp(24)).apply { marginEnd = ui.dp(12) })
                     val lines = button.label.split('\n', limit = 2)
                     key.addView(LinearLayout(ui.context).apply {
                         orientation = LinearLayout.VERTICAL
                         val styles = listOf(textColor to 15f, hintColor to 13.5f)
                         for ((i, text) in lines.withIndex()) {
-                            val (color, size) = styles[i]
+                            val (lineColor, size) = styles[i]
                             addView(TextView(ui.context).apply {
                                 this.text = text
                                 typeface = if (i == 0) ui.fontLabel else ui.fontHint
-                                setTextColor(color)
+                                setTextColor(lineColor)
                                 setTextSize(TypedValue.COMPLEX_UNIT_SP, size * ui.scale)
                                 maxLines = 1
                                 ellipsize = TextUtils.TruncateAt.END
+                                if (i == 0) ui.glow(this, halo)
                             })
                         }
+                        if (transport && media?.timeline != null) addView(MediaProgressView(ui, media, iconTint, hintColor),
+                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                                topMargin = ui.dp(1)
+                            })
                     }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                     if (transport) {
                         val buttons = listOf(
@@ -139,7 +149,7 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
                             Triple("next", "media:next", "Next"),
                         )
                         for ((icon, action, name) in buttons) {
-                            key.addView(ui.icon(icon, if (action == "media:playpause") textColor else iconTint).apply {
+                            key.addView(ui.legendIcon(icon, if (action == "media:playpause") textColor else iconTint, halo).apply {
                                 val pad = ui.dp(10)
                                 setPadding(pad, pad, pad, pad)
                                 background = ui.pressable(Color.TRANSPARENT, ui.dpf(24f))
@@ -154,7 +164,7 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
                     }
                 }
                 compact -> {
-                    if (iconRes != null) key.addView(ui.icon(button.icon!!, iconTint),
+                    if (iconRes != null) key.addView(ui.legendIcon(button.icon!!, iconTint, halo),
                         LinearLayout.LayoutParams(ui.sdp(22), ui.sdp(22)))
                     key.addView(TextView(ui.context).apply {
                         text = button.label
@@ -164,17 +174,18 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
                         maxLines = 1
                         ellipsize = TextUtils.TruncateAt.END
                         setPadding(if (iconRes != null) ui.dp(8) else 0, 0, 0, 0)
+                        ui.glow(this, halo)
                     })
                 }
                 !small && iconRes != null -> {
                     // Icon top-left, the name along the bottom: how a keycap's legends are printed.
                     alignStart = true
                     key.gravity = Gravity.START
-                    key.addView(ui.icon(button.icon!!, iconTint), LinearLayout.LayoutParams(ui.sdp(26), ui.sdp(26)))
-                    key.addView(label(button.label, textColor, 14f, 20f, Gravity.START or Gravity.BOTTOM))
+                    key.addView(ui.legendIcon(button.icon!!, iconTint, halo), LinearLayout.LayoutParams(ui.sdp(26), ui.sdp(26)))
+                    key.addView(label(button.label, textColor, 14f, 20f, Gravity.START or Gravity.BOTTOM).apply { ui.glow(this, halo) })
                 }
                 else -> {
-                    if (iconRes != null) key.addView(ui.icon(button.icon!!, iconTint),
+                    if (iconRes != null) key.addView(ui.legendIcon(button.icon!!, iconTint, halo),
                         LinearLayout.LayoutParams(ui.sdp(26), ui.sdp(26)).apply { bottomMargin = ui.dp(4) })
                     // Without an icon the label is the legend, as big as the key allows (numpad digits).
                     val max = when {
@@ -183,6 +194,7 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
                         else -> 20f
                     }
                     key.addView(label(button.label, textColor, 14f, max, Gravity.CENTER).apply {
+                        ui.glow(this, halo)
                         // Sidebar keys get shorter in edit mode (the free slot shows): a plain size,
                         // since auto-sizing would need a fixed height.
                         if (small) {

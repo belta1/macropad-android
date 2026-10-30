@@ -67,12 +67,14 @@ class SliderView(
     private val travel = ui.dpf(3f)
     private val tapStep = Macro.slider(button.action)?.tap
 
+    /** The key's color as the theme shows it. */
+    private val accent = Ui.accent(button.color)
     private val icon = Icons.get(button.icon)?.let {
-        context.getDrawable(it)!!.mutate().apply { setTint(legendTone(button.color)) }
+        ui.glowing(context.getDrawable(it)!!.mutate().apply { setTint(legendTone(accent)) }, accent)
     }
     /** A speaker icon shows crossed out while [muted]. */
     private val mutedIcon = Icons.get("volume_off")?.takeIf { button.icon?.startsWith("volume") == true }?.let {
-        context.getDrawable(it)!!.mutate().apply { setTint(legendTone(button.color)) }
+        ui.glowing(context.getDrawable(it)!!.mutate().apply { setTint(legendTone(accent)) }, accent)
     }
     private val labelPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = TEXT
@@ -86,7 +88,7 @@ class SliderView(
         textSize = ui.dp(20).toFloat()
     }
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = PLATE }
-    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = legendTone(button.color) }
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = legendTone(accent) }
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(TEXT, 0.25f) }
     private val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val discPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -213,7 +215,7 @@ class SliderView(
         canvas.drawCircle(kx, ky + ui.dp(2), thumbR, thumbPaint)
         thumbPaint.color = if (isPressed) MUTED else TEXT
         canvas.drawCircle(kx, ky, thumbR, thumbPaint)
-        thumbPaint.color = legendTone(button.color)
+        thumbPaint.color = legendTone(accent)
         canvas.drawCircle(kx, ky, thumbR * 0.32f, thumbPaint)
     }
 

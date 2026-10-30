@@ -25,32 +25,44 @@ import dev.belta.macropad.ui.Ui.Companion.withAlpha
  * plate below. While pressed the face drops [travel] into the skirt, so the key visibly goes down
  * (the key's legends move with it, see [KeyViews]).
  *
- * The cap is graphite dyed with [dye] of [accent]; [lit] fills the face with the accent (toggle
- * and lock keys that are ON). [led] = null for keys without an on/off state, otherwise whether the
- * indicator is on. [editing] outlines the face (tap to edit).
+ * The cap is the theme's cap color dyed with [dye] of [accent]; [lit] fills the face with the
+ * accent (toggle and lock keys that are ON). [led] = null for keys without an on/off state,
+ * otherwise whether the indicator is on. [editing] outlines the face (tap to edit).
+ *
+ * Themes draw it as a sculpted cap (above), a neon tube around dark glass, or a terminal's box
+ * ([Caps]); the face and its insets are where the legends go in every style.
  */
 class KeyCap(
-    ui: Ui, accent: Int, private val lit: Boolean, private val led: Boolean? = null,
+    ui: Ui, private val accent: Int, private val lit: Boolean, private val led: Boolean? = null,
     private val editing: Boolean = false, dye: Float = 0.045f,
 ) : Drawable() {
 
+    private val caps = Ui.theme.caps
+
     val travel = ui.dpf(3f)
     /** Face insets from the drawable's bounds (unpressed): legends should sit inside them. */
-    val insetSide = ui.dpf(4f)
-    val insetTop = ui.dpf(2f)
-    val insetBottom = ui.dpf(10f)
+    val insetSide = ui.dpf(if (caps == Caps.NEON) 6f else 4f)
+    val insetTop = ui.dpf(if (caps == Caps.NEON) 6f else 2f)
+    val insetBottom = ui.dpf(if (caps == Caps.TERMINAL) 6f else 10f)
 
     private val ui1 = ui.dpf(1f)
     private val shadowDrop = ui.dpf(2f)
     private val outerRadius = ui.dpf(11f)
-    private val faceRadius = ui.dpf(8f)
+    private val faceRadius = ui.dpf(if (caps == Caps.TERMINAL) 3f else 8f)
     private val ledRadius = ui.dpf(3.5f)
     private val ledInset = ui.dpf(11f)
+    private val glowRadius = ui.dpf(maxOf(Ui.theme.glow, 3f))
 
-    private val face = if (lit) accent else blend(accent, CAP_TOP, dye)
+    private val face = when {
+        lit -> accent
+        caps == Caps.NEON -> blend(accent, CAP_TOP, dye + 0.06f) // dark glass with a tint of the tube's color
+        else -> blend(accent, CAP_TOP, dye)
+    }
     private val skirt = if (lit) darken(accent, 0.38f) else blend(accent, CAP_SKIRT, dye)
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    /** The neon tube or the terminal's outline, with a glow of the key's color. */
+    private val tube = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = ui.dpf(1f)
@@ -70,7 +82,79 @@ class KeyCap(
         val t = b.top.toFloat()
         val r = b.right.toFloat()
         val bottom = b.bottom.toFloat()
+        val drop = if (pressed) travel else 0f
+        val faceTop = t + insetTop + drop
+        val faceBottom = bottom - insetBottom + drop * 0.6f
+        rect.set(l + insetSide, faceTop, r - insetSide, faceBottom)
+        when (caps) {
+            Caps.SCULPTED -> drawSculpted(canvas, l, t, r, bottom)
+            Caps.NEON -> drawNeon(canvas, bottom)
+            Caps.TERMINAL -> drawTerminal(canvas)
+        }
 
+        if (editing) {
+            rect.inset(ui1 * 2, ui1 * 2)
+            canvas.drawRoundRect(rect, faceRadius, faceRadius, dashed)
+        }
+
+        led?.let { on ->
+            val cx = r - insetSide - ledInset
+            val cy = faceTop + ledInset
+            if (on) {
+                paint.shader = RadialGradient(cx, cy, ledRadius * 3.2f,
+                    withAlpha(Color.WHITE, 0.55f), withAlpha(Color.WHITE, 0f), Shader.TileMode.CLAMP)
+                canvas.drawCircle(cx, cy, ledRadius * 3.2f, paint)
+                paint.shader = null
+                paint.color = Color.WHITE
+            } else {
+                paint.color = darken(face, 0.35f)
+            }
+            // A terminal's indicator is a block cursor.
+            if (caps == Caps.TERMINAL) canvas.drawRect(cx - ledRadius, cy - ledRadius, cx + ledRadius, cy + ledRadius, paint)
+            else canvas.drawCircle(cx, cy, ledRadius, paint)
+        }
+    }
+
+    /** Dark glass outlined by a tube of the key's color, its light reflected on the case below. */
+    private fun drawNeon(canvas: Canvas, bottom: Float) {
+        val bright = pressed || lit
+        val glass = when {
+            lit -> withAlpha(face, 0.9f)
+            pressed -> blend(accent, CAP_TOP, 0.28f)
+            else -> face
+        }
+        val reflection = bottom - insetBottom * 0.4f
+        val inset = rect.width() * 0.12f
+        paint.shader = LinearGradient(rect.left + inset, 0f, rect.right - inset, 0f,
+            intArrayOf(withAlpha(accent, 0f), withAlpha(accent, if (bright) 0.6f else 0.32f), withAlpha(accent, 0f)),
+            null, Shader.TileMode.CLAMP)
+        canvas.drawRect(rect.left + inset, reflection, rect.right - inset, reflection + ui1 * 1.5f, paint)
+        paint.shader = null
+        paint.color = glass
+        canvas.drawRoundRect(rect, faceRadius, faceRadius, paint)
+
+        tube.strokeWidth = ui1 * 1.6f
+        tube.color = if (bright) lighten(accent, 0.35f) else accent
+        tube.setShadowLayer(glowRadius * (if (bright) 1.5f else 1f), 0f, 0f, withAlpha(accent, if (bright) 1f else 0.75f))
+        canvas.drawRoundRect(rect, faceRadius, faceRadius, tube)
+    }
+
+    /** A text-mode box: outlined in the key's color, filled with it (inverse video) while ON. */
+    private fun drawTerminal(canvas: Canvas) {
+        paint.shader = null
+        paint.color = when {
+            lit -> accent
+            pressed -> blend(accent, CAP_TOP, 0.3f)
+            else -> face
+        }
+        canvas.drawRoundRect(rect, faceRadius, faceRadius, paint)
+        tube.strokeWidth = ui1 * 1.2f
+        tube.color = withAlpha(accent, if (pressed || lit) 1f else 0.6f)
+        tube.setShadowLayer(glowRadius, 0f, 0f, withAlpha(accent, 0.45f))
+        canvas.drawRoundRect(rect, faceRadius, faceRadius, tube)
+    }
+
+    private fun drawSculpted(canvas: Canvas, l: Float, t: Float, r: Float, bottom: Float) {
         // Shadow on the plate, then the skirt.
         paint.shader = null
         paint.color = withAlpha(PLATE, if (pressed) 0.5f else 0.9f)
@@ -94,25 +178,6 @@ class KeyCap(
         paint.shader = null
         edge.color = withAlpha(Color.WHITE, if (lit) 0.22f else 0.06f)
         canvas.drawRoundRect(rect, faceRadius, faceRadius, edge)
-        if (editing) {
-            rect.inset(ui1 * 2, ui1 * 2)
-            canvas.drawRoundRect(rect, faceRadius, faceRadius, dashed)
-        }
-
-        led?.let { on ->
-            val cx = r - insetSide - ledInset
-            val cy = faceTop + ledInset
-            if (on) {
-                paint.shader = RadialGradient(cx, cy, ledRadius * 3.2f,
-                    withAlpha(Color.WHITE, 0.55f), withAlpha(Color.WHITE, 0f), Shader.TileMode.CLAMP)
-                canvas.drawCircle(cx, cy, ledRadius * 3.2f, paint)
-                paint.shader = null
-                paint.color = Color.WHITE
-            } else {
-                paint.color = darken(face, 0.35f)
-            }
-            canvas.drawCircle(cx, cy, ledRadius, paint)
-        }
     }
 
     override fun isStateful() = true

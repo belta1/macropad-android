@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.speech.SpeechRecognizer
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.ActivityNotFoundException
@@ -16,6 +17,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
@@ -60,6 +62,7 @@ import dev.belta.macropad.model.TextVariables
 import dev.belta.macropad.net.NetActions
 import dev.belta.macropad.net.Updater
 import dev.belta.macropad.pc.LinkScript
+import dev.belta.macropad.pc.PcComputer
 import dev.belta.macropad.pc.PcLink
 import dev.belta.macropad.pc.PcStatus
 import dev.belta.macropad.pc.ScreenViewport
@@ -78,6 +81,8 @@ import dev.belta.macropad.ui.Recorder
 import dev.belta.macropad.ui.RecordingEditor
 import dev.belta.macropad.ui.ScreenView
 import dev.belta.macropad.ui.SliderView
+import dev.belta.macropad.ui.ThemeBackdrop
+import dev.belta.macropad.ui.Themes
 import dev.belta.macropad.ui.TrackpadView
 import dev.belta.macropad.ui.WindowSwitcherView
 import dev.belta.macropad.ui.Ui
@@ -172,9 +177,14 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         setShowWhenLocked(true)
         setTurnScreenOn(true)
 
+        settings = AppSettings(this)
+        // The theme first: colors, caps and fonts are read as views are built.
+        Ui.theme = Themes.byId(settings.theme)
+        window.setBackgroundDrawable(ColorDrawable(CASE))
+        window.statusBarColor = CASE
+        window.navigationBarColor = CASE
         ui = Ui(this)
         store = MacroStore(this)
-        settings = AppSettings(this)
         layout = store.load()
         pageIndex = settings.lastPage.coerceIn(0, layout.pages.lastIndex)
         dialogs = Dialogs(this)
@@ -263,6 +273,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         updateScreenStream()
         handler.postDelayed(liveTick, 30_000)
         handler.postDelayed(usageTick, 60_000)
+        service?.pc?.pending?.let { askPcApproval(it) }
     }
 
     override fun onPause() {
@@ -603,6 +614,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
         override fun onFileText(id: Int, name: String, text: String) = typeFile(id, name, text)
 
+        override fun onPcApproval(computer: PcComputer?) = askPcApproval(computer)
+
         override fun onPcResult(id: Int, ok: Boolean, error: String?) {
             val then = pcWaits.remove(id)
             val label = pcRequests.remove(id)
@@ -658,6 +671,38 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             selectPage(back)
             renderPage()
         }
+    }
+
+    /** The question about a computer that wants the PC link, while it shows, and that computer's address. */
+    private var approvalDialog: AlertDialog? = null
+    private var approvalFor: String? = null
+
+    /**
+     * A computer not allowed yet opened the PC link port and waits: ask whether it may use the link
+     * (waking the tablet). [computer] null: it no longer waits, so the question goes.
+     */
+    private fun askPcApproval(computer: PcComputer?) {
+        if (computer != null && computer.address == approvalFor) return
+        approvalDialog?.dismiss()
+        approvalDialog = null
+        approvalFor = null
+        if (computer == null || !resumed) return // asked again in onResume while it still waits
+        if (dimmed) wake()
+        approvalFor = computer.address
+        approvalDialog = ui.dialog()
+            .setTitle("Allow ${computer.name} to use the PC link?")
+            .setMessage("${computer.name} (${computer.address}) opened the macropad's PC link port. Allow only " +
+                "your own computers: with the link a computer tells the tablet what to show (its clipboard " +
+                "becomes keys that type it) and gets the tablet's pc: commands.\n\nChange it later in " +
+                "⚙ → Connection → PC link computers.")
+            .setPositiveButton("Allow") { _, _ -> withUnlock { service?.pc?.decide(computer, true) } }
+            .setNegativeButton("Refuse") { _, _ -> service?.pc?.decide(computer, false) }
+            .setNeutralButton("Not now", null)
+            .create()
+            .apply {
+                setOnDismissListener { if (approvalDialog === it) { approvalDialog = null; approvalFor = null } }
+                show()
+            }
     }
 
     /** The PC link script this app carries; null if the build has none. */
@@ -969,7 +1014,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         // The dock runs along the whole bottom, under both.
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(CASE)
+            background = ThemeBackdrop(ui)
             setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(12))
         }
         val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -1552,6 +1597,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             stateful = lock != null || button?.toggle == true,
             sliderLevel = volume?.level, sliderMuted = volume?.muted == true,
             card = small && live,
+            media = pcStatus?.media?.takeIf { live && KeyViews.isMediaCard(stored) },
         ).apply {
             if (lock != null || isTeamsKey(stored) || live || isVolumeSlider(stored)) tag = LiveKey(page, index, compact)
         }
@@ -1988,6 +2034,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             handler.postDelayed(this, SHIFT_EVERY_MS)
         }
     }
+
+    /** Every view is built again, in the new theme's colors, caps and fonts. */
+    override fun themeChanged() = recreate()
 
     override fun screenShiftChanged() {
         handler.removeCallbacks(shiftScreen)

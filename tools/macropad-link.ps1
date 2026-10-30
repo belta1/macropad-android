@@ -77,7 +77,7 @@ $ErrorActionPreference = 'Stop'
 $ProtocolVersion = 1
 # The tablet offers this script's update when the app carries a higher version, or the same one
 # with other contents.
-$ScriptVersion = '1.8.1'
+$ScriptVersion = '1.8.2'
 $StartOptions = @{} + $PSBoundParameters # for starting again after an update
 $ConfigDir = Join-Path $env:APPDATA 'Macropad'
 $CommandsFile = Join-Path $ConfigDir 'commands.json'
@@ -1529,10 +1529,13 @@ function Initialize-Media {
     }
 }
 
+$MediaSent = $null   # @{ json; position; at; playing } as last sent: the position moves on by itself while playing
+
 function Send-Media([switch]$Always) {
     if ($null -eq $script:Media) { Initialize-Media }
     if (-not $script:Media) { return }
     $message = [ordered]@{ t = 'media' }
+    $position = $null
     try {
         $session = $script:Media.GetCurrentSession()
         if ($session) {
@@ -1541,12 +1544,35 @@ function Send-Media([switch]$Always) {
                 $message.title = $properties.Title
                 if ($properties.Artist) { $message.artist = $properties.Artist }
                 $message.playing = [string]$session.GetPlaybackInfo().PlaybackStatus -eq 'Playing'
+                # How far it has played, when the app says (a live stream doesn't). Apps report the
+                # position now and then; while playing it has moved on since.
+                $timeline = $session.GetTimelineProperties()
+                $length = ($timeline.EndTime - $timeline.StartTime).TotalSeconds
+                if ($length -gt 0) {
+                    $position = ($timeline.Position - $timeline.StartTime).TotalSeconds
+                    if ($message.playing -and $timeline.LastUpdatedTime.Year -gt 2000) {
+                        $position += ([DateTimeOffset]::UtcNow - $timeline.LastUpdatedTime).TotalSeconds
+                    }
+                    $position = [Math]::Max(0, [Math]::Min($length, $position))
+                    $message.length = [Math]::Round($length, 1)
+                }
             }
         }
     } catch {
         return # the app went away while asking; next time
     }
-    Send-Changed $message -Always:$Always
+    # Sent again when anything but the position changes, or the position jumps (a seek), not as it plays.
+    $json = $message | ConvertTo-Json -Compress
+    $now = Get-Date
+    $last = $script:MediaSent
+    if (-not $Always -and $last -and $last.json -eq $json) {
+        if ($null -eq $position) { return }
+        $expected = $last.position + $(if ($last.playing) { ($now - $last.at).TotalSeconds } else { 0 })
+        if ([Math]::Abs($position - $expected) -lt 2) { return }
+    }
+    if ($null -ne $position) { $message.position = [Math]::Round($position, 1) }
+    $script:MediaSent = @{ json = $json; position = $(if ($null -ne $position) { $position } else { 0 }); at = $now; playing = [bool]$message.playing }
+    Send-Tablet $message
 }
 
 # ------------------------------------------------------------------ the terminal (shell hook)

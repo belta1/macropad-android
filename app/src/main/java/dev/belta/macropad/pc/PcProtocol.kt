@@ -88,7 +88,17 @@ data class PcVolume(val level: Int, val muted: Boolean, val apps: List<PcAudioAp
 
 data class PcAudioApp(val exe: String, val app: String, val level: Int, val muted: Boolean)
 
-data class PcMedia(val title: String, val artist: String?, val playing: Boolean)
+data class PcMedia(val title: String, val artist: String?, val playing: Boolean, val timeline: PcTimeline? = null)
+
+/**
+ * How far the song or video has played, when its app says: [position] of [length] seconds, as of
+ * [at] (the tablet's clock when the computer told it). The computer tells again only when it jumps.
+ */
+data class PcTimeline(val length: Double, val position: Double, val at: Long) {
+    /** The position at [now], moving on while [playing]. */
+    fun positionAt(now: Long, playing: Boolean) =
+        if (playing) (position + (now - at) / 1000.0).coerceIn(0.0, length) else position
+}
 
 /** [venv] is the active environment's folder (VIRTUAL_ENV or conda's), [python] its version. */
 data class PcShell(val cwd: String, val venv: String?, val python: String?)
@@ -197,7 +207,12 @@ object PcProtocol {
                     PcAudioApp(exe.lowercase(), a.text("app") ?: exe, a.optInt("level"), a.optBoolean("muted"))
                 },
             ))
-            "media" -> PcMessage.Media(json.text("title")?.let { PcMedia(it, json.text("artist"), json.optBoolean("playing")) })
+            "media" -> PcMessage.Media(json.text("title")?.let { title ->
+                val timeline = json.optDouble("length", 0.0).takeIf { it > 0 }?.let { length ->
+                    PcTimeline(length, json.optDouble("position", 0.0).coerceIn(0.0, length), System.currentTimeMillis())
+                }
+                PcMedia(title, json.text("artist"), json.optBoolean("playing"), timeline)
+            })
             "shell" -> PcMessage.Shell(json.text("cwd")?.let { PcShell(it, json.text("venv"), json.text("python")) })
             "monitors" -> PcMessage.Monitors(json.optJSONArray("list").objects().map {
                 PcMonitor(it.getInt("n"), it.getInt("w"), it.getInt("h"), it.optBoolean("primary"))
