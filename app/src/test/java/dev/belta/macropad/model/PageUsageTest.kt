@@ -44,6 +44,28 @@ class PageUsageTest {
     }
 
     @Test
+    fun `Teams keys still on the Run box become Teams commands, the others stay`() {
+        fun runBox(shortcut: String, back: Boolean) =
+            "win+r\ndelay:400\ntext:ms-teams\\n\ndelay:800\n$shortcut" + if (back) "\ndelay:150\nalt+tab" else ""
+        val keys = mutableListOf<MacroButton?>(
+            MacroButton("Mute / Unmute", "pc:teams mute", 0),
+            MacroButton("Camera on / off", runBox("ctrl+shift+o", true), 0, toggle = true),
+            MacroButton("Raise hand", runBox("ctrl+shift+k", true), 0),
+            MacroButton("Share screen", runBox("ctrl+shift+e", false), 0),
+            MacroButton("Leave call", runBox("ctrl+shift+h", true), 0),
+            MacroButton("Blur background", runBox("ctrl+shift+p", true), 0),
+            MacroButton("Chat", runBox("ctrl+2", false), 0),
+        )
+        val pages = listOf(Page(DefaultLayout.TEAMS_PAGE, keys))
+        assertTrue(DefaultLayout.upgradeRunBoxTeams(pages))
+        assertEquals(listOf("pc:teams mute", "pc:teams camera", "pc:teams hand", runBox("ctrl+shift+e", false), "pc:teams leave",
+            "pc:teams blur", runBox("ctrl+2", false)), keys.map { it!!.action })
+        assertEquals(DefaultLayout.LEAVE_CALL_LABEL, keys[4]!!.label)
+        assertTrue(keys[1]!!.toggle)
+        assertFalse(DefaultLayout.upgradeRunBoxTeams(pages))
+    }
+
+    @Test
     fun `Excel and Word go unless changed, and the tabs take the work order`() {
         val old = DefaultLayout.layout().pages.toMutableList()
         // An old layout: Excel and Word as they came (and one Word key changed in another copy).

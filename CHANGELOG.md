@@ -68,6 +68,9 @@ More through the PC link ([docs/pc-link.md](docs/pc-link.md)); update
   the next one, the show's time and the clock, ◀ ▶ (and the tablet's volume buttons), black /
   white screen, every slide to jump to, and PowerPoint's laser pointer following your finger on
   the slide. It comes up by itself when a slide show starts and goes back when it ends.
+- **Teams keys from 1.2–1.6 that open Teams through Win+R** (missed by 1.7's upgrade) become
+  Teams commands: Camera, Raise hand, Blur and Leave call answer at once, from Citrix too, and
+  light from Teams. The others keep working as they are.
 - **Calls bring up the Teams page** and give the page you had back when you hang up; *Leave call*
   shows the call's time (`{call}` in any label). Presenting, the Presenter page gets a Mute button.
 - **Commands in the speaker notes**: a `>` line on the Presenter page is a key that brings the

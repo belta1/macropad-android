@@ -110,16 +110,44 @@ object DefaultLayout {
         old.zip(layout().pages.first { it.name == "Desktop" }.buttons.takeLast(old.size).map { it!! }).toMap()
     }
 
+    /** The Teams page's shortcuts of 1.0/1.1, in the page's order. */
+    private val TEAMS_SHORTCUTS = listOf("ctrl+shift+m", "ctrl+shift+o", "ctrl+shift+k", "ctrl+shift+e", "ctrl+shift+h",
+        "ctrl+space", "ctrl+shift+p", "ctrl+shift+y", "ctrl+shift+a", "ctrl+shift+d",
+        "ctrl+1", "ctrl+2", "ctrl+4", "ctrl+e", "ctrl+n")
+
     /**
      * Teams keys of 1.0/1.1 (which only worked with Teams focused) -> their replacements; applied
      * once to existing layouts by [MacroStore].
      */
     val TEAMS_FOCUS_UPGRADE: Map<String, String> by lazy {
-        val old = listOf("ctrl+shift+m", "ctrl+shift+o", "ctrl+shift+k", "ctrl+shift+e", "ctrl+shift+h",
-            "ctrl+space", "ctrl+shift+p", "ctrl+shift+y", "ctrl+shift+a", "ctrl+shift+d",
-            "ctrl+1", "ctrl+2", "ctrl+4", "ctrl+e", "ctrl+n")
         val new = layout().pages.first { it.name == TEAMS_PAGE }.buttons.map { it!!.action }
-        old.zip(new).filter { (a, b) -> a != b }.toMap()
+        TEAMS_SHORTCUTS.zip(new).filter { (a, b) -> a != b }.toMap()
+    }
+
+    /** A Teams key of the versions that focused Teams through the Run box (Win+R, ms-teams), and its shortcut. */
+    private val RUN_BOX_TEAMS = Regex("""win\+r\ndelay:\d+\ntext:ms-teams\\n\ndelay:\d+\n([^\n]+)(\ndelay:\d+\nalt\+tab)?""")
+
+    /**
+     * 1.8: Teams keys still focusing Teams through the Run box, which the 1.7 upgrade (from Win+8)
+     * missed: the ones Teams' commands cover become them (pc:teams camera…, lit from Teams), and
+     * Leave call shows the call's time. The rest keep working as they are. Returns whether
+     * anything changed.
+     */
+    fun upgradeRunBoxTeams(pages: List<Page>): Boolean {
+        val keys = pages.firstOrNull { it.name == TEAMS_PAGE }?.buttons ?: return false
+        // Each command's shortcut, as sent inside Teams (Mute's fallback is Windows' own: none).
+        val commands = Macro.TEAMS_FALLBACK.entries.mapNotNull { (action, fallback) ->
+            fallback.lines().firstOrNull { "+" in it && !it.startsWith("win+") && it != "alt+tab" }?.let { it to action }
+        }.toMap()
+        var changed = false
+        for (key in keys.filterNotNull()) {
+            val shortcut = RUN_BOX_TEAMS.matchEntire(key.action)?.groupValues?.get(1) ?: continue
+            val command = commands[shortcut] ?: continue
+            key.action = "pc:teams $command"
+            if (command == "leave" && key.label == "Leave call") key.label = LEAVE_CALL_LABEL
+            changed = true
+        }
+        return changed
     }
 
     private val c = Palette.colors
