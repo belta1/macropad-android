@@ -30,8 +30,9 @@ Windows laptops/desktops.
   Citrix — a login filled in from encrypted **saved values**, see ⚙ → Saved values).
 - **App icons on the tabs** (long-press a tab to rename it or change its icon).
 - **Dock** along the whole bottom, on every page: virtual-desktop switching (Prev desktop · Task
-  view · Next desktop), a volume slider (its speaker mutes) and the media card: what's playing on
-  the computer (PC link) with ⏮ ⏯ ⏭.
+  view · Next desktop), a volume slider (its speaker mutes), the media card: what's playing on
+  the computer (PC link) with ⏮ ⏯ ⏭, and **Dictate**: speak, check the text, type it on the
+  computer (into Citrix too).
 - **Trackpad page**: pointer with acceleration, tap / two-finger tap to click / right-click,
   two-finger or edge-strip scrolling, long-press to drag, plus editable click/scroll keys.
 - **Sliders**: drag a key instead of tapping it for PC volume, scrolling, zoom, brightness,

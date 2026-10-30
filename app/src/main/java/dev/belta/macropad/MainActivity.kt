@@ -1,6 +1,8 @@
 package dev.belta.macropad
 
 import android.Manifest
+import android.content.pm.PackageManager
+import android.speech.SpeechRecognizer
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
@@ -67,6 +69,7 @@ import dev.belta.macropad.ui.Icons
 import dev.belta.macropad.ui.KeyEditor
 import dev.belta.macropad.ui.KeyViews
 import dev.belta.macropad.ui.MacropadHost
+import dev.belta.macropad.ui.DictationPanel
 import dev.belta.macropad.ui.HomeAssistantView
 import dev.belta.macropad.ui.PresenterView
 import dev.belta.macropad.ui.MixerView
@@ -899,6 +902,31 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         if (requestCode == REQUEST_PERMISSIONS && MacropadService.hasBluetoothPermissions(this)) hid?.start()
+        if (requestCode == REQUEST_MIC) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) openDictation()
+            else ui.toast("Dictation needs the microphone")
+        }
+    }
+
+    /** Dictated text not typed yet, for the next time the panel opens. */
+    private var dictationDraft = ""
+
+    /** Dictation (tablet:dictate): speak, check the text, type it into the computer's window in front. */
+    private fun openDictation() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            return requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_MIC)
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) return ui.toast("No speech recognition on this tablet (install the Google app)")
+        DictationPanel(ui, dictationDraft, onDraft = { dictationDraft = it }) { text ->
+            val hid = hid
+            if (hid == null || !connected) {
+                dictationDraft = text.trimEnd('\n') // kept for when the computer is back
+                return@DictationPanel flashOfflineBanner()
+            }
+            recorder.record("text:" + text.replace("\n", "\\n").replace("\t", "\\t"))
+            pauseCapture()
+            runSteps(hid, listOf(Step.Text(text))) { runOnUiThread { resumeCapture() } }
+        }.show()
     }
 
     // ---------------------------------------------------------------- tablet volume buttons
@@ -1711,6 +1739,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         // Dim after the keys have gone out (e.g. "lock PC, then dim"), so the idle overlay doesn't
         // block them.
         if (steps.any { it is Step.Tablet && it.command == "dim" }) handler.postDelayed({ dim() }, 600)
+        if (steps.any { it is Step.Tablet && it.command == "dictate" }) openDictation()
         steps.filter { it.isNetwork }.takeIf { it.isNotEmpty() }?.let { runNetwork(button.label, it) }
         // PC steps go over the PC link; Teams / Outlook steps only while it reaches Teams / classic
         // Outlook. Otherwise they become their shortcut, in place. pc:focus / pc:wait stay in
@@ -2145,6 +2174,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         private const val TAG = "Macropad"
         private const val EVENT_REFRESH_MS = 5 * 60_000L
         private const val REQUEST_PERMISSIONS = 1
+        private const val REQUEST_MIC = 2
         private const val REQUEST_EXPORT = 2
         private const val REQUEST_IMPORT = 3
         private const val TRACKPAD_KEYS = 5

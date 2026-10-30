@@ -12,6 +12,7 @@ Every key has an **action**: one step per line. Lines starting with `#` are comm
 | Scroll | `scroll:3` | Mouse wheel notches; positive = up, negative = down (max ±50) |
 | Page | `page:next` | Switches the tablet's page: `next`, `prev` or a page name. Runs on the tablet, even when no computer is connected |
 | Tablet | `tablet:dim` | Dims the tablet to its idle clock (after the other steps have been sent). Runs on the tablet |
+| Dictation | `tablet:dictate` | Opens [dictation](#dictation): speak, check the text, type it on the computer (the dock's mic key) |
 | Slider | `slide:volume` | Makes the key a **slider** you drag instead of tap (see [Sliders](#sliders)). Must be the key's only step |
 | Web request | `http:POST https://… \| {"on":true}` | Sent by the tablet over Wi-Fi (see [Network steps](#network-steps)) |
 | Wake on LAN | `wol:AA:BB:CC:DD:EE:FF` | Wakes a computer on the tablet's network |
@@ -181,6 +182,21 @@ turns the wheel there (positive = up). `screen` in place of an app means points 
 
 A key that is just `pc:teams mute`, `camera`, `hand` or `blur` lights up from Teams' real state
 while the PC link reaches Teams, like Caps Lock; otherwise it is an ordinary toggle key.
+
+## Dictation
+
+The dock's **mic** key (`tablet:dictate`) opens a panel that listens: what you say fills a text
+box, phrase after phrase, until you tap *Listening* off. Spoken punctuation becomes marks —
+*coma*, *punto*, *punto y aparte*, *nueva línea*, *nuevo párrafo*, *dos puntos*, *punto y coma*,
+*(abre / cierra) signo de interrogación / exclamación*, *abre / cierra paréntesis*, *arroba*,
+*guion* (and *comma*, *period*, *new line*… in English) — and sentences start with a capital.
+Fix anything with the keyboard, then **Type** types it into the window in front on the computer,
+line by line like any text, so it reaches Citrix too (*Enter after* presses Enter at the end).
+Closing without typing keeps the text for next time.
+
+It uses the tablet's speech recognition (Google's) in the tablet's language, which needs the
+internet unless that language is downloaded for offline speech. The first time, Android asks
+for the microphone.
 
 ## Keyboard layouts
 

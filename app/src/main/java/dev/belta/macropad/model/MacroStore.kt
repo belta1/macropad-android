@@ -34,6 +34,7 @@ class MacroStore(private val context: Context) {
         retireAndOrderTabs(layout)
         addTypeFile(layout)
         upgradeRunBoxTeams(layout)
+        addDictate(layout)
         addPageIcons(layout)
         if (backupFile?.exists() == false) writeBackup(export(layout))
         return layout
@@ -198,6 +199,14 @@ class MacroStore(private val context: Context) {
         if (changed) save(layout)
     }
 
+    /** 1.8: the Dictate key, in a free slot of the dock. */
+    private fun addDictate(layout: Layout) {
+        if (prefs.getBoolean(DICTATE_FLAG, false)) return
+        val changed = DefaultLayout.addDictate(layout.dock)
+        prefs.edit().putBoolean(DICTATE_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
     /** 1.8: Teams keys still on the Run box (missed by the 1.7 upgrade) become Teams commands. */
     private fun upgradeRunBoxTeams(layout: Layout) {
         if (prefs.getBoolean(RUN_BOX_TEAMS_FLAG, false)) return
@@ -254,6 +263,7 @@ class MacroStore(private val context: Context) {
         const val TAB_ORDER_FLAG = "upgraded_tab_order"
         const val TYPE_FILE_FLAG = "added_type_file"
         const val RUN_BOX_TEAMS_FLAG = "upgraded_run_box_teams"
+        const val DICTATE_FLAG = "added_dictate"
         const val KEY = "layout_v3"
         const val BACKUP_NAME = "macropad-layout.json"
     }

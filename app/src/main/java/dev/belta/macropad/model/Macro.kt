@@ -14,6 +14,7 @@ import dev.belta.macropad.hid.KeyboardLayout
  *   scroll:3            mouse wheel; positive = up, negative = down
  *   page:next           switches the tablet's page (next, prev or a page name); not sent
  *   tablet:dim          dims the tablet to its idle clock; not sent
+ *   tablet:dictate      opens dictation: speak, check the text, type it on the computer
  *   slide:volume        makes the key a slider (a preset, or "up step | down step [| tap step]"); must be the only step
  *   http:POST https://… | {"a":1}   web request from the tablet (GET by default; "| body" is optional)
  *   wol:AA:BB:CC:DD:EE:FF           Wake-on-LAN packet from the tablet
@@ -149,7 +150,8 @@ object Macro {
     /** Short human-readable hint shown under a key's label, e.g. "Ctrl+Shift+P". */
     fun describe(action: String): String {
         val lines = action.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
-        val dims = lines.any { it.lowercase().startsWith("tablet:") }
+        if (lines.singleOrNull()?.lowercase()?.replace(" ", "") == "tablet:dictate") return "Dictation"
+        val dims = lines.any { it.lowercase().replace(" ", "") == "tablet:dim" }
         val actions = lines.filterNot {
             val lower = it.lowercase()
             lower.startsWith("delay:") || lower.startsWith("wait:") || lower.startsWith("tablet:")
@@ -212,7 +214,7 @@ object Macro {
         }.let { if (lines.size > actions.size) "$it · timed" else it }
     }
 
-    private val TABLET_COMMANDS = listOf("dim")
+    private val TABLET_COMMANDS = listOf("dim", "dictate")
 
     /** A text step that only types one of the computer's clipboard entries. */
     private val PC_CLIP_ONLY = Regex("""\{pcclipboard(?::(\d+))?\}""")

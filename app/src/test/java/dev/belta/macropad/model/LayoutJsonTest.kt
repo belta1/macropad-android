@@ -101,13 +101,14 @@ class LayoutJsonTest {
     }
 
     @Test
-    fun `default dock - desktop keys, the volume slider, the media card`() {
+    fun `default dock - desktop keys, the volume slider, the media card, Dictate`() {
         val dock = DefaultLayout.dock().buttons
         assertEquals(Layout.DOCK_SIZE, dock.size)
         assertEquals(DefaultLayout.DESKTOP_DOCK, dock.take(3))
         assertEquals("slide:volume", dock[3]!!.action)
         assertEquals(DefaultLayout.MEDIA_CARD, dock[4])
-        assertTrue(dock.drop(5).all { it == null })
+        assertEquals(DefaultLayout.DICTATE, dock[5])
+        assertTrue(dock.drop(6).all { it == null })
         assertEquals(false, DefaultLayout.mediaCardDock(DefaultLayout.dock())) // already so
     }
 

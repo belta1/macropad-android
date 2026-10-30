@@ -170,8 +170,20 @@ object DefaultLayout {
      * Below every page, the whole width: virtual-desktop navigation, the volume slider and the
      * media card; the rest is free.
      */
-    fun dock() = Page("Media", (DESKTOP_DOCK + VOLUME_SLIDER + MEDIA_CARD).toMutableList<MacroButton?>()
+    fun dock() = Page("Media", (DESKTOP_DOCK + VOLUME_SLIDER + MEDIA_CARD + DICTATE).toMutableList<MacroButton?>()
         .apply { while (size < Layout.DOCK_SIZE) add(null) })
+
+    /** 1.8: dictation (speak, check, type on the computer — into Citrix too), at the end of the dock. */
+    val DICTATE get() = b("Dictate", "tablet:dictate", GREEN, "mic")
+
+    /** Puts [DICTATE] in the dock's first free slot, unless it has one. Returns whether anything changed. */
+    fun addDictate(dock: Page): Boolean {
+        if (dock.buttons.any { it?.action?.trim() == "tablet:dictate" }) return false
+        val free = dock.buttons.indexOf(null).takeIf { it >= 0 }
+            ?: dock.buttons.size.takeIf { it < Layout.DOCK_SIZE } ?: return false
+        if (free == dock.buttons.size) dock.buttons += DICTATE else dock.buttons[free] = DICTATE
+        return true
+    }
 
     /**
      * 1.8: what's playing on the computer (PC link) with ⏮ ⏯ ⏭, a card at the end of the dock;
@@ -185,7 +197,7 @@ object DefaultLayout {
     /**
      * 1.8: the dock's Previous / Play / Pause / Next keys go, since the media card has them; the
      * desktop keys come first (added if missing, repeats dropped), then the dock's other keys, then
-     * the card (added if missing). Returns whether anything changed.
+     * the card (added if missing), then Dictate if there. Returns whether anything changed.
      */
     fun mediaCardDock(dock: Page): Boolean {
         fun action(b: MacroButton) = b.action.trim().lowercase()
@@ -195,7 +207,9 @@ object DefaultLayout {
         val desktopActions = DESKTOP_DOCK.map { it.action }
         val desktop = DESKTOP_DOCK.map { d -> keys.firstOrNull { action(it) == d.action } ?: d }
         val others = keys.filter { it !== card && action(it) !in desktopActions && action(it) !in MEDIA_KEYS }
-        val after = ((desktop + others).take(Layout.DOCK_SIZE - 1) + card).toMutableList<MacroButton?>()
+        val (afterCard, beforeCard) = others.partition { action(it) == DICTATE.action }
+        val after = ((desktop + beforeCard).take(Layout.DOCK_SIZE - 1 - afterCard.size) + card + afterCard)
+            .take(Layout.DOCK_SIZE).toMutableList<MacroButton?>()
         while (after.size < Layout.DOCK_SIZE) after += null
         if (after == before) return false
         dock.buttons.clear()
