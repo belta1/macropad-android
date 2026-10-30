@@ -107,6 +107,19 @@ class PcProtocolTest {
     }
 
     @Test
+    fun `an HTML deck in the browser`() {
+        val deck = (PcProtocol.parse("""{"t":"slides","kind":"html","app":"Chrome.exe","file":"202610_workshop_bis.html",""" +
+            """"show":true,"state":"running","count":19,"v":3,"slide":2,"title":"El workshop en una lámina","notes":"Uno\nDos"}""")
+            as PcMessage.Slides).slides!!
+        assertEquals(PcSlides(true, "202610_workshop_bis.html", 2, 19, "El workshop en una lámina", "Uno\nDos", "running", 3,
+            html = true, app = "chrome"), deck)
+        // Scripts before HTML decks: PowerPoint.
+        val ppt = (PcProtocol.parse("""{"t":"slides","file":"a.pptx","show":true,"count":3,"slide":1}""") as PcMessage.Slides).slides!!
+        assertFalse(ppt.html)
+        assertEquals("powerpnt", ppt.app)
+    }
+
+    @Test
     fun `a file to type, kept as written`() {
         assertEquals(JSONObject("""{"t":"typefile","id":4}""").toString(), JSONObject(PcProtocol.typeFile(4)).toString())
         val file = PcProtocol.parse("""{"t":"file","id":4,"name":"main.py","text":"def f():\r\n    return {1: 2}\n\n"}""") as PcMessage.FileText

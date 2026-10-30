@@ -545,7 +545,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
                 handler.postDelayed(recordApp, 1000)
             }
             pcApp = app
-            if (app != null && app != POWERPOINT) demoApp = app
+            if (app != null && app != slidesApp(status)) demoApp = app
             if (status == null) {
                 pcRequests.clear()
                 pcWaits.clear() // macros waiting on the computer stop
@@ -761,10 +761,11 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         }
     }
 
-    /** A PowerPoint command over the PC link (the Presenter page, the volume buttons). */
+    /** A PowerPoint / HTML deck command over the PC link (the Presenter page, the volume buttons). */
     private fun slideCommand(action: String, slide: Int = 0) {
-        val id = pcLinkFor("PowerPoint")?.slides(action, slide) ?: return
-        pcRequests[id] = "PowerPoint"
+        val label = if (pcStatus?.slides?.html == true) "Slides" else "PowerPoint"
+        val id = pcLinkFor(label)?.slides(action, slide) ?: return
+        pcRequests[id] = label
     }
 
     /** Sends a `pc:` step over the PC link; its result comes back to [pcListener]. */
@@ -1427,7 +1428,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     ).apply { update(pcStatus) }
 
     /** A monitor of the computer, touchable (PC link). */
-    /** PowerPoint's notes, slides and controls (PC link); its keys without it. */
+    /** PowerPoint's or an HTML deck's notes, slides and controls (PC link); the slide show's keys without it. */
     private fun buildPresenter() = PresenterView(ui, settings,
         images = { service?.pc?.slideImages },
         startedAt = { showStartedAt },
@@ -1439,17 +1440,19 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         onType = ::typeNotesCommand,
     ).apply { update(pcStatus) }
 
-    /** The last app in front on the computer other than PowerPoint: where a demo's commands go. */
+    /** The last app in front on the computer other than the slides' (PowerPoint, the deck's browser): where a demo's commands go. */
     private var demoApp: String? = null
     /** The app chosen for them instead (Presenter page → Types in). */
     private var demoPicked: String? = null
 
     private fun demoTarget() = demoPicked ?: demoApp
 
+    private fun slidesApp(status: PcStatus?) = status?.slides?.app ?: POWERPOINT
+
     private fun appName(exe: String) = pcStatus?.windows?.firstOrNull { it.exe == exe }?.app ?: exe
 
     private fun pickDemoApp() {
-        val apps = pcStatus?.windows.orEmpty().map { it.exe }.distinct().filter { it != POWERPOINT }
+        val apps = pcStatus?.windows.orEmpty().map { it.exe }.distinct().filter { it != slidesApp(pcStatus) }
         val items = listOf("The last app I used" + (demoApp?.let { " (now ${appName(it)})" } ?: "")) + apps.map(::appName)
         ui.dialog()
             .setTitle("Type the notes' commands in")
@@ -1476,7 +1479,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         runSteps(hid, listOf(text))
     }
 
-    /** Over the PC link while it reaches PowerPoint; else the slide show's own keys. */
+    /** Over the PC link while it reaches PowerPoint or an HTML deck; else the slide show's own keys. */
     private fun presenterCommand(action: String, slide: Int) {
         if (action == "mute") {
             val id = pcLinkFor("Teams")?.teams("mute", null) ?: return

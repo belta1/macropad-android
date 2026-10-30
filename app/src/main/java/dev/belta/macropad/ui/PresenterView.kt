@@ -40,9 +40,10 @@ import java.util.Locale
  * PowerPoint's presenter view on the tablet (PC link): the current slide's speaker notes, big, on
  * the left; the slide and the next one on the right, with the time since the show started and
  * the clock; ◀ ▶, black / white screen, start / end and a grid of every slide to jump to.
- * Dragging on the slide moves PowerPoint's laser pointer there. `>` lines in the notes are
- * commands to type for a demo ([NotesCommands]), into [typeTarget]. Without PowerPoint on the
- * computer the buttons still send the slide show's keys ([onCommand] decides).
+ * Dragging on the slide moves PowerPoint's laser pointer there. The same for an HTML slide deck
+ * in the browser ([PcSlides.html]), without black / white; its pointer is the mouse's. `>` lines
+ * in the notes are commands to type for a demo ([NotesCommands]), into [typeTarget]. Without a
+ * presentation on the computer the buttons still send the slide show's keys ([onCommand] decides).
  *
  * [images] are the slides' pictures by number; [startedAt] when the show started (0: none),
  * [onResetTimer] sets it to now.
@@ -278,15 +279,16 @@ class PresenterView(
         }
         title.text = when {
             status == null -> "PC link not connected"
-            s == null -> "PowerPoint isn't open on the computer"
+            s == null -> "No presentation open on the computer"
             s.show && s.state == "done" -> "End of the show"
-            else -> (if (s.show) "" else "Editing · ") + (s.title?.takeIf { it.isNotBlank() } ?: s.file)
+            else -> (if (s.show) "" else if (s.html) "Not full screen · " else "Editing · ") + (s.title?.takeIf { it.isNotBlank() } ?: s.file)
         }
         val text = when {
             status == null -> "The buttons send the slide show's keys (→ ← B W F5 Esc).\n\nWith the PC link and " +
-                "PowerPoint on the computer, this page shows each slide's speaker notes, the slide and the next one."
-            s == null -> "Open a presentation in PowerPoint on the computer (not inside Citrix) to see its notes " +
-                "here. The buttons still send the slide show's keys."
+                "PowerPoint or an HTML slide deck on the computer, this page shows each slide's speaker notes, the slide " +
+                "and the next one."
+            s == null -> "Open a presentation in PowerPoint, or an HTML slide deck in Chrome or Edge, on the computer " +
+                "(not inside Citrix) to see its notes here. The buttons still send the slide show's keys."
             s.slide == 0 -> ""
             s.notes.isBlank() -> "No notes on this slide."
             else -> s.notes
@@ -303,6 +305,9 @@ class PresenterView(
         (showButton.getChildAt(1) as TextView).text = if (s?.show == true) "End show" else "Start show"
         tint(blackButton, s?.show == true && s.state == "black")
         tint(whiteButton, s?.show == true && s.state == "white")
+        // An HTML deck has no black or white screen.
+        blackButton.visibility = if (s?.html == true) GONE else VISIBLE
+        whiteButton.visibility = blackButton.visibility
         val teams = status?.teams
         muteButton.visibility = if (teams?.meeting == true) VISIBLE else GONE
         (muteButton.getChildAt(1) as TextView).text = if (teams?.muted == true) "Muted" else "Mute"
@@ -331,7 +336,7 @@ class PresenterView(
 
     /** Every slide as a picture; tapping one goes there. */
     private fun showGrid() {
-        val s = slides ?: return ui.toast("Open the presentation in PowerPoint on the computer first")
+        val s = slides ?: return ui.toast("Open the presentation on the computer first (PowerPoint, or an HTML deck in the browser)")
         if (s.count == 0) return
         onCommand("thumbs", 0)
         val grid = GridLayout(context).apply { columnCount = 4 }

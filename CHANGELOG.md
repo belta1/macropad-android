@@ -68,6 +68,11 @@ More through the PC link ([docs/pc-link.md](docs/pc-link.md)); update
   the next one, the show's time and the clock, ◀ ▶ (and the tablet's volume buttons), black /
   white screen, every slide to jump to, and PowerPoint's laser pointer following your finger on
   the slide. It comes up by itself when a slide show starts and goes back when it ends.
+- **HTML slide decks on the Presenter page**: a single-file HTML presentation open in Chrome or
+  Edge (slides as `S({sect, html, notes})`, ← → to move, F for full screen, `#7` in the address)
+  shows its speaker notes, "7 / 19" and the slide's title; full screen is its slide show, and ◀ ▶,
+  the slide grid, Start / End show and the pointer drive it. Pictures of the slides come as each
+  one is shown.
 - **Dictation** (the dock's new mic key, `tablet:dictate`): speak, see the text (spoken
   punctuation in Spanish or English becomes marks), fix it, and type it into the window in front
   — into Citrix too. The text left untyped waits for next time.

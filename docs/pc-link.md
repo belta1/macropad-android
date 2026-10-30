@@ -32,8 +32,9 @@ Through it:
   and the page you had comes back when you hang up. *Leave call* shows the call's time. During a
   slide show the Presenter page stays instead, with a Mute button. ⚙ → Connection → *Teams page
   during calls* turns it off.
-- **Presenter** page for PowerPoint: the speaker notes, the slide and the next one, ◀ ▶; it comes
-  up when a slide show starts. See [below](#the-presenter-page-powerpoint).
+- **Presenter** page for PowerPoint and HTML slide decks in the browser: the speaker notes, the
+  slide and the next one, ◀ ▶; it comes up when a slide show starts. See
+  [below](#the-presenter-page-powerpoint-html-decks).
 - **Outlook keys** (classic Outlook) go to Outlook itself: they work in any language (Spanish
   Outlook's shortcuts differ), from any window, Citrix too, and act on the selected messages:
   `pc:outlook reply`, `new-mail`, `mark-read`, … ([below](#outlook-commands)).
@@ -207,7 +208,7 @@ it types it line by line into the window in front, with the bar to stop it that 
   with auto-indent off.
 - Characters the computer's keyboard layout can't type are skipped (a message names them).
 
-## The Presenter page (PowerPoint)
+## The Presenter page (PowerPoint, HTML decks)
 
 With PowerPoint open on the computer (installed there, not inside Citrix), the **Presenter** page
 shows:
@@ -243,6 +244,32 @@ The demo's window is the last app you had in front other than PowerPoint (a term
 *Types in* at the bottom shows it and picks another. The command is typed as written, line by
 line like any text (so it reaches Citrix too), with what PowerPoint's AutoCorrect changed in the
 notes undone: curly quotes become straight, a dash before an option `--`, `…` three dots.
+
+### HTML slide decks
+
+The same page drives **single-file HTML presentations** opened in Chrome or Edge (also Brave,
+Vivaldi, Opera, Firefox) from a local file: decks that define their slides as
+
+```js
+const SLIDES=[]; const S=o=>SLIDES.push(o);
+S({sect:"…", cls:"…", html:`<h2>Title</h2>…`, notes:`One paragraph per line…`});
+```
+
+move with ← → Home End, go full screen with F, and keep the slide's number in the address
+(`deck.html#7`). Bring the deck's window to the front and the tablet shows its notes (each line a
+paragraph), "7 / 19" and the slide's title (its first heading, else its section). Going full screen
+(F, or the browser's F11) is the slide show: the Presenter page comes up, and **Start / End show**
+press F / Esc. ◀ ▶, the volume buttons and the slide grid bring the deck to the front and press its
+own keys. Dragging on the slide moves the mouse pointer there. The deck has no black or white screen,
+so those buttons hide.
+
+Pictures of the slides arrive as each slide is shown in full screen; a slide not shown yet is its
+number. Editing and saving the deck file shows the new notes at once (and takes new pictures).
+
+In full screen the browser hides its address bar, so the script can't read the slide number
+there: it counts the tablet's own ◀ ▶ instead. Change slides from the tablet while in full
+screen, or leave full screen for a moment to put it right. A PowerPoint slide show, when one
+runs, takes the page over.
 
 ## Recording the computer's keyboard and mouse (experimental)
 

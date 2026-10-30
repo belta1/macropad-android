@@ -20,8 +20,9 @@ Windows laptops/desktops.
   *Sort tabs by use* orders them by how much you use each.
   With the [PC link](docs/pc-link.md): **Switcher** (the computer's open windows; tap to switch),
   **Screen** (a monitor of the computer, touchable), **Mixer** (volume per app) and
-  **PC clipboard** (your last copies on the computer, typed on tap) and **Presenter** (PowerPoint's
-  speaker notes, the slides and ◀ ▶; it comes up when a slide show starts). Over Wi-Fi: **Home** (Home
+  **PC clipboard** (your last copies on the computer, typed on tap) and **Presenter** (speaker notes,
+  the slides and ◀ ▶ for PowerPoint and HTML slide decks in the browser; it comes up when a slide
+  show starts). Over Wi-Fi: **Home** (Home
   Assistant's lights, switches, scenes, scripts and automations — see
   [docs/macro-language.md](docs/macro-language.md#network-steps)).
   Teams and Outlook keys work even while a Citrix / Remote Desktop window has focus — see

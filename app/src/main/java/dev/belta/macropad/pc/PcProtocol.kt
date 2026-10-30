@@ -60,10 +60,15 @@ data class PcStatus(
  * PowerPoint on the computer: [show] while a slide show runs ([state] "running", "black",
  * "white", "paused", or "done" on the closing black slide), else the presentation being edited.
  * [slide] is 1-based (0 when none); [version] changes when the slides' pictures must be sent again.
+ *
+ * Or, [html], a single-file HTML slide deck open in a browser (docs/pc-link.md): [show] while it
+ * fills its screen; it has no black or white screen. [app] is the program showing the slides
+ * ("powerpnt", "chrome"…).
  */
 data class PcSlides(
     val show: Boolean, val file: String, val slide: Int, val count: Int, val title: String?,
     val notes: String, val state: String, val version: Int,
+    val html: Boolean = false, val app: String = "powerpnt",
 )
 
 /** New mail in classic Outlook: the newest one's sender and subject, [count] new ones in all; [at] when it came. */
@@ -213,7 +218,8 @@ object PcProtocol {
             "slides" -> PcMessage.Slides(json.text("file")?.let { file ->
                 PcSlides(json.optBoolean("show"), file, json.optInt("slide"), json.optInt("count"), json.text("title"),
                     json.text("notes").orEmpty().replace("\r\n", "\n").replace('\r', '\n').replace('\u000B', '\n').trimEnd(),
-                    json.text("state") ?: "running", json.optInt("v"))
+                    json.text("state") ?: "running", json.optInt("v"),
+                    json.text("kind") == "html", json.text("app")?.lowercase()?.removeSuffix(".exe") ?: "powerpnt")
             })
             // The text as it is: its spaces and blank lines are the file's.
             "file" -> PcMessage.FileText(json.getInt("id"), json.text("name") ?: "file", json.optString("text").replace("\r\n", "\n"))

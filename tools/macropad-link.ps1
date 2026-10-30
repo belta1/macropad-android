@@ -3,7 +3,8 @@
     Macropad PC link: keeps the tablet's Bluetooth serial port open, tells the tablet about Teams,
     the app in front, the next Outlook meeting, the clipboard, open windows, the volume, what's
     playing and the terminal's Python venv, mirrors a monitor to the tablet's Screen page (and
-    clicks where it is touched), and runs the tablet's pc: steps.
+    clicks where it is touched), shows PowerPoint's and HTML slide decks' notes on its Presenter
+    page, and runs the tablet's pc: steps.
 
 .DESCRIPTION
     The macropad (Classic Bluetooth, e.g. Galaxy Tab S5e) offers a serial port next to the keyboard;
@@ -76,7 +77,7 @@ $ErrorActionPreference = 'Stop'
 $ProtocolVersion = 1
 # The tablet offers this script's update when the app carries a higher version, or the same one
 # with other contents.
-$ScriptVersion = '1.8.0'
+$ScriptVersion = '1.8.1'
 $StartOptions = @{} + $PSBoundParameters # for starting again after an update
 $ConfigDir = Join-Path $env:APPDATA 'Macropad'
 $CommandsFile = Join-Path $ConfigDir 'commands.json'
@@ -378,6 +379,11 @@ namespace MacropadLink {
         }
 
         public static long Front() { return GetForegroundWindow().ToInt64(); }
+
+        public static bool Exists(long id) { return IsWindow(new IntPtr(id)); }
+
+        [DllImport("user32.dll")] static extern bool IsZoomed(IntPtr h);
+        public static bool Maximized(long id) { return IsZoomed(new IntPtr(id)); }
 
         [DllImport("user32.dll")] static extern IntPtr GetKeyboardLayout(uint thread);
         [DllImport("user32.dll")] static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
@@ -698,6 +704,30 @@ namespace MacropadLink {
             return lines;
         }
 
+        // One picture of the screen at (x, y, w, h), at most maxW wide, as a JPEG; null if it can't be captured.
+        public static byte[] Picture(int x, int y, int w, int h, int maxW, int quality) {
+            try {
+                using (var full = new Bitmap(w, h, PixelFormat.Format32bppRgb)) {
+                    using (var g = Graphics.FromImage(full)) g.CopyFromScreen(x, y, 0, 0, new Size(w, h), CopyPixelOperation.SourceCopy);
+                    double scale = Math.Min(1.0, (double)maxW / w);
+                    using (var scaled = new Bitmap(Math.Max(1, (int)(w * scale)), Math.Max(1, (int)(h * scale)), PixelFormat.Format24bppRgb))
+                    using (var stream = new MemoryStream()) {
+                        using (var g = Graphics.FromImage(scaled)) {
+                            g.InterpolationMode = InterpolationMode.HighQualityBilinear;
+                            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                            g.DrawImage(full, 0, 0, scaled.Width, scaled.Height);
+                        }
+                        var parameters = new EncoderParameters(1);
+                        parameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)quality);
+                        scaled.Save(stream, jpeg, parameters);
+                        return stream.ToArray();
+                    }
+                }
+            } catch {
+                return null;
+            }
+        }
+
         static string Line(int seq, int view, int w, int h, StringBuilder tiles, string end) {
             var s = new StringBuilder("{\"t\":\"frame\",\"seq\":").Append(seq).Append(",\"view\":").Append(view)
                 .Append(",\"w\":").Append(w).Append(",\"h\":").Append(h)
@@ -990,6 +1020,25 @@ namespace MacropadLink {
         }
     }
 
+    // Keys pressed on this computer, as if typed: for slide decks in a browser, which only listen
+    // to their keys.
+    public static class Keys {
+        [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+        [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint mapType);
+        const uint Extended = 0x1, Up = 0x2;
+
+        // Virtual key [vk], [times] times; arrows, Home and End are the extended (not numpad) ones.
+        public static void Tap(int vk, int times) {
+            bool extended = vk >= 0x21 && vk <= 0x28;
+            byte scan = (byte)MapVirtualKey((uint)vk, 0);
+            uint flags = extended ? Extended : 0;
+            for (int i = 0; i < times; i++) {
+                keybd_event((byte)vk, scan, flags, UIntPtr.Zero);
+                keybd_event((byte)vk, scan, flags | Up, UIntPtr.Zero);
+            }
+        }
+    }
+
     // Buttons by name (UI Automation, as screen readers see them), so a recorded click finds its
     // button again where it is now. Only short names of things one clicks: a cell or a document
     // has no name worth keeping.
@@ -1050,6 +1099,31 @@ namespace MacropadLink {
                 }
             }
             return best;
+        }
+
+        static readonly Dictionary<long, UIA.AutomationElement> addressBars = new Dictionary<long, UIA.AutomationElement>();
+
+        // What browser window [window]'s address bar shows (its first edit box: Chrome's and Edge's
+        // in any language); null when it has none or hides it (full screen). The box is looked up
+        // once per window.
+        public static string AddressBar(long window) {
+            UIA.AutomationElement bar;
+            if (!addressBars.TryGetValue(window, out bar)) {
+                if (addressBars.Count > 50) addressBars.Clear();
+                var edit = new UIA.PropertyCondition(UIA.AutomationElement.ControlTypeProperty, UIA.ControlType.Edit);
+                bar = UIA.AutomationElement.FromHandle(new IntPtr(window)).FindFirst(UIA.TreeScope.Descendants, edit);
+                if (bar == null) return null; // not yet (a window opening), or none: look again next time
+                addressBars[window] = bar;
+            }
+            try {
+                if (bar.Current.IsOffscreen) return null;
+                object pattern;
+                if (!bar.TryGetCurrentPattern(UIA.ValuePattern.Pattern, out pattern)) return null;
+                return ((UIA.ValuePattern)pattern).Current.Value;
+            } catch (UIA.ElementNotAvailableException) {
+                addressBars.Remove(window);
+                return null;
+            }
         }
 
         static int[] ClickPoint(UIA.AutomationElement e) {
@@ -2263,7 +2337,7 @@ function Invoke-TypeFile($Request) {
 # title and speaker notes, every half second when they change. Pictures of the slides go one per
 # turn of the main loop, the slide on screen and the next one first; each once per version (a new
 # show or another presentation starts a new one, so edits show up).
-$Slides = @{ version = 0; file = $null; show = $false; presentation = $null; sent = @{}; queue = New-Object System.Collections.ArrayList }
+$Slides = @{ version = 0; file = $null; show = $false; presentation = $null; deck = $false; sent = @{}; queue = New-Object System.Collections.ArrayList }
 $SlideImageWidth = 960
 
 function Get-PowerPoint {
@@ -2301,6 +2375,10 @@ function Send-Slides([switch]$Always) {
             }
         } catch { Write-Traffic "PowerPoint: $($_.Exception.Message)" }
     }
+    # A slide show running in PowerPoint is what's on screen; else an HTML deck in the browser.
+    try { Update-Deck } catch { Write-Traffic "Deck: $($_.Exception.Message)"; $script:Deck = $null }
+    if ($script:Deck -and -not $show) { return Send-Deck -Always:$Always }
+    $script:Slides.deck = $false
     $file = if ($presentation) { [string]$presentation.Name } else { $null }
     # A new show or another presentation: the tablet's pictures may be old.
     if ($file -ne $script:Slides.file -or ($show -and -not $script:Slides.show)) { Reset-SlideImages }
@@ -2356,6 +2434,7 @@ function Send-SlideImage {
 }
 
 function Invoke-Slides($Request) {
+    if ($script:Slides.deck) { return Invoke-DeckCommand $Request }
     $do = [string]$Request.do
     $ppt = Get-PowerPoint
     if (-not $ppt) { if ($Request.id) { Send-Result $Request.id $false 'PowerPoint is not open on this computer' }; return }
@@ -2403,6 +2482,234 @@ function Move-Laser($Window, [double]$X, [double]$Y) {
     $left = $rect[0] + ($rect[2] - $w) / 2
     $top = $rect[1] + ($rect[3] - $h) / 2
     [MacropadLink.Pointer]::Do([int]($left + $X * $w), [int]($top + $Y * $h), 'move', 0)
+}
+
+# ------------------------------------------------------------------ HTML slide decks (the Presenter page too)
+
+# Single-file HTML presentations open in a browser: `const S=o=>SLIDES.push(o);` then one
+# S({sect, cls, html, notes}) per slide, a 1280 x 720 slide centred in the window, ← → Home End
+# and F (full screen) to drive it, and "#n" in the address for slide n. The address bar says which
+# file and slide; the file has the titles and notes. In full screen the address bar is hidden, so
+# the slide is the last one read, moved by the tablet's own ◀ ▶ (pressed here, on the deck).
+# Reported like PowerPoint (kind "html"), after a running PowerPoint show and before PowerPoint
+# being edited.
+$Deck = $null         # @{ window; app; path; stamp; slides; slide; heldUntil; shownAt } while one is open
+$DeckFiles = @{}      # path -> @{ stamp; slides } as last read ($null slides: not a deck)
+$DeckBrowsers = 'chrome', 'msedge', 'brave', 'vivaldi', 'opera', 'firefox'
+
+# "E:/talks/deck.html#7" or "file:///E:/talks/my%20deck.html#7" -> @{ path; slide }; $null for
+# anything else (a web page, the address being typed…).
+function Get-DeckAddress([string]$Text) {
+    if (-not $Text) { return $null }
+    $address = $Text.Trim() -replace '^file:///', ''
+    if ($address -notmatch '^(?<path>[A-Za-z]:/[^#?]+\.html?)(\?[^#]*)?(#(?<n>\d+))?$') { return $null }
+    $slide = if ($Matches.n) { [int]$Matches.n } else { 1 }
+    return @{ path = [Uri]::UnescapeDataString($Matches.path).Replace('/', '\'); slide = $slide }
+}
+
+# A JavaScript string after "<Field>:" in $Block (backquoted or quoted), or the backquoted value of
+# the constant it names (html:COVER); $null if none.
+function Get-DeckField([string]$Block, [string]$Field, [string]$Text) {
+    $m = [regex]::Match($Block, "\b$Field\s*:\s*(?:``(?<s>[^``]*)``|`"(?<s>(?:[^`"\\]|\\.)*)`"|(?<name>[A-Za-z_]\w*))")
+    if (-not $m.Success) { return $null }
+    if ($m.Groups['name'].Success) {
+        $m = [regex]::Match($Text, "(?:const|let|var)\s+$($m.Groups['name'].Value)\s*=\s*``(?<s>[^``]*)``")
+        if (-not $m.Success) { return $null }
+    }
+    return $m.Groups['s'].Value -replace '\\(.)', '$1'
+}
+
+# HTML as plain text: tags out (a <br> or a paragraph is a space), entities decoded.
+function ConvertFrom-DeckHtml([string]$Html) {
+    $text = [Net.WebUtility]::HtmlDecode(($Html -replace '<br\s*/?>|</(p|div|li|h\d)>', ' ' -replace '<[^>]+>', ''))
+    return ($text -replace '\s+', ' ').Trim()
+}
+
+# The deck's slides, @{ title; notes } each, or $null if $Path isn't such a deck. Read again when
+# the file changes.
+function Read-DeckFile([string]$Path) {
+    $stamp = [IO.File]::GetLastWriteTimeUtc($Path)
+    $known = $script:DeckFiles[$Path]
+    if (-not $known -or $known.stamp -ne $stamp) {
+        $known = @{ stamp = $stamp; slides = (Get-DeckSlides ([IO.File]::ReadAllText($Path, [Text.Encoding]::UTF8))) }
+        if ($script:DeckFiles.Count -gt 20) { $script:DeckFiles.Clear() }
+        $script:DeckFiles[$Path] = $known
+    }
+    if ($null -eq $known.slides) { return $null }
+    return , $known.slides # the list itself, the same one until the file changes
+}
+
+function Get-DeckSlides([string]$Text) {
+    if ($Text -notmatch '\bS\s*=\s*\w+\s*=>\s*SLIDES\.push') { return $null }
+    $slides = New-Object System.Collections.ArrayList
+    $starts = [regex]::Matches($Text, '(?<![\w.$])S\(\{')
+    for ($i = 0; $i -lt $starts.Count; $i++) {
+        $start = $starts[$i].Index
+        $end = if ($i + 1 -lt $starts.Count) { $starts[$i + 1].Index } else { $Text.IndexOf('</script>', $start) }
+        if ($end -lt 0) { $end = $Text.Length }
+        $block = $Text.Substring($start, $end - $start)
+        # The slide's HTML first and out of the way: its words could look like the other fields.
+        $html = $null
+        $literal = [regex]::Match($block, '\bhtml\s*:\s*`[^`]*`')
+        if ($literal.Success) {
+            $html = Get-DeckField $literal.Value 'html' $Text
+            $block = $block.Remove($literal.Index, $literal.Length)
+        } else {
+            $html = Get-DeckField $block 'html' $Text
+        }
+        $heading = if ($html) { [regex]::Match($html, '(?s)<h[12][^>]*>(.*?)</h[12]>') } else { $null }
+        $title = if ($heading -and $heading.Success) { ConvertFrom-DeckHtml $heading.Groups[1].Value } else { Get-DeckField $block 'sect' $Text }
+        # The deck shows each line of its notes as a paragraph (HTML allowed).
+        $notes = @([string](Get-DeckField $block 'notes' $Text) -split '\r?\n' | ForEach-Object { ConvertFrom-DeckHtml $_ } | Where-Object { $_ }) -join "`n`n"
+        [void]$slides.Add(@{ title = $title; notes = $notes })
+    }
+    if ($slides.Count -eq 0) { return $null }
+    return , $slides
+}
+
+# Browser window $Window's deck: @{ path; slide; slides }, $false when it shows something else,
+# $null when its address can't be read (full screen).
+function Read-DeckWindow([long]$Window) {
+    $text = $null
+    try { $text = [MacropadLink.Uia]::AddressBar($Window) } catch { }
+    if ($null -eq $text) { return $null }
+    $address = Get-DeckAddress $text
+    if (-not $address -or -not (Test-Path -LiteralPath $address.path -PathType Leaf)) { return $false }
+    try { $slides = Read-DeckFile $address.path } catch { Write-Traffic "Deck $($address.path): $($_.Exception.Message)"; return $false }
+    if (-not $slides) { return $false }
+    $address.slides = $slides
+    return $address
+}
+
+# Which deck is open, and on which slide: a browser coming to the front with a deck takes over;
+# the deck's window follows its address while it can be read.
+function Update-Deck {
+    $front = [MacropadLink.Windows]::Front()
+    if ($front -and (-not $script:Deck -or $front -ne $script:Deck.window)) {
+        $info = Get-ProcessInfo ([MacropadLink.Pointer]::ProcessId($front))
+        if ($info -and $info.exe -in $DeckBrowsers) {
+            $found = Read-DeckWindow $front
+            if ($found) { $script:Deck = @{ window = $front; app = $info.exe; path = $null; heldUntil = [datetime]::MinValue; shownAt = Get-Date } }
+        }
+    }
+    $deck = $script:Deck
+    if (-not $deck) { return }
+    if (-not [MacropadLink.Windows]::Exists($deck.window)) { $script:Deck = $null; return }
+    $found = Read-DeckWindow $deck.window
+    if ($found -is [bool]) { $script:Deck = $null; return } # another page now
+    if ($null -eq $found) { return } # full screen: the slide as last known
+    if ($found.path -ne $deck.path -or -not [object]::ReferenceEquals($found.slides, $deck.slides)) {
+        if ($deck.path) { Reset-SlideImages } # edited, or another deck in that tab: new pictures
+        $deck.path = $found.path
+        $deck.slides = $found.slides
+        $deck.slide = 0
+    }
+    # Right after the tablet changed slides the browser may not have caught up yet.
+    $slide = [Math]::Min($found.slide, $deck.slides.Count)
+    if ((Get-Date) -ge $deck.heldUntil -and $slide -ne $deck.slide) {
+        $deck.slide = $slide
+        $deck.shownAt = Get-Date
+    }
+}
+
+# The deck's window fills its monitor (the deck's F, or the browser's F11): its slide show. Chrome
+# and Edge un-maximize a window going full screen, so a maximized one never counts.
+function Test-DeckFullScreen([long]$Window) {
+    if ([MacropadLink.Windows]::Maximized($Window)) { return $false }
+    $rect = [MacropadLink.Pointer]::Rect($Window)
+    if (-not $rect) { return $false }
+    $screen = [Windows.Forms.Screen]::FromHandle([IntPtr]$Window).Bounds
+    return $rect[0] -le $screen.X -and $rect[1] -le $screen.Y -and
+        $rect[0] + $rect[2] -ge $screen.Right -and $rect[1] + $rect[3] -ge $screen.Bottom
+}
+
+# Where the 1280 x 720 slide sits in the full-screen deck window: left, top, width, height.
+function Get-DeckSlideBox([long]$Window) {
+    $rect = [MacropadLink.Pointer]::Rect($Window)
+    if (-not $rect) { return $null }
+    $w = [Math]::Min($rect[2], $rect[3] * 16 / 9)
+    $h = $w * 9 / 16
+    return @([int]($rect[0] + ($rect[2] - $w) / 2), [int]($rect[1] + ($rect[3] - $h) / 2), [int]$w, [int]$h)
+}
+
+function Send-Deck([switch]$Always) {
+    $deck = $script:Deck
+    $file = [IO.Path]::GetFileName($deck.path)
+    $show = Test-DeckFullScreen $deck.window
+    if ($file -ne $script:Slides.file -or ($show -and -not $script:Slides.show)) { Reset-SlideImages }
+    $script:Slides.file = $file
+    $script:Slides.show = $show
+    $script:Slides.presentation = $null
+    $script:Slides.deck = $true
+    $message = [ordered]@{ t = 'slides'; kind = 'html'; app = $deck.app; file = $file; show = $show; state = 'running'; count = $deck.slides.Count; v = $script:Slides.version }
+    if ($deck.slide -gt 0) {
+        $message.slide = $deck.slide
+        $message.title = $deck.slides[$deck.slide - 1].title
+        $message.notes = $deck.slides[$deck.slide - 1].notes
+    }
+    Send-Changed $message -Always:$Always
+    if ($show) { Send-DeckPicture }
+}
+
+# A picture of the slide on screen, once per slide: in full screen, with the deck in front, once
+# the slide has been up a moment (the browser has drawn it).
+function Send-DeckPicture {
+    $deck = $script:Deck
+    $n = $deck.slide
+    if ($n -lt 1 -or $script:Slides.sent.ContainsKey($n)) { return }
+    if ([MacropadLink.Windows]::Front() -ne $deck.window -or ((Get-Date) - $deck.shownAt).TotalMilliseconds -lt 600) { return }
+    $box = Get-DeckSlideBox $deck.window
+    if (-not $box) { return }
+    $jpg = [MacropadLink.Mirror]::Picture($box[0], $box[1], $box[2], $box[3], $SlideImageWidth, 80)
+    if (-not $jpg) { return }
+    $script:Slides.sent[$n] = $true
+    Send-Tablet ([ordered]@{ t = 'slide-image'; file = $script:Slides.file; n = $n; v = $script:Slides.version; jpg = [Convert]::ToBase64String($jpg) })
+}
+
+# The Presenter page's buttons on a deck: its own keys, pressed with its window in front.
+function Invoke-DeckCommand($Request) {
+    $deck = $script:Deck
+    $do = [string]$Request.do
+    $count = if ($deck) { $deck.slides.Count } else { 0 }
+    try {
+        if (-not $deck) { throw 'The presentation was closed' }
+        if ($do -eq 'thumbs') {
+            # Pictures come as each slide is shown.
+        } elseif ($do -in 'point', 'point-end') {
+            # The mouse pointer is the deck's laser pointer.
+            if ($do -eq 'point-end' -or -not (Test-DeckFullScreen $deck.window)) { return }
+            $box = Get-DeckSlideBox $deck.window
+            if ($box) { [MacropadLink.Pointer]::Do([int]($box[0] + [double]$Request.x * $box[2]), [int]($box[1] + [double]$Request.y * $box[3]), 'move', 0) }
+            return
+        } elseif ($do -in 'black', 'white') {
+            throw 'An HTML presentation has no black or white screen'
+        } else {
+            if (-not [MacropadLink.Windows]::Focus($deck.window)) { throw "Couldn't bring the presentation to the front" }
+            $full = Test-DeckFullScreen $deck.window
+            $slide = [Math]::Max(1, $deck.slide)
+            switch ($do) {
+                'next' { [MacropadLink.Keys]::Tap(0x27, 1); $slide = [Math]::Min($count, $slide + 1) }    # →
+                'prev' { [MacropadLink.Keys]::Tap(0x25, 1); $slide = [Math]::Max(1, $slide - 1) }         # ←
+                'goto' {
+                    $slide = [Math]::Max(1, [Math]::Min($count, [int]$Request.n))
+                    # From the nearer end: Home then →, or End then ←.
+                    if ($slide - 1 -le $count - $slide) { [MacropadLink.Keys]::Tap(0x24, 1); [MacropadLink.Keys]::Tap(0x27, $slide - 1) }
+                    else { [MacropadLink.Keys]::Tap(0x23, 1); [MacropadLink.Keys]::Tap(0x25, $count - $slide) }
+                }
+                'start' { if (-not $full) { [MacropadLink.Keys]::Tap(0x46, 1) } } # F
+                'end' { if ($full) { [MacropadLink.Keys]::Tap(0x1B, 1) } }        # Esc
+            }
+            if ($slide -ne $deck.slide) {
+                $deck.slide = $slide
+                $deck.shownAt = Get-Date
+                $deck.heldUntil = (Get-Date).AddSeconds(1)
+            }
+        }
+        if ($Request.id) { Send-Result $Request.id $true $null }
+    } catch {
+        if ($Request.id) { Send-Result $Request.id $false $_.Exception.Message }
+    }
+    $script:Next.slides = Get-Date # show the new slide at once
 }
 
 # ------------------------------------------------------------------ talking to the tablet
