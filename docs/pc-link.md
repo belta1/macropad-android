@@ -374,6 +374,11 @@ once more.
 - *"No outgoing Bluetooth COM port"*: see steps 1–2. The script looks for a paired Bluetooth
   device whose name contains `Macropad`; use `-Device "<name>"` if you renamed it (⚙ →
   Connection → Bluetooth name).
+- *"Can't open COMx: The port 'COMx' does not exist"* (*"El puerto 'COMx' no existe"*), although
+  the COM Ports tab still lists it: the port belongs to an old pairing (after reinstalling the app
+  or pairing again), and Windows keeps showing it. `[System.IO.Ports.SerialPort]::GetPortNames()`
+  leaves it out. Remove Macropad in Bluetooth & devices, pair it again (step 1), check the new
+  *Outgoing* port (step 2; its number may change) and start the script without `-Port`.
 - The port opens but nothing happens: check that ⚙ → Diagnostics → Connection is *Classic
   Bluetooth*. The PC link needs the Classic keyboard. Then check ⚙ → Connection → PC link
   computers: a computer refused there is turned away (the tablet's log says so).
