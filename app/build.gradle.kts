@@ -47,6 +47,9 @@ android {
         }
     }
 
+    // The PC link script rides in the app, so the tablet can update the computer's copy (LinkScript).
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/linkScript"))
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -55,6 +58,12 @@ android {
         jvmTarget = "17"
     }
 }
+
+val copyLinkScript by tasks.registering(Copy::class) {
+    from(rootProject.file("tools/macropad-link.ps1"))
+    into(layout.buildDirectory.dir("generated/linkScript"))
+}
+tasks.named("preBuild") { dependsOn(copyLinkScript) }
 
 dependencies {
     testImplementation("junit:junit:4.13.2")

@@ -45,6 +45,20 @@ class LayoutJsonTest {
     }
 
     @Test
+    fun `pages that stay round trip, and only Screen, Home and Python stay by default`() {
+        val layout = DefaultLayout.layout()
+        assertEquals(setOf(DefaultLayout.SCREEN_PAGE, DefaultLayout.HOME_PAGE, DefaultLayout.PYTHON_PAGE),
+            layout.pages.filter { it.stay }.map { it.name }.toSet())
+        layout.pages.first { it.name == "Chrome" }.stay = true
+        val copy = LayoutJson.fromJson(LayoutJson.toJson(layout))
+        assertEquals(setOf("Screen", "Home", "Python", "Chrome"), copy.pages.filter { it.stay }.map { it.name }.toSet())
+        assertEquals(PageKind.SCREEN, copy.pages.first { it.name == DefaultLayout.SCREEN_PAGE }.kind)
+        assertEquals(PageKind.HOME, copy.pages.first { it.name == DefaultLayout.HOME_PAGE }.kind)
+        // The Python page lists no apps of its own.
+        assertEquals(emptyList<String>(), copy.pages.first { it.name == DefaultLayout.PYTHON_PAGE }.appNames)
+    }
+
+    @Test
     fun `dock volume keys become a slider`() {
         val dock = Page("Media", mutableListOf(
             MacroButton("Play", "media:playpause", 1, null),
@@ -87,12 +101,48 @@ class LayoutJsonTest {
     }
 
     @Test
-    fun `default dock has every dock slot, desktop keys last, then one free slot`() {
+    fun `default dock - desktop keys, the volume slider, the media card`() {
         val dock = DefaultLayout.dock().buttons
         assertEquals(Layout.DOCK_SIZE, dock.size)
-        assertNull(dock.last()) // the slider's icon took over Mute; the slot is free for a key
-        assertEquals(DefaultLayout.DESKTOP_DOCK.map { it.action },
-            dock.dropLast(1).takeLast(DefaultLayout.DESKTOP_DOCK.size).map { it!!.action })
+        assertEquals(DefaultLayout.DESKTOP_DOCK, dock.take(3))
+        assertEquals("slide:volume", dock[3]!!.action)
+        assertEquals(DefaultLayout.MEDIA_CARD, dock[4])
+        assertTrue(dock.drop(5).all { it == null })
+        assertEquals(false, DefaultLayout.mediaCardDock(DefaultLayout.dock())) // already so
+    }
+
+    private val b = { action: String -> MacroButton(action, action, 1, null) }
+    private val expected = listOf("win+ctrl+left", "win+tab", "win+ctrl+right", "slide:volume", "media:playpause", null, null, null)
+
+    @Test
+    fun `a 1_7 dock - media keys go into the card, desktop keys first, repeats dropped`() {
+        val dock = Page("Media", mutableListOf(b("media:prev"), b("media:playpause"), b("media:next"), b("slide:volume"),
+            b("win+ctrl+left"), b("win+tab"), b("win+ctrl+right"), b("win+ctrl+right")))
+        assertTrue(DefaultLayout.mediaCardDock(dock))
+        assertEquals(expected, dock.buttons.map { it?.action })
+        assertEquals(DefaultLayout.MEDIA_CARD, dock.buttons[4])
+        assertEquals("win+ctrl+left", dock.buttons[0]!!.label) // the dock's own keys are kept
+    }
+
+    @Test
+    fun `a dock that already had what's playing keeps that card and gets the desktop keys back`() {
+        val card = MacroButton("{media}", "media:playpause", 2, null)
+        val dock = Page("Media", mutableListOf(b("media:prev"), b("media:playpause"), b("media:next"), b("slide:volume"),
+            card, null, b("f13"), null))
+        assertTrue(DefaultLayout.mediaCardDock(dock))
+        assertEquals(listOf("win+ctrl+left", "win+tab", "win+ctrl+right", "slide:volume", "f13", "media:playpause", null, null),
+            dock.buttons.map { it?.action })
+        assertTrue(dock.buttons[5] === card)
+    }
+
+    @Test
+    fun `PC link pages keep their kind`() {
+        val copy = LayoutJson.fromJson(LayoutJson.toJson(DefaultLayout.layout()))
+        assertEquals(PageKind.WINDOWS, copy.pages.first { it.name == DefaultLayout.SWITCHER_PAGE }.kind)
+        assertEquals(PageKind.MIXER, copy.pages.first { it.name == DefaultLayout.MIXER_PAGE }.kind)
+        val clipboard = copy.pages.first { it.name == DefaultLayout.CLIPBOARD_PAGE }
+        assertEquals("text:{pcclipboard:3}", clipboard.buttons[2]!!.action)
+        assertEquals(15, clipboard.buttons.size)
     }
 
     @Test(expected = IllegalArgumentException::class)

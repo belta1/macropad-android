@@ -1,5 +1,85 @@
 # Changelog
 
+## Unreleased
+
+- **Python page** for classes and demos: create / activate / deactivate a `.venv`, install from
+  `requirements.txt`, freeze, pip list / install / upgrade, run a script, the Python shell, clear,
+  Ctrl+C. Hold *Create venv* to also activate it, hold *Activate venv* to first allow scripts in
+  PowerShell. It stays up whatever app is in front.
+- **Type selected file** (PC clipboard page, `pc:typefile`): the text file selected in File
+  Explorer, typed line by line into the window in front — into Citrix without its clipboard or
+  drives. It asks first, showing the file's name and size. It takes the place of that page's Paste.
+- **Tabs in order of use**: the work ones first (Desktop, Citrix, Teams, Outlook, Switcher, PC
+  clipboard, Python, Presenter…), once. The **Excel** and **Word** pages go (their shortcuts are
+  the apps' own), unless you changed their keys. The app now counts how much each page is used
+  (keys pressed, minutes shown; lately counts most) and *Sort tabs by use* (pages menu) orders
+  them by it, naming the rarely used ones.
+- A page can **stay** while it shows, whatever app comes to the front (long-press a tab → Stay on
+  this page).
+- **Home** page: Home Assistant's lights, switches, covers, media, scenes, scripts and automations
+  by area, over Wi-Fi (`ha_url` / `ha_token`). It starts with the main devices (the ones exposed to
+  a voice assistant); tap to toggle, hold to pin, hide or run an automation now; filter by kind or
+  search. Added once to existing layouts.
+
+More through the PC link ([docs/pc-link.md](docs/pc-link.md)); update
+`tools/macropad-link.ps1` on the computer too.
+
+- **PC clipboard** page: your last copies on the computer, each key showing its text and typing it
+  (so it also reaches a Citrix session without a shared clipboard). `{pcclipboard}` /
+  `{pcclipboard:N}` in any `text:` step. Copies a password manager or an incognito window marks
+  as private are never sent; `-NoClipboard` sends none.
+- **Switcher** page: the computer's open windows with their icons; tap one to bring it to the
+  front, also from Citrix.
+- **Screen** page: a monitor of the computer on the tablet, touchable (tap = click, hold = right
+  click, drag, two fingers scroll); choose the monitor at the top. A live view at a few pictures
+  per second: only the parts that changed are sent.
+- **Real volume**: with the PC link the dock's volume slider sits at the computer's level and drags
+  to a level. **Mixer** page: a slider per app playing sound.
+- **Media card** in the dock: what's playing (title over artist) with ⏮ ⏯ ⏭; tapping the text
+  plays / pauses too. It replaces the dock's Previous / Play / Pause / Next keys.
+- **The dock runs along the whole bottom**, under the sidebar too: desktop switching, the volume
+  slider, the media card. Existing docks change once (repeated desktop keys go).
+- **The terminal's venv and folder** on the Python page's *Which Python* key, with the new shell
+  hook (`macropad-link.ps1 -InstallShellHook`).
+- **Outlook keys work in any language**: with the PC link they are classic Outlook commands
+  (`pc:outlook reply`, `new-mail`, `mark-read`, …) on the selected messages, from any window;
+  Spanish Outlook's shortcuts differ from the English ones the keys sent. Without the link they
+  send those shortcuts as before. Unchanged Outlook keys switch once.
+- **Join meeting** key in the sidebar (added once to a free slot): shows the next Outlook meeting,
+  lights from 5 minutes before, and opens its Teams / Zoom / Meet / Webex meeting (`pc:join`).
+- **The tablet follows the computer's lock**: locked, it dims; unlocked, it wakes.
+- **Typing follows the computer's keyboard layout** (of the window in front), so accents come out
+  right without setting it.
+- **Unread mail on the Outlook tab.**
+- **Screen**: pinch to zoom (the computer sends that part sharp), *Fit*, and a *Keyboard* chip that
+  types on the computer from the tablet's keyboard.
+- **Macros that find their window**: `pc:focus excel` brings an app to the front (waiting for it
+  to open), `pc:wait save as` waits for a window instead of a fixed delay; the steps after them
+  wait, and if the window doesn't come the rest doesn't run.
+- **Recording**: app switches on the computer are recorded as `pc:focus`; stopping shows the steps
+  to reorder, delete, change pauses and try, can start by bringing the app to the front, and saves
+  on that app's page.
+- **New mail** from classic Outlook over the dock (tap to open Outlook) and on the idle clock.
+- **Experimental, off**: recording also captures the computer's own keyboard and mouse (⚙ →
+  Connection, and the script's `-AllowRecording`). Clicks become `pc:click` steps in their app's
+  window, with the button's name when Windows knows it, so they find it again if it moved;
+  `pc:drag` and `pc:scroll` too.
+- **Presenter** page for PowerPoint: the current slide's speaker notes in big type, the slide and
+  the next one, the show's time and the clock, ◀ ▶ (and the tablet's volume buttons), black /
+  white screen, every slide to jump to, and PowerPoint's laser pointer following your finger on
+  the slide. It comes up by itself when a slide show starts and goes back when it ends.
+- **Calls bring up the Teams page** and give the page you had back when you hang up; *Leave call*
+  shows the call's time (`{call}` in any label). Presenting, the Presenter page gets a Mute button.
+- **Commands in the speaker notes**: a `>` line on the Presenter page is a key that brings the
+  demo's window (a terminal…) to the front and types it, then Enter — curly quotes and dashes from
+  PowerPoint's AutoCorrect undone.
+- **The tablet updates the PC link script**: the app carries it, offers it when the computer's
+  copy is older, and the script checks it, keeps a `.bak` and restarts (`-NoUpdate` refuses).
+  Scripts from before this one still need copying once.
+- **Live labels**: `{venv}`, `{folder}`, `{media}`, `{volume}`, `{pcclipboard:2}`, … in any key's
+  label, with a fallback: `{venv|Which Python}`. See
+  [docs/macro-language.md](docs/macro-language.md#live-labels).
+
 ## 1.7.0
 
 - **PC link** ([docs/pc-link.md](docs/pc-link.md)), on tablets with Classic Bluetooth (Galaxy Tab

@@ -16,18 +16,27 @@ import dev.belta.macropad.ui.Ui.Companion.TEXT
 
 /**
  * Records a macro on the tablet: every action is sent to the computer live (by [send]) and
- * captured, with the pause since the previous action kept as a `delay:` step.
+ * captured, with the pause since the previous action kept as a `delay:` step. With the PC link,
+ * switching apps on the computer is captured as `pc:focus <app>` ([appChanged]).
  */
 class Recorder(private val ui: Ui, private val send: (String) -> Unit, private val onChanged: () -> Unit) {
 
+    /** The recorded steps (one per line), and [app]: the computer's app in front when it started. */
+    class Recording(val steps: List<String>, val app: String?)
+
     private var steps: MutableList<String>? = null
     private var lastAt = 0L
+    private var startApp: String? = null
+    private var currentApp: String? = null
 
     val isRecording get() = steps != null
 
-    fun start() {
+    /** [app]: the app in front on the computer (PC link), if known. */
+    fun start(app: String? = null) {
         steps = mutableListOf()
         lastAt = 0L
+        startApp = app
+        currentApp = app
         onChanged()
     }
 
@@ -36,12 +45,19 @@ class Recorder(private val ui: Ui, private val send: (String) -> Unit, private v
         onChanged()
     }
 
-    /** Ends the recording; returns the macro text, or null if nothing was recorded. */
-    fun finish(): String? {
+    /** Ends the recording; null if nothing was recorded. */
+    fun finish(): Recording? {
         val recorded = steps ?: return null
         steps = null
         onChanged()
-        return if (recorded.any { !isDelay(it) }) recorded.joinToString("\n") else null
+        return if (recorded.any { !isDelay(it) }) Recording(recorded.dropWhile(::isDelay), startApp) else null
+    }
+
+    /** Another app came to the front on the computer: replaying brings it to the front there too. */
+    fun appChanged(app: String) {
+        if (steps == null || app == currentApp) return
+        currentApp = app
+        record("pc:focus $app")
     }
 
     fun record(action: String) {
@@ -144,12 +160,14 @@ class Recorder(private val ui: Ui, private val send: (String) -> Unit, private v
         send(action)
     }
 
-    private fun isDelay(line: String) = line.startsWith("delay:")
+    private fun isDelay(line: String) = isDelayStep(line)
 
-    private companion object {
-        const val MIN_DELAY = 300L
-        const val MAX_DELAY = 2000L
-        val QUICK_KEYS = listOf(
+    companion object {
+        fun isDelayStep(line: String) = line.startsWith("delay:")
+
+        private const val MIN_DELAY = 300L
+        private const val MAX_DELAY = 2000L
+        private val QUICK_KEYS = listOf(
             "enter", "esc", "tab", "backspace", "up", "down", "left", "right",
             "win", "win+r", "win+e", "win+d", "alt+tab", "alt+f4", "ctrl+c", "ctrl+v",
         )

@@ -103,6 +103,12 @@ object Icons {
         "record" to R.drawable.ic_k_record,
         "check" to R.drawable.ic_k_check,
         "bluetooth" to R.drawable.ic_k_bluetooth,
+        "home" to R.drawable.ic_k_home,
+        "lightbulb" to R.drawable.ic_k_lightbulb,
+        "power" to R.drawable.ic_k_power,
+        "fan" to R.drawable.ic_k_fan,
+        "blinds" to R.drawable.ic_k_blinds,
+        "thermostat" to R.drawable.ic_k_thermostat,
     )
 
     fun get(name: String?): Int? = name?.let { all[it] }

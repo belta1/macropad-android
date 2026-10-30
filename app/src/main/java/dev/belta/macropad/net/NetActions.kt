@@ -48,7 +48,15 @@ object NetActions {
         return CalendarEvent(title, start, parseHaTime(attributes.optString("end_time")), state.optString("state") == "on")
     }
 
-    data class CalendarEvent(val title: String, val start: Date, val end: Date?, val now: Boolean)
+    /** [hasJoin]: the computer has the meeting's online link (Teams…), so `pc:join` can open it. */
+    data class CalendarEvent(val title: String, val start: Date, val end: Date?, val now: Boolean, val hasJoin: Boolean = false)
+
+    /** Every entity's state (Home Assistant's /api/states), as JSON. */
+    fun haStates(secret: (String) -> String?): String = ha(secret, "GET", "/api/states", null)
+
+    /** Renders a Home Assistant template (/api/template). */
+    fun haTemplate(secret: (String) -> String?, template: String): String =
+        ha(secret, "POST", "/api/template", JSONObject().put("template", template).toString())
 
     /** Home Assistant gives calendar times as local "yyyy-MM-dd HH:mm:ss". */
     private fun parseHaTime(text: String): Date? =

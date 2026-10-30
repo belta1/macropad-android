@@ -34,13 +34,26 @@ import kotlin.math.hypot
  * buttons too: a tap sends one step down / up, holding keeps stepping.
  *
  * Drawn as a groove cut into the keycap's face, with a small knob as the thumb.
+ *
+ * With a [level] (0–100, e.g. the computer's volume over the PC link) and [onLevel] it is absolute
+ * instead: the knob sits at the level, a touch on the groove moves it there, dragging follows the
+ * finger and [onLevel] reports each new level (`done` once the finger lifts). − / + and the icon
+ * work as before. [setLevel] moves it when the computer reports a change.
  */
 @SuppressLint("ViewConstructor")
 class SliderView(
     private val ui: Ui, private val button: MacroButton, keyBackground: Drawable, private val compact: Boolean,
     private val onTap: (() -> Unit)? = null,
+    level: Int? = null,
+    private var muted: Boolean = false,
+    private val onLevel: ((level: Int, done: Boolean) -> Unit)? = null,
     private val onTick: (up: Boolean) -> Unit,
 ) : View(ui.context) {
+
+    val absolute = level != null && onLevel != null
+    private var level = level ?: 0
+    /** The level changed during this touch, so lifting reports it as done. */
+    private var levelMoved = false
 
     private val tickPx = ui.dp(TICK_DP).toFloat()
     private val edge = ui.dp(28).toFloat()
@@ -55,6 +68,10 @@ class SliderView(
     private val tapStep = Macro.slider(button.action)?.tap
 
     private val icon = Icons.get(button.icon)?.let {
+        context.getDrawable(it)!!.mutate().apply { setTint(legendTone(button.color)) }
+    }
+    /** A speaker icon shows crossed out while [muted]. */
+    private val mutedIcon = Icons.get("volume_off")?.takeIf { button.icon?.startsWith("volume") == true }?.let {
         context.getDrawable(it)!!.mutate().apply { setTint(legendTone(button.color)) }
     }
     private val labelPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -104,9 +121,26 @@ class SliderView(
 
     init {
         background = keyBackground
-        contentDescription = "${button.label} (${Macro.describe(button.action)})"
         isHapticFeedbackEnabled = true
+        describe()
     }
+
+    private fun describe() {
+        contentDescription = "${button.label} (${Macro.describe(button.action)})" +
+            if (absolute) ", " + (if (muted) "muted" else "$level%") else ""
+    }
+
+    /** The level (and mute) the computer reports; ignored while the slider is being touched. */
+    fun setLevel(level: Int, muted: Boolean) {
+        if (isPressed || (level == this.level && muted == this.muted)) return
+        this.level = level.coerceIn(0, 100)
+        this.muted = muted
+        describe()
+        invalidate()
+    }
+
+    /** Where the knob sits for [level]: 0 at the − end, 100 at the + end. */
+    private fun levelAt(level: Int) = center - maxThumb + 2 * maxThumb * level / 100f
 
     private val tapLabel = when {
         tapStep == null -> null
@@ -133,7 +167,7 @@ class SliderView(
 
     override fun onDraw(canvas: Canvas) {
         val iconSize = ui.dp(if (labelled) 20 else 24)
-        icon?.let {
+        (if (muted && mutedIcon != null) mutedIcon else icon)?.let {
             val left = if (horizontal) pad.toInt() else (width - iconSize) / 2
             val drop = if (isPressed && onIcon && !dragged) travel.toInt() else 0
             val top = drop + if (horizontal && !labelled) ((height - skirt - iconSize) / 2).toInt() else pad.toInt()
@@ -154,19 +188,27 @@ class SliderView(
         drawSign(canvas, "+", end - sign / 2, pressed = onSign == 1 && !dragged)
         bar(center - maxThumb - thumbR, center + maxThumb + thumbR, groove)
         canvas.drawRoundRect(rect, groove, groove, trackPaint)
-        if (thumb != 0f) {
-            bar(center, center + thumb, groove / 2)
+        val knob = if (absolute) levelAt(level) else center + thumb
+        if (absolute) {
+            // Filled up to the level, faintly while muted.
+            fillPaint.alpha = if (muted) 90 else 255
+            bar(center - maxThumb - thumbR, knob, groove / 2)
             canvas.drawRoundRect(rect, groove / 2, groove / 2, fillPaint)
-        }
-        // A dot per tick, so the spacing of the steps can be seen.
-        var t = tickPx
-        while (t <= maxThumb) {
-            for (u in floatArrayOf(center + t, center - t)) canvas.drawCircle(px(u), py(u), ui.dp(2).toFloat(), dotPaint)
-            t += tickPx
+        } else {
+            if (thumb != 0f) {
+                bar(center, center + thumb, groove / 2)
+                canvas.drawRoundRect(rect, groove / 2, groove / 2, fillPaint)
+            }
+            // A dot per tick, so the spacing of the steps can be seen.
+            var t = tickPx
+            while (t <= maxThumb) {
+                for (u in floatArrayOf(center + t, center - t)) canvas.drawCircle(px(u), py(u), ui.dp(2).toFloat(), dotPaint)
+                t += tickPx
+            }
         }
         // The knob: a warm-white disc with a shadow, darker while held.
-        val kx = px(center + thumb)
-        val ky = py(center + thumb)
+        val kx = px(knob)
+        val ky = py(knob)
         thumbPaint.color = withAlpha(PLATE, 0.8f)
         canvas.drawCircle(kx, ky + ui.dp(2), thumbR, thumbPaint)
         thumbPaint.color = if (isPressed) MUTED else TEXT
@@ -211,7 +253,10 @@ class SliderView(
                 origin = anchor
                 sent = 0
                 thumb = 0f
+                levelMoved = false
                 isPressed = true
+                // Absolute: a touch on the groove puts the knob there.
+                if (absolute && !onIcon && onSign == 0) moveLevelTo(e)
                 invalidate()
             }
             MotionEvent.ACTION_MOVE -> {
@@ -221,6 +266,10 @@ class SliderView(
                 }
                 // A finger resting on − / + is a button press, not the start of a slide.
                 if (onSign != 0 && !dragged) return true
+                if (absolute) {
+                    if (!onIcon || dragged) moveLevelTo(e)
+                    return true
+                }
                 val pos = along(e)
                 thumb = (pos - anchor).coerceIn(-maxThumb, maxThumb)
                 val target = ((pos - origin) / tickPx).toInt()
@@ -245,10 +294,16 @@ class SliderView(
                 repeatDir = 0
                 isPressed = false
                 val lifted = e.actionMasked == MotionEvent.ACTION_UP && !dragged
-                if (lifted && onIcon && sent == 0) tap()
+                if (lifted && onIcon && sent == 0 && !levelMoved) tap()
                 if (lifted && onSign != 0 && signSteps == 0) signStep(onSign)
                 onIcon = false
                 onSign = 0
+                if (absolute) {
+                    if (levelMoved) onLevel?.invoke(level, true)
+                    thumb = 0f
+                    invalidate()
+                    return true
+                }
                 springBack = ValueAnimator.ofFloat(thumb, 0f).apply {
                     duration = 220
                     interpolator = OvershootInterpolator(2f)
@@ -258,6 +313,19 @@ class SliderView(
             }
         }
         return true
+    }
+
+    /** Absolute: the knob follows the finger; each new level goes to [onLevel], with a tick every 5. */
+    private fun moveLevelTo(e: MotionEvent) {
+        if (maxThumb <= 0f) return
+        val new = ((along(e) - (center - maxThumb)) / (2 * maxThumb) * 100).toInt().coerceIn(0, 100)
+        if (new == level) return
+        if (new / 5 != level / 5) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        level = new
+        levelMoved = true
+        onLevel?.invoke(new, false)
+        describe()
+        invalidate()
     }
 
     /** The icon and the padding around it, at least a 48 dp target. */

@@ -189,6 +189,77 @@ class MacroTest {
     }
 
     @Test
+    fun `Outlook commands - parsed, described, a fallback each, and 1_7's keys upgrade to them`() {
+        assertEquals(listOf(Step.Pc("outlook", "reply-all")), Macro.parse("pc:Outlook Reply-All"))
+        assertEquals("Outlook · Mark read", Macro.describe("pc:outlook mark-read"))
+        assertThrows("pc:outlook")
+        assertThrows("pc:outlook dance")
+        assertThrows("pc:outlook reply now")
+        assertEquals(Macro.OUTLOOK_ACTIONS.keys, Macro.OUTLOOK_FALLBACK.keys)
+        Macro.OUTLOOK_FALLBACK.values.forEach { Macro.parse(it) }
+        val upgrade = DefaultLayout.OUTLOOK_API_UPGRADE
+        assertEquals("pc:outlook open", upgrade["win+2"])
+        assertEquals("pc:outlook new-mail", upgrade["win+2\ndelay:300\nctrl+shift+m"])
+        assertEquals("pc:outlook reply", upgrade["ctrl+r"])
+        assertEquals("pc:outlook delete", upgrade["delete"])
+        assertEquals("pc:outlook open\ndelay:500\nf3", upgrade["win+2\ndelay:300\nctrl+e"])
+        // The new Outlook page has only commands (and Search's F3).
+        val outlook = DefaultLayout.layout().pages.first { it.name == DefaultLayout.OUTLOOK_PAGE }
+        assertTrue(outlook.buttons.all { it!!.action.startsWith("pc:outlook") })
+    }
+
+    @Test
+    fun `pc focus and pc wait hold the macro, the other PC steps don't`() {
+        assertEquals(listOf(Step.Pc("focus", "excel")), Macro.parse("pc:focus Excel.exe"))
+        assertEquals(listOf(Step.Pc("wait", "save as")), Macro.parse("pc:wait Save As"))
+        assertThrows("pc:focus")
+        assertThrows("pc:focus two words")
+        assertThrows("pc:wait")
+        assertTrue(Step.Pc("focus", "excel").waits && Step.Pc("wait", "x").waits)
+        assertFalse(Step.Pc("outlook", "reply").waits || Step.Pc("run", "lock").waits)
+        assertEquals("Brings excel to the front", Macro.describe("pc:focus excel"))
+        assertEquals("Waits for save as", Macro.describe("pc:wait save as"))
+        assertEquals("Macro · 3 steps", Macro.describe("pc:focus notepad\ntext:hola\nenter"))
+    }
+
+    @Test
+    fun `recorded clicks, drags and scrolls hold the macro and keep the button's name as written`() {
+        assertEquals(listOf(Step.Pc("click", "outlook", point = Step.PcPoint(412, 88, element = "Enviar ahora"))),
+            Macro.parse("pc:click Outlook.exe 412,88 | Enviar ahora"))
+        assertEquals(Step.PcPoint(5, -3, "right"), (Macro.parse("pc:click screen 5,-3 right").single() as Step.Pc).point)
+        assertEquals(Step.PcPoint(1, 2, "double"), (Macro.parse("pc:click excel 1,2 double").single() as Step.Pc).point)
+        assertEquals(Step.PcPoint(100, 200, x2 = 300, y2 = 400), (Macro.parse("pc:drag excel 100,200 300,400").single() as Step.Pc).point)
+        assertEquals(Step.PcPoint(10, 20, amount = -3), (Macro.parse("pc:scroll excel 10,20 -3").single() as Step.Pc).point)
+        assertTrue((Macro.parse("pc:click excel 1,2").single() as Step.Pc).waits)
+        assertThrows("pc:click excel")
+        assertThrows("pc:click excel 1;2")
+        assertThrows("pc:click excel 1,2 middle")
+        assertThrows("pc:drag excel 1,2 | Name")
+        assertThrows("pc:drag excel 1,2")
+        assertThrows("pc:scroll excel 1,2 0")
+        assertEquals("Clicks “Enviar” in outlook", Macro.describe("pc:click outlook 412,88 | Enviar"))
+        assertEquals("Right-clicks on the screen", Macro.describe("pc:click screen 5,5 right"))
+        assertEquals("Drags in excel", Macro.describe("pc:drag excel 1,2 3,4"))
+        assertEquals("Scrolls down in excel", Macro.describe("pc:scroll excel 1,2 -2"))
+        // Other PC steps still read lowercase.
+        assertEquals(listOf(Step.Pc("run", "lock it")), Macro.parse("pc:run Lock It"))
+    }
+
+    @Test
+    fun `the join key - pc join, in the sidebar's free slot once`() {
+        assertEquals(listOf(Step.Pc("join", "next")), Macro.parse("pc:join"))
+        assertThrows("pc:join https://example.com")
+        assertEquals("Joins the next meeting", Macro.describe("pc:join"))
+        val sidebar = Page("Sidebar", mutableListOf(MacroButton("Away", "win+l", 1, null), null, MacroButton("X", "f1", 1, null)))
+        assertTrue(DefaultLayout.addJoinMeeting(sidebar))
+        assertEquals("pc:join", sidebar.buttons[1]!!.action)
+        assertFalse(DefaultLayout.addJoinMeeting(sidebar)) // already there
+        assertEquals("pc:join", DefaultLayout.sidebar().buttons.last()!!.action)
+        assertEquals(dev.belta.macropad.hid.KeyboardLayout.LATAM, dev.belta.macropad.hid.keyboardLayoutForWindowsId("0000080a"))
+        assertEquals(null, dev.belta.macropad.hid.keyboardLayoutForWindowsId("00000407")) // German: not one this app types
+    }
+
+    @Test
     fun `parses PC link steps`() {
         assertEquals(listOf(Step.Pc("teams", "mute")), Macro.parse("pc:teams mute"))
         assertEquals(listOf(Step.Pc("teams", "react", "like")), Macro.parse("pc:Teams  React LIKE"))

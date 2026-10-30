@@ -17,6 +17,10 @@ Every key has an **action**: one step per line. Lines starting with `#` are comm
 | Wake on LAN | `wol:AA:BB:CC:DD:EE:FF` | Wakes a computer on the tablet's network |
 | Home Assistant | `ha:light.toggle light.desk` | Calls a Home Assistant service |
 | Teams (PC link) | `pc:teams mute` | A Teams command through the [PC link](pc-link.md): `mute`, `camera`, `hand`, `blur`, `leave`, `react like` (`love`, `applause`, `laugh`, `wow`). Without the link, sends the Teams shortcut |
+| Outlook (PC link) | `pc:outlook reply` | A classic Outlook command through the [PC link](pc-link.md#outlook-commands): `open`, `new-mail`, `new-meeting`, `mail`, `calendar`, `reply`, `reply-all`, `forward`, `send`, `mark-read`, `mark-unread`, `flag`, `archive`, `delete`. Without the link, sends English Outlook's shortcut |
+| Join meeting (PC link) | `pc:join` | Opens the next Outlook meeting's Teams / Zoom / Meet / Webex meeting on the computer. A key that is just `pc:join` lights from 5 minutes before the meeting until it ends |
+| Bring an app to the front (PC link) | `pc:focus excel` | Brings that app's window (process name) to the front, waiting up to 10 s for it to open. The steps after it wait for it |
+| Wait for a window (PC link) | `pc:wait save as` | Waits until the window in front is that app or has that in its title (up to 10 s), instead of a fixed `delay:`. The steps after it wait for it |
 | PC command (PC link) | `pc:run lock` | Runs a command named in the computer's `commands.json` ([PC link](pc-link.md)) |
 
 ### Text variables
@@ -28,11 +32,34 @@ Every key has an **action**: one step per line. Lines starting with `#` are comm
 | `{date}` | `2026-10-21` |
 | `{time}` | `14:05` |
 | `{date:dd/MM/yyyy}`, `{time:HH:mm:ss}` | any [SimpleDateFormat](https://developer.android.com/reference/java/text/SimpleDateFormat) pattern |
-| `{clipboard}` | the **tablet's** clipboard text (the tablet can't read the computer's clipboard) |
+| `{clipboard}` | the **tablet's** clipboard text |
+| `{pcclipboard}`, `{pcclipboard:2}` | the **computer's** latest copied text, the one before, … ([PC link](pc-link.md#the-computers-clipboard)). The key does nothing while that copy is missing |
 | `{secret:name}` | a saved value (⚙ → **Saved values**), e.g. a login; encrypted on the tablet, never in backups or exports. The key does nothing until every value it uses is set |
 | `{{` | a literal `{` |
 
 Dates and times come from the tablet's clock, so keep its date and time correct.
+
+### Live labels
+
+A key's **label** can show what the [PC link](pc-link.md) reports, kept up to date while the key
+is on screen (edit mode shows the label as written):
+
+| In a label | Shows |
+|---|---|
+| `{pcclipboard}`, `{pcclipboard:2}` | the computer's latest copy (the one before, …) on one line |
+| `{venv}` | the terminal's venv and Python version (`.venv · 3.12.1`), or *No venv* ([shell hook](pc-link.md#the-terminals-venv)) |
+| `{folder}`, `{cwd}` | the terminal's folder: its name, or the full path |
+| `{media}`, `{title}`, `{artist}` | what's playing (`Title — Artist`), or *Nothing playing* |
+| `{volume}` | the computer's volume (`42%`, *Muted*) |
+| `{app}` | the app in front |
+| `{meeting}` | the next Outlook meeting (`Standup · 10:30`, `Standup · now`) |
+| `{call}` | how long the Teams call under way has lasted (`12:04`), every second; nothing outside a call |
+
+`{name|text}` shows *text* while the value is unknown (no PC link, nothing reported yet, an empty
+clipboard slot): the Python page's `{venv|Which Python}`. A label can have two lines (the dock's
+`{title|Now playing}` over `{artist}`); lines left empty are dropped. In the dock, a key with a
+live label is a card six keys wide; when its action is `media:playpause` it is the media card,
+with ⏮ ⏯ ⏭ at its end.
 
 ### Typing code and long texts
 
@@ -113,6 +140,16 @@ stay out of backups.
 `https://xxxx.ui.nabu.casa` or `http://homeassistant.local:8123`) and `ha_token` (a long-lived
 access token: Home Assistant → your profile → Security → Long-lived access tokens).
 
+The **Home** page uses the same two values to show Home Assistant itself: the lights, switches,
+covers, media players, scenes, scripts and automations, by area. At first only the main devices
+show, the ones exposed to a voice assistant (Assist, Alexa, Google: a camera's *Flip* switch or a
+router's guest Wi-Fi usually aren't); **Everything** shows the rest. Tap to toggle (run a scene or
+script, enable or disable an automation; a lock asks first), hold to pin it to the top, hide it,
+open / close / stop a cover, turn something on or off, or run an automation now. Chips filter by
+kind, the search box by name, area or entity id. It reads Home Assistant every 10 s while it
+shows. Entities hidden in Home Assistant stay hidden; reading which ones are exposed needs an
+administrator's token (without it, everything shows).
+
 **Next meeting on the idle clock**: set the saved value `ha_calendar` to a Home Assistant calendar
 entity (e.g. `calendar.work`). The clock shows `Next: Standup · 10:30 (in 4 min)`, `Now: …` or
 tomorrow's first event, refreshed every 5 minutes. Any calendar Home Assistant can read works.
@@ -130,6 +167,17 @@ the keyboard, Classic Bluetooth tablets only) instead of being typed:
 | `pc:teams camera` / `hand` / `blur` / `leave` | Focus Teams (Win+8), its shortcut, Alt+Tab back |
 | `pc:teams react like` (`love`, `applause`, `laugh`, `wow`) | — (a message says it needs the link) |
 | `pc:run <name>` | — |
+| `pc:click outlook 412,88` | — (needs the link) |
+| `pc:typefile` (types the file selected in File Explorer, after asking; [details](pc-link.md#typing-a-file-pctypefile)) | — |
+
+**Clicks**, usually [recorded](#recording) rather than written: `pc:click <app> <x>,<y>` clicks
+that many pixels from the top-left of the app's window (process name; it is brought to the front
+first), so it works wherever the window is. After the point, `right` or `double`; at the end,
+`| <name>` clicks the button with that name wherever it is now (the point says where to look
+first, and is clicked if the button isn't found within 3 s): `pc:click outlook 412,88 | Send`.
+`pc:drag excel 100,200 300,400` drags from one point to the other, `pc:scroll excel 412,88 -3`
+turns the wheel there (positive = up). `screen` in place of an app means points on the screen
+(the taskbar, the desktop). Like `pc:focus`, the steps after them wait until they're done.
 
 A key that is just `pc:teams mute`, `camera`, `hand` or `blur` lights up from Teams' real state
 while the PC link reaches Teams, like Caps Lock; otherwise it is an ordinary toggle key.
@@ -199,8 +247,23 @@ Tap **●** to record. While recording:
 - pauses between actions are kept as `delay:` steps (300 ms–2 s),
 - **Undo** removes the last step, **Discard** throws the recording away.
 
-**Save** opens the editor with the recorded steps on the first free slot of the **Custom** page,
-where they can be tweaked before saving.
+With the [PC link](pc-link.md), switching apps on the computer while recording (by any means: the
+tablet, its keyboard, the mouse) is recorded as `pc:focus <app>` once the app stays in front for a
+second, so the macro switches the same way when it runs. Experimental and off by default: what
+you type and click on the computer itself can be recorded too, clicks as [`pc:click`](#pc-steps)
+([details](pc-link.md#recording-the-computers-keyboard-and-mouse-experimental)).
 
-The tablet can only *send* keys, so it can't watch what you do on the computer itself. Recording
-happens on the tablet.
+**Save** (●) shows the recorded steps first: move (↑ ↓) or delete (✕) any, tap a pause to change
+it, **Try it** to run them on the computer, and, with the PC link, **Start by bringing … to the
+front** (on unless the recording already starts so) to add `pc:focus <app>` for the app that was
+in front when recording started. **Save…** then opens the key editor on the first free slot of
+that app's page (the page shown for it, see [pages for apps](pc-link.md#pages-for-apps)), else of
+the **Custom** page.
+
+A macro with `pc:focus`, `pc:wait` or a recorded click runs in order: the keys before such a step
+go out, the macro waits for the computer to say it's done, then goes on. If it isn't within 10 s, or the
+PC link is down, the rest doesn't run (a message says why), so nothing is typed into the wrong
+window.
+
+Without that option the tablet can only *send* keys, so it can't watch what you do on the
+computer itself: recording happens on the tablet.

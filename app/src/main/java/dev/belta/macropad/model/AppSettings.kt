@@ -53,6 +53,46 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit().putBoolean("open_on_charge", value).apply()
 
     /** Sidebar on the left of the keys instead of the right. */
+    /** New mail in the computer's classic Outlook shows on the tablet (PC link). */
+    var mailNotices: Boolean
+        get() = prefs.getBoolean("mail_notices", true)
+        set(value) = prefs.edit().putBoolean("mail_notices", value).apply()
+
+    /** How much each page is used ([PageUsage] as JSON). */
+    var pageUsage: String?
+        get() = prefs.getString("page_usage", null)
+        set(value) = prefs.edit().putString("page_usage", value).apply()
+
+    /** A Teams call brings up the Teams page (and the page before comes back after it). */
+    var followCalls: Boolean
+        get() = prefs.getBoolean("follow_calls", true)
+        set(value) = prefs.edit().putBoolean("follow_calls", value).apply()
+
+    /** Size of the speaker notes on the Presenter page, in sp. */
+    var notesSize: Float
+        get() = prefs.getFloat("notes_size", 26f)
+        set(value) = prefs.edit().putFloat("notes_size", value).apply()
+
+    /** Home Assistant entities pinned to the top of the Home page, in the order they were pinned. */
+    var haPinned: List<String>
+        get() = prefs.getString("ha_pinned", "").orEmpty().split('\n').filter { it.isNotEmpty() }
+        set(value) = prefs.edit().putString("ha_pinned", value.joinToString("\n")).apply()
+
+    /** Home Assistant entities left off the Home page. */
+    var haHidden: Set<String>
+        get() = prefs.getString("ha_hidden", "").orEmpty().split('\n').filter { it.isNotEmpty() }.toSet()
+        set(value) = prefs.edit().putString("ha_hidden", value.sorted().joinToString("\n")).apply()
+
+    /** Experimental, off by default: recording also captures the computer's own keyboard and mouse (PC link). */
+    var recordPcKeyboard: Boolean
+        get() = prefs.getBoolean("record_pc_keyboard", false)
+        set(value) = prefs.edit().putBoolean("record_pc_keyboard", value).apply()
+
+    /** The computer's monitor the Screen page mirrors (1 = leftmost); 0 = its main monitor. */
+    var screenMonitor: Int
+        get() = prefs.getInt("screen_monitor", 0)
+        set(value) = prefs.edit().putInt("screen_monitor", value).apply()
+
     var sidebarLeft: Boolean
         get() = prefs.getBoolean("sidebar_left", false)
         set(value) = prefs.edit().putBoolean("sidebar_left", value).apply()

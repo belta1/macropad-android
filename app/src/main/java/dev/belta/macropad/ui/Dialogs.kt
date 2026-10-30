@@ -40,6 +40,7 @@ import dev.belta.macropad.model.Macro
 import dev.belta.macropad.model.MacroStore
 import dev.belta.macropad.model.Page
 import dev.belta.macropad.model.PageKind
+import dev.belta.macropad.model.PageUsage
 import dev.belta.macropad.model.SecretStore
 import dev.belta.macropad.model.TextVariables
 import dev.belta.macropad.net.Updater
@@ -75,6 +76,12 @@ interface MacropadHost {
     fun screenShiftChanged()
     /** Runs [action] once the PIN (if any) has been entered. */
     fun withUnlock(action: () -> Unit)
+    /** How much each page is used. */
+    val usage: PageUsage
+    /** The PC link script's state ("1.8.0, up to date"), or null without a connected computer. */
+    fun pcScriptState(): String?
+    /** Offers to send the app's PC link script to the computer. */
+    fun updatePcScript()
 }
 
 /** Settings menu and the dialogs behind it. */
@@ -188,10 +195,46 @@ class Dialogs(private val host: MacropadHost) {
                 ui.toast(if (settings.followPcApp) "Pages follow the app in front on the computer (PC link)"
                     else "Pages no longer follow the computer's app")
             },
+            "Teams page during calls: ${if (settings.followCalls) "on" else "off"}" to {
+                settings.followCalls = !settings.followCalls
+                ui.toast(if (settings.followCalls) "A Teams call brings up the Teams page (PC link)"
+                    else "Calls no longer switch pages")
+            },
+            "New mail on the tablet: ${if (settings.mailNotices) "on" else "off"}" to {
+                settings.mailNotices = !settings.mailNotices
+                ui.toast(if (settings.mailNotices) "New mail in classic Outlook shows on the tablet (PC link)"
+                    else "New mail no longer shows on the tablet")
+            },
+            "Record the computer's keyboard and mouse (experimental): ${if (settings.recordPcKeyboard) "on" else "off"}" to ::recordPcKeyboard,
+            host.pcScriptState()?.let { "PC link script: $it" to host::updatePcScript },
         )
         ui.dialog()
             .setTitle("Connection")
             .setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }
+            .show()
+    }
+
+    /** Off by default: the computer's script then watches the whole keyboard and mouse while recording. */
+    private fun recordPcKeyboard() {
+        if (host.settings.recordPcKeyboard) {
+            host.settings.recordPcKeyboard = false
+            return ui.toast("Recording captures the tablet's keys only")
+        }
+        ui.dialog()
+            .setTitle("Record the computer's keyboard and mouse?")
+            .setMessage("While you record a macro, the PC link script also records what you type, the " +
+                "shortcuts you press and where you click on the computer itself. A click is kept as a " +
+                "point in its app's window, and with the button's name when Windows knows it, so it finds " +
+                "the button again if it moved (not inside Citrix, which is only a picture). It only does " +
+                "this while the tablet records, stops by itself after 5 minutes, and needs the script " +
+                "started with -AllowRecording.\n\nTo watch the keyboard, the script hooks it the way " +
+                "keyloggers do: security software on a work computer may report it to IT. Don't type " +
+                "passwords while recording.")
+            .setPositiveButton("Turn on") { _, _ ->
+                host.settings.recordPcKeyboard = true
+                ui.toast("The next recording also captures the computer's keyboard and mouse")
+            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
@@ -506,10 +549,16 @@ class Dialogs(private val host: MacropadHost) {
         val items = listOf(
             "Add keys page" to { addPage(PageKind.KEYS) },
             "Add trackpad page" to { addPage(PageKind.TRACKPAD) },
+            "Add window switcher page" to { addPage(PageKind.WINDOWS) },
+            "Add volume mixer page" to { addPage(PageKind.MIXER) },
+            "Add screen page" to { addPage(PageKind.SCREEN) },
+            "Add Home Assistant page" to { addPage(PageKind.HOME) },
+            "Add PowerPoint presenter page" to { addPage(PageKind.SLIDES) },
             "Rename \"${page.name}\"" to { renamePage(host.pageIndex) },
             "Change icon of \"${page.name}\"" to { pageIcon(host.pageIndex) },
             "Move \"${page.name}\" left" to { movePage(-1) },
             "Move \"${page.name}\" right" to { movePage(1) },
+            "Sort tabs by use" to ::sortByUse,
             "Delete \"${page.name}\"" to ::deletePage,
         )
         ui.dialog()
@@ -600,7 +649,15 @@ class Dialogs(private val host: MacropadHost) {
     // ---------------------------------------------------------------- pages
 
     private fun addPage(kind: PageKind) {
-        val suggested = if (kind == PageKind.TRACKPAD) DefaultLayout.TRACKPAD_PAGE else "Page ${host.layout.pages.size + 1}"
+        val suggested = when (kind) {
+            PageKind.TRACKPAD -> DefaultLayout.TRACKPAD_PAGE
+            PageKind.WINDOWS -> DefaultLayout.SWITCHER_PAGE
+            PageKind.MIXER -> DefaultLayout.MIXER_PAGE
+            PageKind.SCREEN -> DefaultLayout.SCREEN_PAGE
+            PageKind.HOME -> DefaultLayout.HOME_PAGE
+            PageKind.SLIDES -> DefaultLayout.PRESENTER_PAGE
+            PageKind.KEYS -> "Page ${host.layout.pages.size + 1}"
+        }
         promptText("New page", suggested) { name ->
             val buttons = if (kind == PageKind.TRACKPAD) {
                 DefaultLayout.layout().pages.first { it.kind == PageKind.TRACKPAD }.buttons
@@ -618,14 +675,24 @@ class Dialogs(private val host: MacropadHost) {
         val page = host.layout.pages[index]
         ui.dialog()
             .setTitle(page.name)
-            .setItems(arrayOf("Rename", "Change icon", "Show for apps…")) { _, which ->
+            .setItems(arrayOf("Rename", "Change icon", "Show for apps…",
+                if (page.stay) "Let apps change the page" else "Stay on this page")) { _, which ->
                 when (which) {
                     0 -> renamePage(index)
                     1 -> pageIcon(index)
-                    else -> pageApps(index)
+                    2 -> pageApps(index)
+                    else -> pageStay(index)
                 }
             }
             .show()
+    }
+
+    /** While a staying page shows, the app in front on the computer doesn't change the page (PC link). */
+    private fun pageStay(index: Int) {
+        val page = host.layout.pages[index]
+        page.stay = !page.stay
+        host.saveAndRender()
+        ui.toast(if (page.stay) "\"${page.name}\" stays while apps change" else "Apps can change \"${page.name}\" again")
     }
 
     /** The computer's apps that bring this page up when they come to the front (PC link). */
@@ -683,6 +750,8 @@ class Dialogs(private val host: MacropadHost) {
         val page = host.layout.pages[index]
         promptText("Rename page", page.name) { name ->
             host.service?.profiles?.renamePage(page.name, name)
+            host.usage.rename(page.name, name)
+            host.settings.pageUsage = host.usage.toJson()
             page.name = name
             host.saveAndRender()
         }
@@ -696,6 +765,36 @@ class Dialogs(private val host: MacropadHost) {
         pages.add(to, pages.removeAt(from))
         host.selectPage(to)
         host.saveAndRender()
+    }
+
+    /**
+     * Puts the tabs in order of use (most used first) after showing the new order, and names the
+     * rarely used ones (to hide per computer or delete). Only once there is enough use to go by.
+     */
+    private fun sortByUse() {
+        val now = System.currentTimeMillis()
+        val usage = host.usage
+        if (usage.total(now) < PageUsage.ENOUGH) {
+            return ui.toast("Not enough use counted yet — try again in a few days of work")
+        }
+        val pages = host.layout.pages
+        val order = usage.sorted(pages.map { it.name }, now)
+        val rare = order.filter { usage.score(it, now) < PageUsage.RARE }
+        ui.dialog()
+            .setTitle("Sort tabs by use?")
+            .setMessage(order.joinToString(" · ") +
+                if (rare.isEmpty()) "" else "\n\nRarely used: ${rare.joinToString(", ")}. Hide them for a computer " +
+                    "(⚙ → Computers) or delete them (long-press the tab).")
+            .setPositiveButton("Sort") { _, _ ->
+                val current = pages[host.pageIndex]
+                val sorted = order.map { name -> pages.first { it.name == name } }
+                pages.clear()
+                pages.addAll(sorted)
+                host.selectPage(pages.indexOf(current))
+                host.saveAndRender()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun deletePage() {

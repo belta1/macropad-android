@@ -116,6 +116,7 @@ object KeyEditor {
             override fun onEditKey(page: Page, index: Int) = Unit
             override fun onSlide(page: Page, index: Int, button: MacroButton, up: Boolean) = Unit
             override fun onSlideTap(page: Page, index: Int, button: MacroButton) = Unit
+            override fun onSlideLevel(page: Page, index: Int, button: MacroButton, level: Int, done: Boolean) = Unit
         })
         val previewPage = Page("Preview", mutableListOf())
         fun preview() {

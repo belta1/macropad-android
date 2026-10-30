@@ -13,16 +13,25 @@ Windows laptops/desktops.
 ## Features
 
 - **Pages (tabs)** with ready-made shortcuts: **Desktop** (open apps, snip, clipboard history, emoji,
-  Copilot, lock), **Monitors** (snap and move windows between screens, virtual desktops, *Away*),
-  **VS Code**, **Chrome**, **Excel**, **Numpad**, **Word**, **Outlook**, **Teams**, **Citrix**,
-  **Phrases** (ready-to-type replies, date, signature), a **Trackpad**, and an empty **Custom** page.
+  Copilot, lock), **Citrix**, **Teams**, **Outlook**, **Python** (virtual environments, pip,
+  requirements, running code — for classes and demos), **VS Code**, **Phrases** (ready-to-type
+  replies, date, signature), **Monitors** (snap and move windows between screens, virtual desktops,
+  *Away*), **Chrome**, **Numpad**, a **Trackpad**, and an empty **Custom** page. Pages menu →
+  *Sort tabs by use* orders them by how much you use each.
+  With the [PC link](docs/pc-link.md): **Switcher** (the computer's open windows; tap to switch),
+  **Screen** (a monitor of the computer, touchable), **Mixer** (volume per app) and
+  **PC clipboard** (your last copies on the computer, typed on tap) and **Presenter** (PowerPoint's
+  speaker notes, the slides and ◀ ▶; it comes up when a slide show starts). Over Wi-Fi: **Home** (Home
+  Assistant's lights, switches, scenes, scripts and automations — see
+  [docs/macro-language.md](docs/macro-language.md#network-steps)).
   Teams and Outlook keys work even while a Citrix / Remote Desktop window has focus — see
   [docs/citrix.md](docs/citrix.md).
 - **Sidebar** on every page: status, Record, Edit, Settings, ⇄, and action keys (Away, Lock PC, Work
   Citrix — a login filled in from encrypted **saved values**, see ⚙ → Saved values).
 - **App icons on the tabs** (long-press a tab to rename it or change its icon).
-- **Dock** on every page: media keys as icons (Previous · Play/Pause · Next), a volume slider and Mute,
-  and virtual-desktop switching (Prev desktop · Task view · Next desktop).
+- **Dock** along the whole bottom, on every page: virtual-desktop switching (Prev desktop · Task
+  view · Next desktop), a volume slider (its speaker mutes) and the media card: what's playing on
+  the computer (PC link) with ⏮ ⏯ ⏭.
 - **Trackpad page**: pointer with acceleration, tap / two-finger tap to click / right-click,
   two-finger or edge-strip scrolling, long-press to drag, plus editable click/scroll keys.
 - **Sliders**: drag a key instead of tapping it for PC volume, scrolling, zoom, brightness,
@@ -32,8 +41,11 @@ Windows laptops/desktops.
 - **PC link** (Classic Bluetooth tablets, e.g. Galaxy Tab S5e): a Bluetooth serial port next to the
   keyboard and a PowerShell script on the computer. Teams keys light up from Teams' real state and
   work without focusing Teams, pages follow the app in front, the idle clock shows the next Outlook
-  meeting, and `pc:run` keys start commands you list. See [docs/pc-link.md](docs/pc-link.md).
-- **Text variables** in typed text: `{date}`, `{time}`, custom date formats and `{clipboard}`.
+  meeting, and `pc:run` keys start commands you list. It also brings the computer's clipboard,
+  open windows, real volume (per app too), what's playing and the terminal's Python venv to the
+  tablet. See [docs/pc-link.md](docs/pc-link.md).
+- **Text variables** in typed text: `{date}`, `{time}`, custom date formats, `{clipboard}` and the
+  computer's `{pcclipboard}`; **live labels** show what the computer reports (`{venv}`, `{media}`…).
 - `page:` actions to change page from a key or the tablet's volume buttons.
 - **Idle clock**: dims to a clock when not used; the waking touch never presses a key. The
   **Away** key locks the PC and dims the tablet (hold: also mutes the Teams call).

@@ -18,6 +18,8 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import dev.belta.macropad.hid.HidPeripheral
+import dev.belta.macropad.hid.KeyboardLayout
+import dev.belta.macropad.hid.keyboardLayoutForWindowsId
 import dev.belta.macropad.model.AppSettings
 import dev.belta.macropad.model.ComputerProfiles
 import dev.belta.macropad.pc.PcLink
@@ -121,15 +123,32 @@ class MacropadService : Service() {
     }
 
     private val pcFanOut = object : PcLink.Listener {
-        override fun onPcStatus(status: PcStatus?) = pcListeners.toList().forEach { it.onPcStatus(status) }
+        override fun onPcStatus(status: PcStatus?) {
+            // The window in front's keyboard layout may have changed.
+            if (pcLayout(status) != pcLayout) applySettings()
+            pcListeners.toList().forEach { it.onPcStatus(status) }
+        }
         override fun onPcResult(id: Int, ok: Boolean, error: String?) =
             pcListeners.toList().forEach { it.onPcResult(id, ok, error) }
+        override fun onScreen() = pcListeners.toList().forEach { it.onScreen() }
+        override fun onRecorded(step: String) = pcListeners.toList().forEach { it.onRecorded(step) }
+        override fun onSlideImage() = pcListeners.toList().forEach { it.onSlideImage() }
+        override fun onFileText(id: Int, name: String, text: String) = pcListeners.toList().forEach { it.onFileText(id, name, text) }
     }
 
-    /** App-wide defaults, overridden by the connected computer's profile. */
+    /** The layout the PC link last reported (one this app can type with), else null. */
+    private var pcLayout: KeyboardLayout? = null
+
+    private fun pcLayout(status: PcStatus?) = keyboardLayoutForWindowsId(status?.keyboard)
+
+    /**
+     * App-wide defaults, overridden by the connected computer's profile; the text layout follows
+     * the window in front on the computer while the PC link reports it.
+     */
     fun applySettings() {
         val profile = hid.currentHost()?.let { profiles[it.address] }
-        hid.keyboardLayout = profile?.keyboardLayout ?: settings.keyboardLayout
+        pcLayout = pcLayout(pc?.status)
+        hid.keyboardLayout = pcLayout ?: profile?.keyboardLayout ?: settings.keyboardLayout
         hid.keyTiming = profile?.keyTiming ?: settings.keyTiming
     }
 

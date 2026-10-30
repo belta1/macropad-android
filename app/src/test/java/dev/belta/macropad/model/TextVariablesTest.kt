@@ -15,6 +15,16 @@ class TextVariablesTest {
     }
 
     @Test
+    fun `the computer's clipboard, latest first`() {
+        val clips = listOf("latest", "before")
+        val pc = { n: Int -> clips.getOrNull(n - 1) }
+        assertEquals("latest / before / ", TextVariables.expand("{pcclipboard} / {pcclipboard:2} / {pcclipboard:3}", now, pcClipboard = pc))
+        assertEquals(listOf(1, 2), TextVariables.pcClipboardSlots("{pcclipboard}{pcclipboard:2}{clipboard}"))
+        assertEquals("PC clipboard 2", Macro.describe("text:{pcclipboard:2}"))
+        assertEquals("PC clipboard 1", Macro.describe("text:{pcclipboard}"))
+    }
+
+    @Test
     fun `clipboard, escapes and unknown names`() {
         assertEquals("Ref: ABC-1", TextVariables.expand("Ref: {clipboard}", now) { "ABC-1" })
         assertEquals("Ref: ", TextVariables.expand("Ref: {clipboard}", now) { null })

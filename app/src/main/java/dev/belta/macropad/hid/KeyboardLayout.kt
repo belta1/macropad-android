@@ -7,6 +7,18 @@ import dev.belta.macropad.hid.HidKeys.SHIFT
 data class Stroke(val mods: Int, val key: Int)
 
 /**
+ * The layout for Windows' keyboard layout id (KLID, as the PC link reports the window in front's),
+ * or null for one this app can't type with.
+ */
+fun keyboardLayoutForWindowsId(klid: String?): KeyboardLayout? = when (klid?.uppercase()) {
+    "00000409" -> KeyboardLayout.US
+    "00020409" -> KeyboardLayout.US_INTL
+    "0000080A" -> KeyboardLayout.LATAM
+    "0000040A", "0001040A", "00000C0A" -> KeyboardLayout.SPAIN
+    else -> null
+}
+
+/**
  * Keyboard layout configured on the *computer*. A BLE keyboard sends physical key positions, so
  * typing a character means pressing whichever key produces it in the computer's layout. Characters
  * on dead keys (´ ` ^ ¨) are typed as dead key + space; accented letters as dead key + letter.

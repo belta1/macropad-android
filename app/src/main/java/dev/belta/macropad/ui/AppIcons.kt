@@ -28,11 +28,18 @@ object AppIcons {
     private val specs = mapOf(
         "windows" to Spec.Windows,
         "monitors" to Spec.Tile(0xFF0E9AA7.toInt(), glyph = "task_view"),
+        "switcher" to Spec.Tile(0xFF2F6DB5.toInt(), glyph = "swap"),
+        "screen" to Spec.Tile(0xFF1E7F8C.toInt(), glyph = "screen_share"),
+        "mixer" to Spec.Tile(0xFF7A52CC.toInt(), glyph = "tune"),
+        "clipboard" to Spec.Tile(0xFF23947F.toInt(), glyph = "paste"),
+        "home" to Spec.Tile(0xFF1A8FC9.toInt(), glyph = "home"),
         "vscode" to Spec.Tile(0xFF0A7ACC.toInt(), glyph = "code"),
+        "python" to Spec.Tile(0xFF3776AB.toInt(), glyph = "terminal"),
         "chrome" to Spec.Chrome,
         "edge" to Spec.Tile(0xFF1B8FC4.toInt(), letter = "e", round = true),
         "excel" to Spec.Tile(0xFF107C41.toInt(), letter = "X"),
         "word" to Spec.Tile(0xFF185ABD.toInt(), letter = "W"),
+        "powerpoint" to Spec.Tile(0xFFC43E1C.toInt(), letter = "P"),
         "outlook" to Spec.Tile(0xFF0F6CBD.toInt(), letter = "O"),
         "teams" to Spec.Tile(0xFF5B5FC7.toInt(), letter = "T"),
         "citrix" to Spec.Tile(0xFF4B3A8C.toInt(), glyph = "desktop"),
@@ -44,8 +51,10 @@ object AppIcons {
 
     /** Display names for the page menu's icon chooser. */
     val names = mapOf(
-        "windows" to "Windows", "monitors" to "Monitors / windows", "vscode" to "VS Code", "chrome" to "Chrome",
-        "edge" to "Edge", "excel" to "Excel", "word" to "Word", "outlook" to "Outlook", "teams" to "Teams",
+        "windows" to "Windows", "monitors" to "Monitors / windows", "switcher" to "Window switcher", "screen" to "Screen mirror",
+        "vscode" to "VS Code", "python" to "Python", "chrome" to "Chrome", "mixer" to "Volume mixer",
+        "clipboard" to "PC clipboard", "home" to "Home Assistant",
+        "edge" to "Edge", "excel" to "Excel", "word" to "Word", "powerpoint" to "PowerPoint", "outlook" to "Outlook", "teams" to "Teams",
         "citrix" to "Citrix / remote desktop", "phrases" to "Phrases", "numpad" to "Numpad",
         "trackpad" to "Trackpad", "custom" to "Star",
     )

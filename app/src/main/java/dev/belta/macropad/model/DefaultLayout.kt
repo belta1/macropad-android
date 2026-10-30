@@ -10,24 +10,38 @@ object DefaultLayout {
     const val MONITORS_PAGE = "Monitors"
     const val OUTLOOK_PAGE = "Outlook"
     const val PHRASES_PAGE = "Phrases"
+    const val PYTHON_PAGE = "Python"
+    const val SWITCHER_PAGE = "Switcher"
+    const val MIXER_PAGE = "Mixer"
+    const val CLIPBOARD_PAGE = "PC clipboard"
+    const val SCREEN_PAGE = "Screen"
+    const val HOME_PAGE = "Home"
+    const val PRESENTER_PAGE = "Presenter"
 
     /** Pages added in later versions; inserted once into existing layouts at their default position. */
     val ADDED_PAGES = listOf("Desktop", NUMPAD_PAGE, TEAMS_PAGE, CITRIX_PAGE, TRACKPAD_PAGE,
-        MONITORS_PAGE, OUTLOOK_PAGE, PHRASES_PAGE)
+        MONITORS_PAGE, OUTLOOK_PAGE, PHRASES_PAGE, PYTHON_PAGE, SWITCHER_PAGE, MIXER_PAGE, CLIPBOARD_PAGE, SCREEN_PAGE, HOME_PAGE, PRESENTER_PAGE)
 
     /** Tab icons (drawn by ui.AppIcons), in the order the page menu offers them. */
-    val APP_ICONS = listOf("windows", "monitors", "vscode", "chrome", "edge", "excel", "word", "outlook",
-        "teams", "citrix", "phrases", "numpad", "trackpad", "custom")
+    val APP_ICONS = listOf("windows", "monitors", "switcher", "screen", "vscode", "python", "chrome", "edge", "excel",
+        "word", "powerpoint", "outlook", "teams", "citrix", "mixer", "phrases", "clipboard", "home", "numpad", "trackpad", "custom")
 
     /** Icon for a page that has none stored (layouts from before 1.3, renamed or new pages). */
     fun iconFor(name: String): String? = when (name.lowercase()) {
         "desktop", "windows", "escritorio" -> "windows"
         "monitors", "screens", "pantallas", "ventanas" -> "monitors"
+        "switcher", "open windows", "alt+tab" -> "switcher"
+        "screen", "pantalla", "mirror", "espejo" -> "screen"
+        "mixer", "volume", "volumen", "mezclador" -> "mixer"
+        "pc clipboard", "clipboard", "portapapeles" -> "clipboard"
+        "home", "home assistant", "casa", "hogar" -> "home"
         "vs code", "vscode", "code" -> "vscode"
+        "python" -> "python"
         "chrome" -> "chrome"
         "edge" -> "edge"
         "excel" -> "excel"
         "word" -> "word"
+        "presenter", "powerpoint", "slides", "presentación", "presentacion" -> "powerpoint"
         "outlook", "mail", "correo" -> "outlook"
         "teams" -> "teams"
         "citrix", "remote", "rdp" -> "citrix"
@@ -40,7 +54,6 @@ object DefaultLayout {
 
     // Taskbar positions (Win+1…9, counting pinned apps after Start/Search) on the work PC. Win+number
     // focuses an app even while a Citrix / Remote Desktop window has the keyboard.
-    private const val OUTLOOK_SLOT = 2
     private const val COPILOT_SLOT = 3
     private const val REMOTE_SLOT = 4
     private const val EXPLORER_SLOT = 6
@@ -62,6 +75,7 @@ object DefaultLayout {
         "edge" -> "msedge"
         "excel" -> "excel"
         "word" -> "winword"
+        "presenter", "powerpoint" -> "powerpnt"
         else -> null
     }
 
@@ -73,8 +87,19 @@ object DefaultLayout {
     val TEAMS_API_UPGRADE: Map<String, String> =
         Macro.TEAMS_FALLBACK.entries.associate { (action, shortcut) -> shortcut to "pc:teams $action" }
 
-    /** Focuses Outlook and sends a shortcut, leaving Outlook in front. */
-    private fun toOutlook(shortcut: String) = "win+$OUTLOOK_SLOT\ndelay:300\n$shortcut"
+    /**
+     * 1.8: the Outlook keys of 1.3–1.7 (English shortcuts, Win+2 to focus Outlook) -> Outlook
+     * commands over the PC link, which work whatever Outlook's language and still send those
+     * shortcuts without it ([Macro.OUTLOOK_FALLBACK]); applied once to existing layouts by
+     * [MacroStore], only to keys still set to the old defaults.
+     */
+    val OUTLOOK_API_UPGRADE: Map<String, String> by lazy {
+        Macro.OUTLOOK_FALLBACK.entries.associate { (action, shortcut) -> shortcut to "pc:outlook $action" } +
+            (Macro.toOutlook("ctrl+e") to OUTLOOK_SEARCH)
+    }
+
+    /** Brings Outlook up and presses F3 (Search in any language; Ctrl+E is English only). */
+    private const val OUTLOOK_SEARCH = "pc:outlook open\ndelay:500\nf3"
 
     /**
      * 1.3: the Desktop page's desktop-switching row (now in the dock) -> new keys; applied once to
@@ -107,18 +132,48 @@ object DefaultLayout {
     /** Opens an app through the Windows Run box (Win+R), so it works for anything on the PATH. */
     private fun run(command: String) = "win+r\ndelay:400\ntext:$command\\n"
 
-    /** Media keys (shown as icons only) plus virtual-desktop navigation, below every page; one slot free. */
-    fun dock() = Page("Media", (MEDIA_DOCK + DESKTOP_DOCK).toMutableList<MacroButton?>()
+    /** Keys on the PC clipboard page for the computer's last copies. */
+    private const val PC_CLIPS = 12
+
+    /** Types a command in the terminal in front and runs it (Enter). */
+    private fun shell(command: String) = "text:$command\\n"
+
+    /**
+     * Below every page, the whole width: virtual-desktop navigation, the volume slider and the
+     * media card; the rest is free.
+     */
+    fun dock() = Page("Media", (DESKTOP_DOCK + VOLUME_SLIDER + MEDIA_CARD).toMutableList<MacroButton?>()
         .apply { while (size < Layout.DOCK_SIZE) add(null) })
 
-    private val MEDIA_DOCK get() = listOf(
-        b("Previous", "media:prev", GRAY, "prev"),
-        b("Play / Pause", "media:playpause", BLUE, "play_pause"),
-        b("Next", "media:next", GRAY, "next"),
-    ) + VOLUME_DOCK
+    /**
+     * 1.8: what's playing on the computer (PC link) with ⏮ ⏯ ⏭, a card at the end of the dock;
+     * tapping its text plays / pauses too. Any key with a live label and Play / Pause as its action
+     * is drawn this way (ui.KeyViews).
+     */
+    val MEDIA_CARD get() = b("{title|Now playing}\n{artist}", "media:playpause", BLUE, null)
 
-    /** 1.5: a volume slider in place of the Volume − / Volume + keys; tapping its icon mutes (1.6). */
-    private val VOLUME_DOCK get() = listOf(VOLUME_SLIDER)
+    private val MEDIA_KEYS = listOf("media:prev", "media:playpause", "media:next")
+
+    /**
+     * 1.8: the dock's Previous / Play / Pause / Next keys go, since the media card has them; the
+     * desktop keys come first (added if missing, repeats dropped), then the dock's other keys, then
+     * the card (added if missing). Returns whether anything changed.
+     */
+    fun mediaCardDock(dock: Page): Boolean {
+        fun action(b: MacroButton) = b.action.trim().lowercase()
+        val before = dock.buttons.toList()
+        val keys = before.filterNotNull()
+        val card = keys.firstOrNull { LiveLabels.isLive(it.label) } ?: MEDIA_CARD
+        val desktopActions = DESKTOP_DOCK.map { it.action }
+        val desktop = DESKTOP_DOCK.map { d -> keys.firstOrNull { action(it) == d.action } ?: d }
+        val others = keys.filter { it !== card && action(it) !in desktopActions && action(it) !in MEDIA_KEYS }
+        val after = ((desktop + others).take(Layout.DOCK_SIZE - 1) + card).toMutableList<MacroButton?>()
+        while (after.size < Layout.DOCK_SIZE) after += null
+        if (after == before) return false
+        dock.buttons.clear()
+        dock.buttons += after
+        return true
+    }
 
     private val VOLUME_SLIDER get() = b("Volume", "slide:volume", GRAY, "volume_up")
 
@@ -150,7 +205,7 @@ object DefaultLayout {
         return true
     }
 
-    /** Added to existing docks once by [MacroStore] (1.3). */
+    /** Added to existing docks once by [MacroStore] (1.3); first in the dock since 1.8. */
     val DESKTOP_DOCK get() = listOf(
         b("Prev desktop", "win+ctrl+left", TEAL, "desktop_prev"),
         b("Task view", "win+tab", PURPLE, "task_view"),
@@ -166,8 +221,49 @@ object DefaultLayout {
         MacroButton("Away", AWAY, RED, "lock", longAction = AWAY_MUTED),
         b("Lock PC", "win+l", ORANGE, "lock"),
         b("Work Citrix", WORK_CITRIX, BLUE, "desktop"),
-        null,
+        JOIN_MEETING,
     ))
+
+    /**
+     * 1.8: the next Outlook meeting (PC link); lit from 5 minutes before it until it ends, a tap
+     * opens its Teams (or other online) meeting.
+     */
+    val JOIN_MEETING get() = b("{meeting|Join meeting}", "pc:join", GREEN, "videocam")
+
+    /** Puts [JOIN_MEETING] in the sidebar's first free slot, unless it has one. Returns whether anything changed. */
+    fun addJoinMeeting(sidebar: Page): Boolean {
+        if (sidebar.buttons.any { it?.action?.trim()?.lowercase() == "pc:join" }) return false
+        val free = sidebar.buttons.indexOf(null).takeIf { it >= 0 }
+            ?: sidebar.buttons.size.takeIf { it < Layout.SIDEBAR_SIZE } ?: return false
+        if (free == sidebar.buttons.size) sidebar.buttons += JOIN_MEETING else sidebar.buttons[free] = JOIN_MEETING
+        return true
+    }
+
+    /** 1.8: types the file selected in File Explorer (into Citrix, say), after asking. */
+    val TYPE_FILE get() = b("Type selected file", "pc:typefile", ORANGE, "document")
+
+    /**
+     * Puts [TYPE_FILE] on the PC clipboard page in place of its untouched Paste key (Paste is on
+     * the Citrix page too). Returns whether anything changed.
+     */
+    fun addTypeFile(pages: List<Page>): Boolean {
+        val page = pages.firstOrNull { it.name == CLIPBOARD_PAGE } ?: return false
+        if (page.buttons.any { it?.action?.trim() == "pc:typefile" }) return false
+        val paste = page.buttons.indexOfFirst { it?.label == "Paste" && it.action == "ctrl+v" }.takeIf { it >= 0 } ?: return false
+        page.buttons[paste] = TYPE_FILE
+        return true
+    }
+
+    /** 1.8: the Teams page's Leave key shows how long the call has lasted. */
+    const val LEAVE_CALL_LABEL = "Leave call\n{call}"
+
+    /** Gives an untouched Leave key of the Teams page [LEAVE_CALL_LABEL]. Returns whether anything changed. */
+    fun callTimerLabel(pages: List<Page>): Boolean {
+        val key = pages.firstOrNull { it.name == TEAMS_PAGE }?.buttons
+            ?.firstOrNull { it?.label == "Leave call" && it.action == "pc:teams leave" } ?: return false
+        key.label = LEAVE_CALL_LABEL
+        return true
+    }
 
     /** Lock the PC, then dim the tablet; [AWAY_MUTED] mutes the Teams call first. */
     private const val AWAY = "win+l\ntablet:dim"
@@ -181,8 +277,42 @@ object DefaultLayout {
         b("Volume −", "media:voldown", GRAY, "volume_down"),
     ))
 
+    /**
+     * 1.8: the tabs in order of (expected) use, the work ones first; pages not listed go after
+     * them, as they were. Sort tabs by use (pages menu) orders them by real use instead.
+     */
+    val TAB_ORDER = listOf("Desktop", CITRIX_PAGE, TEAMS_PAGE, OUTLOOK_PAGE, SWITCHER_PAGE, CLIPBOARD_PAGE, PYTHON_PAGE,
+        PRESENTER_PAGE, "VS Code", PHRASES_PAGE, SCREEN_PAGE, MONITORS_PAGE, HOME_PAGE, MIXER_PAGE, "Chrome", NUMPAD_PAGE,
+        TRACKPAD_PAGE, CUSTOM_PAGE)
+
+    /** 1.8: pages no longer offered: their shortcuts are the apps' own, worth no tab. */
+    val RETIRED_PAGES = listOf("Excel", "Word")
+
+    /** [pages] in [TAB_ORDER], the others after them in their order. */
+    fun ordered(pages: List<Page>): MutableList<Page> =
+        pages.withIndex().sortedBy { (i, p) -> TAB_ORDER.indexOf(p.name).let { if (it < 0) TAB_ORDER.size + i else it } }
+            .map { it.value }.toMutableList()
+
+    /**
+     * Drops the retired pages whose keys were never changed, and puts the rest in [TAB_ORDER].
+     * Returns whether anything changed.
+     */
+    fun retireAndOrder(pages: MutableList<Page>): Boolean {
+        val defaults = allPages().associateBy { it.name }
+        val before = pages.toList()
+        // Keys count as changed when their label or what they do differs (not their color).
+        fun keys(page: Page?) = page?.buttons?.filterNotNull()?.map { Triple(it.label, it.action, it.longAction) }
+        pages.removeAll { page -> page.name in RETIRED_PAGES && keys(page) == keys(defaults[page.name]) }
+        val sorted = ordered(pages)
+        pages.clear()
+        pages.addAll(sorted)
+        return pages != before
+    }
+
+    fun layout() = Layout(3, 5, ordered(allPages().filterNot { it.name in RETIRED_PAGES }), dock(), hardware())
+
     // Shortcuts are the Windows/Linux defaults of each app.
-    fun layout() = Layout(3, 5, mutableListOf(
+    private fun allPages() = mutableListOf(
         // Windows: launch common apps and manage virtual desktops.
         Page("Desktop", mutableListOf(
             b("Chrome", run("chrome"), BLUE, "globe"),
@@ -222,6 +352,15 @@ object DefaultLayout {
             // Tap: lock the PC and dim the tablet. Hold: also mute the Teams call first.
             MacroButton("Away", AWAY, RED, "lock", longAction = AWAY_MUTED),
         )),
+        // The computer's open windows (PC link); tap one to bring it to the front, even from Citrix.
+        Page(SWITCHER_PAGE, mutableListOf(), PageKind.WINDOWS),
+        // A monitor of the computer, touchable (PC link). Clicking in it brings apps to the front,
+        // so the page stays instead of following them.
+        Page(SCREEN_PAGE, mutableListOf(), PageKind.SCREEN, stay = true),
+        // Home Assistant's lights, switches, scenes, scripts and automations (over Wi-Fi, ha_url / ha_token).
+        Page(HOME_PAGE, mutableListOf(), PageKind.HOME, stay = true),
+        // PowerPoint's notes and slides, and ◀ ▶ (PC link). It comes up by itself when a slide show starts.
+        Page(PRESENTER_PAGE, mutableListOf(), PageKind.SLIDES),
         Page("VS Code", mutableListOf(
             b("Command palette", "ctrl+shift+p", BLUE, "command"),
             b("Quick open", "ctrl+p", BLUE, "search"),
@@ -239,6 +378,34 @@ object DefaultLayout {
             b("Step into", "f11", PURPLE, "step_into"),
             b("Cursor below", "ctrl+alt+down", YELLOW, "cursor"),
         )),
+        // Python commands typed into the terminal in front (Windows Terminal, PowerShell, cmd or VS
+        // Code's terminal), for classes and demos: virtual environments, packages, running code. The
+        // page stays up whatever window comes to the front, so switching to the editor or the browser
+        // mid-demo doesn't change it. Keys ending in a space wait for the rest of the command.
+        Page(PYTHON_PAGE, mutableListOf(
+            b("Terminal", run("wt"), GRAY, "terminal"),
+            // Hold: create and activate.
+            MacroButton("Create venv", shell("python -m venv .venv"), GREEN, "add",
+                longAction = shell("python -m venv .venv") + "\n" + shell(".venv\\Scripts\\activate")),
+            // Hold: first allow scripts in this PowerShell session (blocked by default on Windows).
+            MacroButton("Activate venv", shell(".venv\\Scripts\\activate"), GREEN, "check",
+                longAction = shell("Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass") + "\n" +
+                    shell(".venv\\Scripts\\activate")),
+            b("Deactivate", shell("deactivate"), ORANGE, "close"),
+            // Shows the terminal's venv and folder with the PC link's shell hook; types the check anyway.
+            b("{venv|Which Python}\n{folder}", shell("python -c \"import sys; print(sys.version.split()[0], sys.executable)\""),
+                BLUE, "search"),
+            b("Install requirements", shell("python -m pip install -r requirements.txt"), BLUE, "download"),
+            b("Install package", "text:python -m pip install ", BLUE, "add"),
+            b("Save requirements", shell("python -m pip freeze > requirements.txt"), TEAL, "save"),
+            b("List packages", shell("python -m pip list"), TEAL, "bullets"),
+            b("Upgrade pip", shell("python -m pip install --upgrade pip"), PURPLE, "refresh"),
+            b("Run script", "text:python ", PURPLE, "play"),
+            b("Python shell", shell("python"), YELLOW, "command"),
+            b("Exit shell", shell("exit()"), YELLOW, "back"),
+            b("Clear screen", shell("cls"), GRAY, "format_clear"),
+            b("Stop (Ctrl+C)", "ctrl+c", RED, "stop"),
+        ), stay = true),
         Page("Chrome", mutableListOf(
             b("New tab", "ctrl+t", BLUE, "add"),
             b("Close tab", "ctrl+w", RED, "close"),
@@ -300,25 +467,25 @@ object DefaultLayout {
             b("Word count", "ctrl+shift+g", GREEN, "hash"),
             b("Clear formatting", "ctrl+space", RED, "format_clear"),
         )),
-        // Outlook runs on the PC. Keys that start something (new mail, calendar, search) focus it
-        // first (Win+number), so they work from a Citrix window; the others act on the selected mail
-        // and expect Outlook in front. Shortcuts work in classic and new Outlook.
+        // Classic Outlook commands over the PC link: they go to Outlook itself, so they work in any
+        // language and from any window (Citrix too); the ones on mail act on the selected messages.
+        // Without the link (or with new Outlook) they send English Outlook's shortcuts.
         Page(OUTLOOK_PAGE, mutableListOf(
-            b("Open Outlook", "win+$OUTLOOK_SLOT", BLUE, "mail"),
-            b("New mail", toOutlook("ctrl+shift+m"), BLUE, "edit"),
-            b("New meeting", toOutlook("ctrl+shift+q"), PURPLE, "calendar"),
-            b("Mail", toOutlook("ctrl+1"), TEAL, "mail"),
-            b("Calendar", toOutlook("ctrl+2"), PURPLE, "calendar"),
-            b("Reply", "ctrl+r", GREEN, "back"),
-            b("Reply all", "ctrl+shift+r", GREEN, "group"),
-            b("Forward", "ctrl+f", TEAL, "forward"),
-            b("Send", "ctrl+enter", BLUE, "check"),
-            b("Search", toOutlook("ctrl+e"), YELLOW, "search"),
-            b("Mark read", "ctrl+q", GRAY, "check"),
-            b("Mark unread", "ctrl+u", GRAY, "mail"),
-            b("Flag", "insert", ORANGE, "bookmark"),
-            b("Archive", "backspace", TEAL, "download"),
-            b("Delete", "delete", RED, "delete"),
+            b("Open Outlook", "pc:outlook open", BLUE, "mail"),
+            b("New mail", "pc:outlook new-mail", BLUE, "edit"),
+            b("New meeting", "pc:outlook new-meeting", PURPLE, "calendar"),
+            b("Mail", "pc:outlook mail", TEAL, "mail"),
+            b("Calendar", "pc:outlook calendar", PURPLE, "calendar"),
+            b("Reply", "pc:outlook reply", GREEN, "back"),
+            b("Reply all", "pc:outlook reply-all", GREEN, "group"),
+            b("Forward", "pc:outlook forward", TEAL, "forward"),
+            b("Send", "pc:outlook send", BLUE, "check"),
+            b("Search", OUTLOOK_SEARCH, YELLOW, "search"),
+            b("Mark read", "pc:outlook mark-read", GRAY, "check"),
+            b("Mark unread", "pc:outlook mark-unread", GRAY, "mail"),
+            b("Flag", "pc:outlook flag", ORANGE, "bookmark"),
+            b("Archive", "pc:outlook archive", TEAL, "download"),
+            b("Delete", "pc:outlook delete", RED, "delete"),
         )),
         // New Microsoft Teams on Windows. Mute, camera, hand, leave and blur are Teams commands over
         // the PC link, and their lights follow Teams; without the link they send the shortcut. Teams
@@ -329,7 +496,7 @@ object DefaultLayout {
             b("Camera on / off", "pc:teams camera", BLUE, "videocam", toggle = true),
             b("Raise hand", "pc:teams hand", YELLOW, "hand", toggle = true),
             b("Share screen", toTeams("ctrl+shift+e"), TEAL, "screen_share"),
-            b("Leave call", "pc:teams leave", RED, "call_end"),
+            b(LEAVE_CALL_LABEL, "pc:teams leave", RED, "call_end"),
             b("Push to talk", "ctrl+space", GREEN, "mic"),
             b("Blur background", "pc:teams blur", PURPLE, "blur", toggle = true),
             b("Admit from lobby", inTeams("ctrl+shift+y"), ORANGE, "group"),
@@ -347,7 +514,7 @@ object DefaultLayout {
         Page(CITRIX_PAGE, mutableListOf(
             b("Remote desktop", "win+$REMOTE_SLOT", BLUE, "desktop"),
             b("Teams", "win+${Macro.TEAMS_SLOT}", PURPLE, "group"),
-            b("Outlook", "win+$OUTLOOK_SLOT", BLUE, "mail"),
+            b("Outlook", "pc:outlook open", BLUE, "mail"),
             b("Edge", "win+$EDGE_SLOT", TEAL, "globe"),
             b("Explorer (local)", "win+$EXPLORER_SLOT", YELLOW, "folder"),
             b("Ctrl+Alt+Del (session)", "ctrl+f1", RED, "lock"),
@@ -361,6 +528,8 @@ object DefaultLayout {
             b("Snip (local)", "win+shift+s", GREEN, "camera"),
             b("Lock PC", "win+l", RED, "lock"),
         )),
+        // The computer's volume and each app playing sound (PC link), like Windows' volume mixer.
+        Page(MIXER_PAGE, mutableListOf(), PageKind.MIXER),
         // Text typed with the computer's layout, so it also works inside Citrix. No trailing Enter:
         // in Teams chat it would send the message. Edit them to taste.
         Page(PHRASES_PAGE, mutableListOf(
@@ -380,6 +549,15 @@ object DefaultLayout {
             b("Fecha y hora", "text:{date:dd/MM/yyyy HH:mm}", GRAY, "calendar"),
             b("Tablet clipboard", "text:{clipboard}", GRAY, "paste"),
         )),
+        // The computer's last copies (PC link), newest first, each key showing its text. They are
+        // typed, not pasted, so they also reach a Citrix session that blocks the shared clipboard.
+        Page(CLIPBOARD_PAGE, (1..PC_CLIPS).map { n ->
+            b("{pcclipboard:$n|—}", "text:{pcclipboard:$n}", if (n == 1) GREEN else GRAY, "paste")
+        }.toMutableList<MacroButton?>().apply {
+            add(b("Copy", "ctrl+c", BLUE, "copy"))
+            add(TYPE_FILE)
+            add(b("Clipboard history", "win+v", PURPLE, "history"))
+        }),
         // Touchpad surface with click and scroll keys.
         // The keys are the row under the touchpad (editable like any other keys).
         Page(TRACKPAD_PAGE, mutableListOf(
@@ -391,5 +569,5 @@ object DefaultLayout {
         ), PageKind.TRACKPAD),
         // Empty page for the user's own buttons and recorded macros.
         Page(CUSTOM_PAGE, mutableListOf()),
-    ), dock(), hardware())
+    )
 }

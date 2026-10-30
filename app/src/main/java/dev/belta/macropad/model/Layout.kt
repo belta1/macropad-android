@@ -17,16 +17,23 @@ data class MacroButton(
     var longAction: String? = null,
 )
 
-enum class PageKind { KEYS, TRACKPAD }
+/**
+ * [WINDOWS] lists the computer's open windows, [MIXER] its volume per app and [SCREEN] mirrors one
+ * of its monitors, touchable (PC link); [HOME] shows Home Assistant's lights, switches, scenes,
+ * scripts and automations (over Wi-Fi); [SLIDES] is the presenter view of PowerPoint's slide show
+ * (PC link). They have no keys.
+ */
+enum class PageKind { KEYS, TRACKPAD, WINDOWS, MIXER, SCREEN, HOME, SLIDES }
 
 /**
  * [icon] is the tab's app icon (see [DefaultLayout.APP_ICONS]); null picks one from the name.
  * [apps] lists the computer's apps (process names, comma-separated) that show this page when they
  * come to the front (PC link); null = the default for the page's name, "" = none.
+ * [stay] keeps this page up while it shows, whatever app comes to the front (classes, demos).
  */
 class Page(
     var name: String, val buttons: MutableList<MacroButton?>, val kind: PageKind = PageKind.KEYS,
-    var icon: String? = null, var apps: String? = null,
+    var icon: String? = null, var apps: String? = null, var stay: Boolean = false,
 ) {
     /** The apps that show this page, lowercase and without ".exe". */
     val appNames: List<String>
@@ -72,7 +79,9 @@ object Palette {
 /** JSON form of a [Layout]; used for storage and for export/import files. */
 object LayoutJson {
     const val FORMAT = "macropad-layout"
-    const val VERSION = 4 // 2: export files also carry "computers" (ComputerProfiles); 3: dock volume slider; 4: slider icon mutes
+    // 2: export files also carry "computers" (ComputerProfiles); 3: dock volume slider; 4: slider icon
+    // mutes; 5: the dock's media keys are in its media card
+    const val VERSION = 5
 
     fun toJson(layout: Layout) = JSONObject().apply {
         put("format", FORMAT)
@@ -107,6 +116,7 @@ object LayoutJson {
         if (page.kind != PageKind.KEYS) put("kind", page.kind.name)
         page.icon?.let { put("icon", it) }
         page.apps?.let { put("apps", it) }
+        if (page.stay) put("stay", true)
         put("buttons", JSONArray().apply {
             for (b in page.buttons) put(b?.let {
                 JSONObject().put("label", it.label).put("action", it.action).put("color", it.color)
@@ -131,6 +141,6 @@ object LayoutJson {
         }
         val kind = PageKind.values().firstOrNull { it.name == p.optString("kind") } ?: PageKind.KEYS
         return Page(p.getString("name"), buttons, kind, p.optString("icon").ifBlank { null },
-            if (p.has("apps")) p.optString("apps") else null)
+            if (p.has("apps")) p.optString("apps") else null, p.optBoolean("stay", false))
     }
 }

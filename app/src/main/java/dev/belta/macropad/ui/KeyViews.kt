@@ -1,6 +1,7 @@
 package dev.belta.macropad.ui
 
 import android.annotation.SuppressLint
+import android.graphics.Color
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.drawable.GradientDrawable
@@ -10,11 +11,13 @@ import android.graphics.drawable.shapes.RoundRectShape
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import dev.belta.macropad.model.LiveLabels
 import dev.belta.macropad.model.MacroButton
 import dev.belta.macropad.model.Macro
 import dev.belta.macropad.model.Page
@@ -41,23 +44,37 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
         fun onSlide(page: Page, index: Int, button: MacroButton, up: Boolean)
         /** The slider's icon was tapped (its tap step, e.g. Mute). */
         fun onSlideTap(page: Page, index: Int, button: MacroButton)
+        /** An absolute slider (one given a `sliderLevel`) was moved to [level]; [done] once the finger lifts. */
+        fun onSlideLevel(page: Page, index: Int, button: MacroButton, level: Int, done: Boolean)
+        /** One of the media card's ⏮ ⏯ ⏭ was tapped: [action] is its media key. */
+        fun onCardButton(action: String) {}
+    }
+
+    companion object {
+        /** A key showing what's playing (a live label) whose action is Play / Pause: drawn with ⏮ ⏯ ⏭ as a card. */
+        fun isMediaCard(button: MacroButton?) =
+            button != null && button.action.trim().lowercase() == "media:playpause" && LiveLabels.isLive(button.label)
     }
 
     /**
      * [stateful] keys (toggles, and lock keys showing the computer's Caps / Num Lock) get the
-     * indicator light; [toggledOn] lights it and fills the cap.
+     * indicator light; [toggledOn] lights it and fills the cap. A slider with a [sliderLevel]
+     * (0–100) is absolute and shows that level ([SliderView]).
      */
     @SuppressLint("ClickableViewAccessibility")
     fun build(
         page: Page, index: Int, button: MacroButton?,
         compact: Boolean, editing: Boolean, toggledOn: Boolean = false, emphasize: Boolean = false,
         iconOnly: Boolean = false, showHint: Boolean = true, small: Boolean = false,
-        stateful: Boolean = button?.toggle == true,
+        stateful: Boolean = button?.toggle == true, sliderLevel: Int? = null, sliderMuted: Boolean = false,
+        card: Boolean = false,
     ): View {
         // Sliders are dragged; in edit mode they show as a normal key so a tap opens the editor.
         if (button != null && !editing && Macro.slider(button.action) != null) {
             return SliderView(ui, button, KeyCap(ui, button.color, lit = false), compact,
-                onTap = { listener.onSlideTap(page, index, button) }) { up ->
+                onTap = { listener.onSlideTap(page, index, button) },
+                level = sliderLevel, muted = sliderMuted,
+                onLevel = { level, done -> listener.onSlideLevel(page, index, button, level, done) }) { up ->
                 listener.onSlide(page, index, button, up)
             }
         }
@@ -92,6 +109,50 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
             when {
                 compact && iconOnly && iconRes != null ->
                     key.addView(ui.icon(button.icon!!, iconTint), LinearLayout.LayoutParams(ui.sdp(28), ui.sdp(28)))
+                compact && (card || '\n' in button.label) -> {
+                    // A card (what's playing): the icon, then the first line over the second, muted.
+                    // The media card has ⏮ ⏯ ⏭ at its end instead of the icon.
+                    val transport = card && button.action.trim().lowercase() == "media:playpause"
+                    key.gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                    if (iconRes != null && !transport) key.addView(ui.icon(button.icon!!, iconTint),
+                        LinearLayout.LayoutParams(ui.sdp(24), ui.sdp(24)).apply { marginEnd = ui.dp(12) })
+                    val lines = button.label.split('\n', limit = 2)
+                    key.addView(LinearLayout(ui.context).apply {
+                        orientation = LinearLayout.VERTICAL
+                        val styles = listOf(textColor to 15f, hintColor to 13.5f)
+                        for ((i, text) in lines.withIndex()) {
+                            val (color, size) = styles[i]
+                            addView(TextView(ui.context).apply {
+                                this.text = text
+                                typeface = if (i == 0) ui.fontLabel else ui.fontHint
+                                setTextColor(color)
+                                setTextSize(TypedValue.COMPLEX_UNIT_SP, size * ui.scale)
+                                maxLines = 1
+                                ellipsize = TextUtils.TruncateAt.END
+                            })
+                        }
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    if (transport) {
+                        val buttons = listOf(
+                            Triple("prev", "media:prev", "Previous"),
+                            Triple(button.icon ?: "play_pause", "media:playpause", "Play / Pause"),
+                            Triple("next", "media:next", "Next"),
+                        )
+                        for ((icon, action, name) in buttons) {
+                            key.addView(ui.icon(icon, if (action == "media:playpause") textColor else iconTint).apply {
+                                val pad = ui.dp(10)
+                                setPadding(pad, pad, pad, pad)
+                                background = ui.pressable(Color.TRANSPARENT, ui.dpf(24f))
+                                contentDescription = name
+                                isHapticFeedbackEnabled = true
+                                setOnClickListener {
+                                    it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    listener.onCardButton(action)
+                                }
+                            }, LinearLayout.LayoutParams(ui.sdp(52), ui.sdp(52)).apply { marginStart = ui.dp(4) })
+                        }
+                    }
+                }
                 compact -> {
                     if (iconRes != null) key.addView(ui.icon(button.icon!!, iconTint),
                         LinearLayout.LayoutParams(ui.sdp(22), ui.sdp(22)))

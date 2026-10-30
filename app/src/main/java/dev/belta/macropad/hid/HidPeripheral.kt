@@ -606,13 +606,14 @@ class HidPeripheral(private val context: Context) {
     fun stopTyping() { stops.incrementAndGet() }
 
     /** Runs a multi-step macro (taps every combo); [onDone] runs on the sender thread afterwards. */
-    fun run(steps: List<Step>, onDone: (() -> Unit)? = null) {
+    /** [onDone] (on the sender thread) gets whether every step went out: not stopped, still connected. */
+    fun run(steps: List<Step>, onDone: ((finished: Boolean) -> Unit)? = null) {
         val stop = stops.get()
         sender.post {
             try {
                 runSteps(steps) { stops.get() != stop }
             } finally {
-                onDone?.invoke()
+                onDone?.invoke(stops.get() == stop && host != null)
             }
         }
     }

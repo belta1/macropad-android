@@ -19,13 +19,27 @@ import dev.belta.macropad.hid.KeyboardLayout
  *   wol:AA:BB:CC:DD:EE:FF           Wake-on-LAN packet from the tablet
  *   ha:light.toggle light.desk      calls a Home Assistant service (ha_url / ha_token saved values)
  *   pc:teams mute       Teams command over the PC link (mute, camera, hand, blur, leave, react like…)
+ *   pc:outlook reply    classic Outlook command over the PC link (reply, new-mail, mark-read, …)
+ *   pc:join             opens the next Outlook meeting's online meeting (Teams…) on the computer
+ *   pc:focus excel      brings the app's window to the front, waiting for it to open (PC link)
+ *   pc:wait save as     waits until the window in front is that app, or has that in its title
+ *
+ *   pc:click outlook 412,88 | Send   clicks at that point of the app's window ("screen": of the
+ *                       screen); right / double after the point; "| name" clicks that button
+ *                       wherever it is now, the point being where to look first
+ *   pc:drag excel 100,200 300,400    drags in the app's window
+ *   pc:scroll excel 412,88 -3        turns the wheel there (positive = up)
+ *   pc:typefile         types the file selected in File Explorer (after asking), e.g. into Citrix
+ *
+ * pc:focus, pc:wait and the pointer steps hold the macro until the computer says they're done
+ * (or gave up after 10 s, which stops the macro), so the keys after them go to the right window.
  *   pc:run lock         runs a command named in the computer's commands.json (PC link)
  *
  * Network steps run on the tablet at once, beside the keys, and work with no computer connected.
  * PC steps go over the PC link (docs/pc-link.md); without it, Teams steps send their shortcut.
  *
- * Text may contain {date}, {time}, {date:<pattern>} and {clipboard}, filled in when the key runs
- * ([TextVariables]).
+ * Text may contain {date}, {time}, {date:<pattern>}, {clipboard} and {pcclipboard}, filled in when
+ * the key runs ([TextVariables]).
  *
  * A macro that is a single combo, media key or click is "held" while the key is touched,
  * so the computer sees a real key press (auto-repeat, holding modifiers, dragging, ...).
@@ -54,9 +68,23 @@ sealed class Step {
     data class Ha(val domain: String, val service: String, val entity: String?) : Step()
     /**
      * Sent over the PC link: [command] "teams" with [name] a Teams action ([param] = the reaction
-     * for "react"), or "run" with [name] a command from the computer's commands.json.
+     * for "react"), "outlook" with [name] an Outlook command, or "run" with [name] a command from
+     * the computer's commands.json.
      */
-    data class Pc(val command: String, val name: String, val param: String? = null) : Step()
+    data class Pc(val command: String, val name: String, val param: String? = null, val point: PcPoint? = null) : Step() {
+        /** `pc:focus` / `pc:wait` / the pointer steps: the macro waits for it to be done before going on. */
+        val waits get() = command == "focus" || command == "wait" || point != null
+    }
+
+    /**
+     * Where `pc:click` / `pc:drag` / `pc:scroll` ([Pc.command]) act, in pixels from the top-left of
+     * [Pc.name]'s window: [button] "left", "right" or "double"; [x2], [y2] where a drag ends;
+     * [amount] wheel notches; [element] the button's name, looked for first.
+     */
+    data class PcPoint(
+        val x: Int, val y: Int, val button: String = "left", val x2: Int = 0, val y2: Int = 0,
+        val amount: Int = 0, val element: String? = null,
+    )
 
     /** Steps the tablet sends over the network instead of to the computer. */
     val isNetwork get() = this is Http || this is Wol || this is Ha
@@ -102,7 +130,7 @@ object Macro {
                 lower.startsWith("http:") -> parseHttp(line.substring(5).trim())
                 lower.startsWith("wol:") -> parseWol(line.substring(4).trim())
                 lower.startsWith("ha:") -> parseHa(line.substring(3).trim())
-                lower.startsWith("pc:") -> parsePc(lower.substring(3).trim())
+                lower.startsWith("pc:") -> parsePc(line.substring(3).trim())
                 else -> parseCombo(lower)
             }
         }
@@ -143,7 +171,9 @@ object Macro {
         val line = actions[0]
         val lower = line.lowercase()
         return when {
-            lower.startsWith("text:") -> "Types “${line.substring(5).replace("\\n", "⏎").take(18)}”"
+            lower.startsWith("text:") -> PC_CLIP_ONLY.matchEntire(lower.substring(5).trim())?.let {
+                "PC clipboard " + (it.groupValues[1].ifEmpty { "1" })
+            } ?: "Types “${line.substring(5).replace("\\n", "⏎").take(18)}”"
             lower.startsWith("media:") -> "Media key"
             lower.startsWith("click:") -> lower.substring(6).trim().replaceFirstChar { it.uppercase() } + " click"
             lower.startsWith("scroll:") -> "Scroll " + lower.substring(7).trim()
@@ -155,9 +185,23 @@ object Macro {
             lower.startsWith("http:") -> "Web request"
             lower.startsWith("wol:") -> "Wake on LAN"
             lower.startsWith("ha:") -> "Home Assistant"
-            lower.startsWith("pc:") -> runCatching { parsePc(lower.substring(3).trim()) }.getOrNull()?.let { pc ->
-                if (pc.command == "teams") "Teams · " + (TEAMS_ACTIONS[pc.name] ?: pc.name) + (pc.param?.let { " $it" } ?: "")
-                else "PC · ${pc.name}"
+            lower.startsWith("pc:") -> runCatching { parsePc(line.substring(3).trim()) }.getOrNull()?.let { pc ->
+                val where = if (pc.name == SCREEN) "on the screen" else "in ${pc.name}"
+                when (pc.command) {
+                    "teams" -> "Teams · " + (TEAMS_ACTIONS[pc.name] ?: pc.name) + (pc.param?.let { " $it" } ?: "")
+                    "outlook" -> "Outlook · " + (OUTLOOK_ACTIONS[pc.name] ?: pc.name)
+                    "join" -> "Joins the next meeting"
+                    "focus" -> "Brings ${pc.name} to the front"
+                    "wait" -> "Waits for ${pc.name}"
+                    "click" -> pc.point!!.let { p ->
+                        when (p.button) { "right" -> "Right-clicks"; "double" -> "Double-clicks"; else -> "Clicks" } +
+                            (p.element?.let { " “$it”" } ?: "") + " $where"
+                    }
+                    "drag" -> "Drags $where"
+                    "typefile" -> "Types the file selected in Explorer"
+                    "scroll" -> "Scrolls ${if (pc.point!!.amount > 0) "up" else "down"} $where"
+                    else -> "PC · ${pc.name}"
+                }
             } ?: "PC link"
             lower.startsWith("page:") -> when (val target = line.substring(5).trim()) {
                 "next" -> "Next page"
@@ -169,6 +213,9 @@ object Macro {
     }
 
     private val TABLET_COMMANDS = listOf("dim")
+
+    /** A text step that only types one of the computer's clipboard entries. */
+    private val PC_CLIP_ONLY = Regex("""\{pcclipboard(?::(\d+))?\}""")
 
     /** Slider presets: name to (up step, down step, tap step or null). */
     val SLIDE_PRESETS = linkedMapOf(
@@ -267,10 +314,78 @@ object Macro {
         "leave" to inTeams("ctrl+shift+h"),
     )
 
-    /** "teams <action> [reaction]" or "run <name>" (already lowercase). */
+    /**
+     * Classic Outlook commands of `pc:outlook`, with their names. They go to Outlook itself (its
+     * object model), so they work whatever Outlook's language and whichever window is in front;
+     * the ones on mail act on the selected messages (or the message open in front).
+     */
+    val OUTLOOK_ACTIONS = linkedMapOf(
+        "open" to "Open", "new-mail" to "New mail", "new-meeting" to "New meeting", "mail" to "Mail",
+        "calendar" to "Calendar", "reply" to "Reply", "reply-all" to "Reply all", "forward" to "Forward",
+        "send" to "Send", "mark-read" to "Mark read", "mark-unread" to "Mark unread", "flag" to "Flag",
+        "archive" to "Archive", "delete" to "Delete",
+    )
+
+    /** Outlook's taskbar slot: Win+2 focuses it. */
+    const val OUTLOOK_SLOT = 2
+
+    /** Focuses Outlook and sends a shortcut, leaving Outlook in front. */
+    fun toOutlook(shortcut: String) = "win+$OUTLOOK_SLOT\ndelay:300\n$shortcut"
+
+    /**
+     * What a `pc:outlook` command sends without the PC link (or with classic Outlook closed):
+     * English Outlook's shortcuts, focusing Outlook first where the command starts something.
+     */
+    val OUTLOOK_FALLBACK = mapOf(
+        "open" to "win+$OUTLOOK_SLOT",
+        "new-mail" to toOutlook("ctrl+shift+m"),
+        "new-meeting" to toOutlook("ctrl+shift+q"),
+        "mail" to toOutlook("ctrl+1"),
+        "calendar" to toOutlook("ctrl+2"),
+        "reply" to "ctrl+r",
+        "reply-all" to "ctrl+shift+r",
+        "forward" to "ctrl+f",
+        "send" to "ctrl+enter",
+        "mark-read" to "ctrl+q",
+        "mark-unread" to "ctrl+u",
+        "flag" to "insert",
+        "archive" to "backspace",
+        "delete" to "delete",
+    )
+
+    /** `pc:click` / `pc:drag` / `pc:scroll` with this in place of an app: the point is on the screen. */
+    const val SCREEN = "screen"
+
+    private val POINT = Regex("""(-?\d+),(-?\d+)""")
+
+    /**
+     * "teams <action> [reaction]", "outlook <action>", "run <name>", "click <app> <x>,<y>
+     * [right|double] [| name]", "drag <app> <x>,<y> <x2>,<y2>", "scroll <app> <x>,<y> <notches>"…
+     * Only a click's name keeps its case.
+     */
     private fun parsePc(spec: String): Step.Pc {
-        val parts = spec.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val parts = spec.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (parts.firstOrNull() in listOf("click", "drag", "scroll")) return parsePointer(spec)
         return when (parts.firstOrNull()) {
+            "focus" -> {
+                val app = parts.drop(1).joinToString(" ").removeSuffix(".exe")
+                if (app.isEmpty() || ' ' in app) throw MacroException("pc:focus needs an app's process name, e.g. pc:focus excel")
+                Step.Pc("focus", app)
+            }
+            "wait" -> Step.Pc("wait", parts.drop(1).joinToString(" ").ifEmpty {
+                throw MacroException("pc:wait needs an app or part of a window title, e.g. pc:wait notepad")
+            })
+            "join" -> {
+                if (parts.size > 1) throw MacroException("pc:join takes nothing after it")
+                Step.Pc("join", "next")
+            }
+            "outlook" -> {
+                val action = parts.getOrNull(1)
+                if (action !in OUTLOOK_ACTIONS || parts.size > 2) {
+                    throw MacroException("Outlook step: pc:outlook ${OUTLOOK_ACTIONS.keys.joinToString("|")}")
+                }
+                Step.Pc("outlook", action!!)
+            }
             "teams" -> {
                 val action = parts.getOrNull(1)
                 if (action !in TEAMS_ACTIONS) {
@@ -285,11 +400,44 @@ object Macro {
                     Step.Pc("teams", action!!)
                 }
             }
+            "typefile" -> {
+                if (parts.size > 1) throw MacroException("pc:typefile takes nothing after it")
+                Step.Pc("typefile", "selected")
+            }
             "run" -> Step.Pc("run", parts.drop(1).joinToString(" ").ifEmpty {
                 throw MacroException("pc:run needs a command name from the computer's commands.json")
             })
-            else -> throw MacroException("PC step: pc:teams <action> or pc:run <name>")
+            else -> throw MacroException("PC step: pc:teams, pc:outlook, pc:join, pc:focus, pc:wait, pc:click, pc:drag, pc:scroll, pc:typefile or pc:run")
         }
+    }
+
+    private fun parsePointer(spec: String): Step.Pc {
+        val element = spec.substringAfter('|', "").trim().takeIf { it.isNotEmpty() }
+        val parts = spec.substringBefore('|').lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val command = parts[0]
+        val usage = when (command) {
+            "click" -> "pc:click app x,y [right|double] [| name], e.g. pc:click outlook 412,88 | Send"
+            "drag" -> "pc:drag app x,y x2,y2, e.g. pc:drag excel 100,200 300,400"
+            else -> "pc:scroll app x,y notches, e.g. pc:scroll excel 412,88 -3"
+        }
+        val app = parts.getOrNull(1)?.removeSuffix(".exe")
+        val at = parts.getOrNull(2)?.let { POINT.matchEntire(it) }
+        if (app == null || at == null || (element != null && command != "click")) throw MacroException(usage)
+        val (x, y) = at.destructured.let { (x, y) -> x.toInt() to y.toInt() }
+        val rest = parts.drop(3)
+        val point = when (command) {
+            "click" -> when (rest.singleOrNull() ?: if (rest.isEmpty()) "left" else null) {
+                "left", "right", "double" -> Step.PcPoint(x, y, rest.firstOrNull() ?: "left", element = element)
+                else -> throw MacroException(usage)
+            }
+            "drag" -> rest.singleOrNull()?.let { POINT.matchEntire(it) }?.destructured?.let { (x2, y2) ->
+                Step.PcPoint(x, y, x2 = x2.toInt(), y2 = y2.toInt())
+            } ?: throw MacroException(usage)
+            else -> rest.singleOrNull()?.toIntOrNull()?.takeIf { it != 0 }?.let {
+                Step.PcPoint(x, y, amount = it.coerceIn(-50, 50))
+            } ?: throw MacroException(usage)
+        }
+        return Step.Pc(command, app, point = point)
     }
 
     private val FOCUS_APP = Regex("""(win|super|gui|meta)\+[0-9]""")

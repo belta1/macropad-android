@@ -27,6 +27,12 @@ class MacroStore(private val context: Context) {
         upgradeVolumeDock(layout)
         dropDockMute(layout)
         upgradeTeamsApi(layout)
+        mediaCardDock(layout)
+        upgradeOutlookApi(layout)
+        addJoinMeeting(layout)
+        callTimerLabel(layout)
+        retireAndOrderTabs(layout)
+        addTypeFile(layout)
         addPageIcons(layout)
         if (backupFile?.exists() == false) writeBackup(export(layout))
         return layout
@@ -50,8 +56,9 @@ class MacroStore(private val context: Context) {
         LayoutJson.toJson(layout).put("computers", computers.toJson()).toString(2)
 
     /**
-     * Files from before 1.5 (format version < 3) get the dock's volume slider, and files from before
-     * 1.6 (< 4) lose its separate Mute key, like a stored layout does.
+     * Files from before 1.5 (format version < 3) get the dock's volume slider, files from before
+     * 1.6 (< 4) lose its separate Mute key, and files from before 1.8 (< 5) get its media card,
+     * like a stored layout does.
      */
     fun import(text: String): Layout {
         val json = JSONObject(text)
@@ -59,6 +66,7 @@ class MacroStore(private val context: Context) {
             val version = json.optInt("version", 1)
             if (version < 3) DefaultLayout.upgradeVolumeDock(it.dock)
             if (version < 4) DefaultLayout.dropDockMute(it.dock)
+            if (version < 5) DefaultLayout.mediaCardDock(it.dock)
         }
     }
 
@@ -153,6 +161,66 @@ class MacroStore(private val context: Context) {
         if (changed) save(layout)
     }
 
+    /**
+     * 1.8: the Outlook keys become Outlook commands over the PC link (shortcuts without it), and
+     * the Citrix page's Outlook key opens Outlook that way. Only untouched keys change.
+     */
+    private fun upgradeOutlookApi(layout: Layout) {
+        if (prefs.getBoolean(OUTLOOK_API_FLAG, false)) return
+        var changed = false
+        layout.pages.firstOrNull { it.name == DefaultLayout.OUTLOOK_PAGE }?.buttons?.forEach { b ->
+            DefaultLayout.OUTLOOK_API_UPGRADE[b?.action]?.let { b!!.action = it; changed = true }
+        }
+        layout.pages.firstOrNull { it.name == DefaultLayout.CITRIX_PAGE }?.buttons?.forEach { b ->
+            if (b?.label == "Outlook" && b.action == Macro.OUTLOOK_FALLBACK["open"]) { b.action = "pc:outlook open"; changed = true }
+        }
+        prefs.edit().putBoolean(OUTLOOK_API_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
+    /** 1.8: the join-meeting key, in a free slot of the sidebar. */
+    private fun addJoinMeeting(layout: Layout) {
+        if (prefs.getBoolean(JOIN_FLAG, false)) return
+        val changed = DefaultLayout.addJoinMeeting(layout.sidebar)
+        prefs.edit().putBoolean(JOIN_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
+    /**
+     * 1.8: the Excel and Word pages go (unless their keys were changed) and the tabs are put in
+     * order of use, the work ones first. Once; after that the order is yours (or Sort tabs by use).
+     */
+    private fun retireAndOrderTabs(layout: Layout) {
+        if (prefs.getBoolean(TAB_ORDER_FLAG, false)) return
+        val changed = DefaultLayout.retireAndOrder(layout.pages)
+        prefs.edit().putBoolean(TAB_ORDER_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
+    /** 1.8: Type selected file on the PC clipboard page, in place of Paste. */
+    private fun addTypeFile(layout: Layout) {
+        if (prefs.getBoolean(TYPE_FILE_FLAG, false)) return
+        val changed = DefaultLayout.addTypeFile(layout.pages)
+        prefs.edit().putBoolean(TYPE_FILE_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
+    /** 1.8: the Teams page's Leave key shows the call's time. */
+    private fun callTimerLabel(layout: Layout) {
+        if (prefs.getBoolean(CALL_TIMER_FLAG, false)) return
+        val changed = DefaultLayout.callTimerLabel(layout.pages)
+        prefs.edit().putBoolean(CALL_TIMER_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
+    /** 1.8: the dock's media keys become the media card (what's playing with ⏮ ⏯ ⏭), desktop keys first. */
+    private fun mediaCardDock(layout: Layout) {
+        if (prefs.getBoolean(MEDIA_CARD_FLAG, false)) return
+        val changed = DefaultLayout.mediaCardDock(layout.dock)
+        prefs.edit().putBoolean(MEDIA_CARD_FLAG, true).apply()
+        if (changed) save(layout)
+    }
+
     /** Stores a tab icon and the apps that show it for pages without them, so they survive renaming. */
     private fun addPageIcons(layout: Layout) {
         var changed = false
@@ -170,6 +238,12 @@ class MacroStore(private val context: Context) {
         const val VOLUME_DOCK_FLAG = "upgraded_volume_dock"
         const val DOCK_MUTE_FLAG = "upgraded_dock_mute"
         const val TEAMS_API_FLAG = "upgraded_teams_api"
+        const val MEDIA_CARD_FLAG = "upgraded_media_card"
+        const val OUTLOOK_API_FLAG = "upgraded_outlook_api"
+        const val JOIN_FLAG = "added_join_meeting"
+        const val CALL_TIMER_FLAG = "upgraded_call_timer"
+        const val TAB_ORDER_FLAG = "upgraded_tab_order"
+        const val TYPE_FILE_FLAG = "added_type_file"
         const val KEY = "layout_v3"
         const val BACKUP_NAME = "macropad-layout.json"
     }
