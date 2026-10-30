@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.8.0
 
 - **Themes** (⚙ → Theme), each with its own keycaps, colors and scenery behind the keys:
   *Graphite* (as before), *Synthwave* (neon-tube keys whose icons and labels glow, over a striped
