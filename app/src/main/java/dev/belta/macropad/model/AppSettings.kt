@@ -53,6 +53,16 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit().putBoolean("open_on_charge", value).apply()
 
     /** Sidebar on the left of the keys instead of the right. */
+    /** Teams messages and mentions on the computer show as a card on the tablet (PC link). */
+    var teamsNotices: Boolean
+        get() = prefs.getBoolean("teams_notices", false)
+        set(value) = prefs.edit().putBoolean("teams_notices", value).apply()
+
+    /** Mail from these senders shows as a card on the tablet (PC link): one per line, names or addresses. */
+    var noticeSenders: String
+        get() = prefs.getString("notice_senders", "") ?: ""
+        set(value) = prefs.edit().putString("notice_senders", value).apply()
+
     /** New mail in the computer's classic Outlook shows on the tablet (PC link). */
     var mailNotices: Boolean
         get() = prefs.getBoolean("mail_notices", true)

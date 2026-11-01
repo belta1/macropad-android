@@ -17,7 +17,9 @@ User docs: `docs/pc-link.md`. Contract: [pc-protocol](pc-protocol.md).
   `Send-Changed`) · app in front · Win32/Core Audio C# (`Add-Type`) · windows/icons · waits
   (`pc:focus`/`pc:wait`) · recording (`-AllowRecording`) · recorded clicks (`pc:click/drag/scroll`) ·
   clipboard · volume · media (WinRT) · shell hook · Screen page · lock/keyboard · Outlook (COM) ·
-  Outlook commands · Teams (third-party API) · Teams without API (UI Automation) · named commands
+  Outlook commands · Teams (third-party API) · Teams without API (UI Automation) · layout editor (`Start-Editor`, `Read-Editor`, C# `EditorRequest`: a
+  127.0.0.1 TcpListener proxying the page's requests to the tablet as `http`) · notices (`Send-TeamsNotices` reads
+  `wpndatabase.db` read-only via C# `ToastStore` over winsqlite3.dll; `Send-MailNotice`; `Open-Notice`) · named commands
   (`pc:run`) · typing a file · PowerPoint · HTML slide decks (`Update-Deck`, `Get-DeckSlides`,
   `Send-Deck`, `Invoke-DeckCommand`) · talking to the tablet (`Send-Hello`) · updates
   (`Invoke-Update`, `Send-All`, dispatch `switch`, `Read-Tablet`) · `-TeamsDump` · **main loop**.
@@ -34,7 +36,8 @@ send screen frames when acked. `Send-Changed` suppresses duplicates per message 
 errors are caught and logged; **write errors end the link** (reconnect).
 
 Switches: `-Port`, `-Device`, `-Install/-Uninstall` (Startup shortcut), `-NoTeams`, `-NoOutlook`,
-`-NoClipboard`, `-AllowRecording`, `-NoUpdate`, `-TeamsDump`, `-InstallShellHook/-UninstallShellHook`.
+`-NoClipboard`, `-AllowRecording`, `-NoUpdate`, `-TeamsDump`, `-InstallShellHook/-UninstallShellHook`,
+`-EditorPort` (default 8771), `-NoNotices`.
 
 ## Gotchas & constraints
 

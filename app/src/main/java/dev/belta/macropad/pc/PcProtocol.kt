@@ -149,7 +149,25 @@ sealed class PcMessage {
     data class FileText(val id: Int, val name: String, val text: String) : PcMessage()
     /** A picture (JPEG) of slide [slide] of [file], for [PcSlides.version] [version]. */
     class SlideImage(val file: String, val slide: Int, val version: Int, val jpeg: ByteArray) : PcMessage()
+    /**
+     * A request from the layout editor's web page on the computer ([PcProtocol.editor]), passed on by
+     * the script: answer it with [PcProtocol.httpReply] and the same [id]. [key] is the editor's key
+     * as the page sent it.
+     */
+    data class Http(val id: Int, val method: String, val path: String, val key: String?, val body: String) : PcMessage()
+    /** Something the computer showed that the tablet may tell: a Teams message, a new mail ([PcNotice]). */
+    data class Notice(val notice: PcNotice) : PcMessage()
 }
+
+/**
+ * A notification from the computer: [kind] "teams" (a chat message or a mention, [mention]) or
+ * "mail" (a new mail in classic Outlook; [address] is the sender's address when Outlook knows it).
+ * [handle] asks the computer to open it ([PcProtocol.openNotice]).
+ */
+data class PcNotice(
+    val kind: String, val handle: Int, val from: String, val text: String,
+    val address: String? = null, val mention: Boolean = false, val at: Long = System.currentTimeMillis(),
+)
 
 /**
  * The part of a monitor the Screen page shows: from ([x], [y]), [size] of its width and of its
@@ -240,6 +258,13 @@ object PcProtocol {
             "file" -> PcMessage.FileText(json.getInt("id"), json.text("name") ?: "file", json.optString("text").replace("\r\n", "\n"))
             "slide-image" ->PcMessage.SlideImage(json.text("file") ?: return null, json.getInt("n"), json.optInt("v"),
                 Base64.getDecoder().decode(json.getString("jpg")))
+            "http" -> PcMessage.Http(json.getInt("id"), json.text("method") ?: "GET", json.text("path") ?: "/",
+                json.text("key"), json.optString("body"))
+            "notice" -> PcMessage.Notice(PcNotice(
+                json.text("kind") ?: return null, json.optInt("n"),
+                json.text("from").orEmpty(), json.text("text").orEmpty().replace("\r\n", "\n").replace('\r', '\n').trim(),
+                json.text("address"), json.optBoolean("mention"),
+            ))
             "lock" -> PcMessage.Lock(json.optBoolean("locked"))
             "keyboard" -> PcMessage.Keyboard(json.text("klid")?.uppercase())
             "badges" -> PcMessage.Badges(json.optJSONObject("counts")?.let { counts ->
@@ -272,7 +297,7 @@ object PcProtocol {
         is PcMessage.Badges -> status.copy(badges = message.counts)
         is PcMessage.Slides -> status.copy(slides = message.slides)
         is PcMessage.Result, is PcMessage.Icon, is PcMessage.Frame, is PcMessage.Recorded, is PcMessage.SlideImage,
-        is PcMessage.FileText -> status
+        is PcMessage.FileText, is PcMessage.Http, is PcMessage.Notice -> status
     }
 
     fun hello(appVersion: String) = line(JSONObject().put("t", "hello").put("v", VERSION).put("app", appVersion))
@@ -362,6 +387,27 @@ object PcProtocol {
     /** Replaces the computer's script with [script]; it checks it, answers, then restarts. */
     fun update(script: LinkScript, id: Int) = line(JSONObject().put("t", "update").put("id", id)
         .put("version", script.version).put("sha256", script.sha256).put("ps1", Base64.getEncoder().encodeToString(script.bytes)))
+
+    /**
+     * Opens the layout editor in the computer's browser: the script serves it on this computer only
+     * (127.0.0.1) and passes the page's requests on as [PcMessage.Http]. [key] is the editor's key,
+     * which the page must send with every request.
+     */
+    fun editor(key: String, id: Int) = line(JSONObject().put("t", "editor").put("key", key).put("id", id))
+
+    /**
+     * The answer to the editor's request [id]: an HTTP [status], content [type] and [body]. [cache]
+     * lets the script keep it for the rest of the session (the page itself, its icons).
+     */
+    fun httpReply(id: Int, status: Int, type: String, body: String, cache: Boolean = false) = line(JSONObject()
+        .put("t", "http-reply").put("id", id).put("status", status).put("type", type).put("body", body)
+        .apply { if (cache) put("cache", true) })
+
+    /** Which notifications the tablet wants: Teams messages and mentions, new mail in Outlook. */
+    fun notices(teams: Boolean, mail: Boolean) = line(JSONObject().put("t", "notices").put("teams", teams).put("mail", mail))
+
+    /** Opens notification [handle] on the computer: the mail, or Teams. */
+    fun openNotice(handle: Int, id: Int) = line(JSONObject().put("t", "notice-open").put("n", handle).put("id", id))
 
     fun screenStop() = line(JSONObject().put("t", "screen").put("stop", true))
 

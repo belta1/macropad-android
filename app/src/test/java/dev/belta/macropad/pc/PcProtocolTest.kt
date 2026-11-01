@@ -278,4 +278,31 @@ class PcProtocolTest {
         assertNotNull(JSONObject(PcProtocol.hello("1.7.0").trim()).getString("app"))
         assertEquals(1, JSONObject(PcProtocol.hello("1.7.0").trim()).getInt("v"))
     }
+
+    @Test
+    fun `parses the editor's requests and notices`() {
+        assertEquals(PcMessage.Http(7, "PUT", "/api/layout", "abc", "{}"),
+            PcProtocol.parse("""{"t":"http","id":7,"method":"PUT","path":"/api/layout","key":"abc","body":"{}"}"""))
+        val notice = (PcProtocol.parse("""{"t":"notice","kind":"teams","n":3,"from":"Ana","text":"hola\r\nqué tal","mention":true}""")
+            as PcMessage.Notice).notice
+        assertEquals("teams", notice.kind)
+        assertEquals(3, notice.handle)
+        assertEquals("hola\nqué tal", notice.text)
+        assertTrue(notice.mention)
+        assertNull(PcProtocol.parse("""{"t":"notice","n":3}"""))
+    }
+
+    @Test
+    fun `builds the editor's replies and the notice requests`() {
+        val reply = JSONObject(PcProtocol.httpReply(7, 200, "text/html", "<p>", cache = true))
+        assertEquals("http-reply", reply.getString("t"))
+        assertEquals(7, reply.getInt("id"))
+        assertEquals("<p>", reply.getString("body"))
+        assertTrue(reply.getBoolean("cache"))
+        val notices = JSONObject(PcProtocol.notices(teams = true, mail = false))
+        assertTrue(notices.getBoolean("teams"))
+        assertFalse(notices.getBoolean("mail"))
+        assertEquals(4, JSONObject(PcProtocol.openNotice(4, 9)).getInt("n"))
+        assertEquals("k1", JSONObject(PcProtocol.editor("k1", 2)).getString("key"))
+    }
 }

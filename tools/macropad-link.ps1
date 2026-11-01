@@ -38,6 +38,13 @@
 .PARAMETER UninstallShellHook
     Remove those lines from your PowerShell profile, then exit.
 
+.PARAMETER EditorPort
+    The port of the layout editor (tablet settings > Edit keys on the computer), served on this
+    computer only (127.0.0.1). Default 8771.
+
+.PARAMETER NoNotices
+    Don't send Teams messages or new mail to the tablet's notice cards.
+
 .PARAMETER Port
     The COM port, e.g. COM5. Default: the outgoing Bluetooth COM port of the device named -Device.
 
@@ -70,14 +77,16 @@ param(
     [switch]$NoUpdate,
     [switch]$TeamsDump,
     [switch]$InstallShellHook,
-    [switch]$UninstallShellHook
+    [switch]$UninstallShellHook,
+    [int]$EditorPort = 8771,
+    [switch]$NoNotices
 )
 
 $ErrorActionPreference = 'Stop'
 $ProtocolVersion = 1
 # The tablet offers this script's update when the app carries a higher version, or the same one
 # with other contents.
-$ScriptVersion = '1.8.2'
+$ScriptVersion = '1.9.0'
 $StartOptions = @{} + $PSBoundParameters # for starting again after an update
 $ConfigDir = Join-Path $env:APPDATA 'Macropad'
 $CommandsFile = Join-Path $ConfigDir 'commands.json'
@@ -98,6 +107,8 @@ if ($Install) {
     if ($NoClipboard) { $arguments += ' -NoClipboard' }
     if ($AllowRecording) { $arguments += ' -AllowRecording' }
     if ($NoUpdate) { $arguments += ' -NoUpdate' }
+    if ($NoNotices) { $arguments += ' -NoNotices' }
+    if ($EditorPort -ne 8771) { $arguments += " -EditorPort $EditorPort" }
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($ShortcutFile)
     $shortcut.TargetPath = (Get-Command powershell.exe).Source
@@ -256,6 +267,9 @@ function Close-Link {
         Write-Log 'Tablet disconnected; trying again every 10 s'
     }
     $script:LinkBuffer = ''
+    Stop-EditorRequests
+    $script:NoticeTeams = $false # the tablet says again when it's back
+    $script:NoticeMail = $false
     # No tablet to record for: stop watching the keyboard.
     if ($script:Capture) {
         [MacropadLink.KeyCapture]::Stop()
@@ -1835,6 +1849,9 @@ function Send-NewMail {
     }
     if ($new.Count -eq 0) { return }
     $script:MailSeen = $new[0].ReceivedTime
+    if ($script:NoticeMail) {
+        for ($i = [Math]::Min($new.Count, 5) - 1; $i -ge 0; $i--) { try { Send-MailNotice $new[$i] } catch { } } # oldest first
+    }
     Send-Tablet ([ordered]@{ t = 'mail'; from = [string]$new[0].SenderName; subject = [string]$new[0].Subject; count = $new.Count })
 }
 
@@ -2738,6 +2755,347 @@ function Invoke-DeckCommand($Request) {
     $script:Next.slides = Get-Date # show the new slide at once
 }
 
+# ------------------------------------------------------------------ the layout editor (a web page on this computer)
+
+# Just enough HTTP for the editor page: one request per connection, read whole, answered once the
+# tablet has answered it.
+Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Net.Sockets;
+using System.Text;
+
+namespace MacropadLink {
+    public class EditorRequest {
+        public string Method = "", Path = "", Host = "", Key = "", Body = "";
+
+        public static EditorRequest Read(TcpClient client) {
+            client.ReceiveTimeout = 3000;
+            NetworkStream stream = client.GetStream();
+            MemoryStream data = new MemoryStream();
+            byte[] buffer = new byte[16384];
+            int headerEnd = -1;
+            while (headerEnd < 0) {
+                int n = stream.Read(buffer, 0, buffer.Length);
+                if (n <= 0) return null;
+                data.Write(buffer, 0, n);
+                headerEnd = Find(data.GetBuffer(), (int)data.Length);
+                if (headerEnd < 0 && data.Length > 65536) return null;
+            }
+            string[] lines = Encoding.ASCII.GetString(data.GetBuffer(), 0, headerEnd).Split(new string[] { "\r\n" }, StringSplitOptions.None);
+            string[] first = lines[0].Split(' ');
+            if (first.Length < 2) return null;
+            EditorRequest request = new EditorRequest();
+            request.Method = first[0];
+            request.Path = first[1];
+            int length = 0;
+            for (int i = 1; i < lines.Length; i++) {
+                int colon = lines[i].IndexOf(':');
+                if (colon <= 0) continue;
+                string name = lines[i].Substring(0, colon).Trim().ToLowerInvariant();
+                string value = lines[i].Substring(colon + 1).Trim();
+                if (name == "host") request.Host = value;
+                else if (name == "x-macropad-key") request.Key = value;
+                else if (name == "content-length") int.TryParse(value, out length);
+            }
+            if (length < 0 || length > 4000000) return null;
+            int start = headerEnd + 4;
+            while (data.Length - start < length) {
+                int n = stream.Read(buffer, 0, buffer.Length);
+                if (n <= 0) return null;
+                data.Write(buffer, 0, n);
+            }
+            request.Body = Encoding.UTF8.GetString(data.GetBuffer(), start, length);
+            return request;
+        }
+
+        static int Find(byte[] bytes, int length) {
+            for (int i = 0; i + 3 < length; i++) {
+                if (bytes[i] == 13 && bytes[i + 1] == 10 && bytes[i + 2] == 13 && bytes[i + 3] == 10) return i;
+            }
+            return -1;
+        }
+
+        public static void Reply(TcpClient client, int status, string type, string body) {
+            try {
+                byte[] content = Encoding.UTF8.GetBytes(body ?? "");
+                string head = "HTTP/1.1 " + status + " " + Reason(status) + "\r\nContent-Type: " + type +
+                    "\r\nContent-Length: " + content.Length + "\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff" +
+                    "\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n";
+                byte[] headBytes = Encoding.ASCII.GetBytes(head);
+                NetworkStream stream = client.GetStream();
+                stream.Write(headBytes, 0, headBytes.Length);
+                stream.Write(content, 0, content.Length);
+                stream.Flush();
+            } catch (Exception) {
+            } finally {
+                client.Close();
+            }
+        }
+
+        static string Reason(int status) {
+            switch (status) {
+                case 200: return "OK";
+                case 400: return "Bad Request";
+                case 403: return "Forbidden";
+                case 404: return "Not Found";
+                case 409: return "Conflict";
+                case 503: return "Service Unavailable";
+                case 504: return "Gateway Timeout";
+                default: return "Status";
+            }
+        }
+    }
+}
+'@
+
+$EditorListener = $null
+$EditorKey = $null      # the key of the editor the tablet opened last
+$EditorWaiting = @{}    # request id -> the browser's connection, waiting for the tablet
+$EditorCache = @{}      # path -> a reply the tablet let keep (the page, its icons), for this editor
+$EditorIds = 0
+$TextType = 'text/plain; charset=utf-8'
+
+# {"t":"editor","key":…}: serves the editor on this computer only (127.0.0.1) and opens it in the
+# browser. The page sends the key with every request; the tablet makes a new one each time.
+function Start-Editor($Request) {
+    $script:EditorKey = [string]$Request.key
+    $script:EditorCache.Clear()
+    if (-not $script:EditorListener) {
+        try {
+            $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $EditorPort)
+            $listener.Start()
+            $script:EditorListener = $listener
+            Write-Log "Layout editor at http://127.0.0.1:$EditorPort/"
+        } catch {
+            return Send-Result $Request.id $false "Can't serve the editor on port ${EditorPort}: $($_.Exception.Message) (start the script with -EditorPort to use another)"
+        }
+    }
+    try {
+        Start-Process "http://127.0.0.1:$EditorPort/?k=$($script:EditorKey)"
+        Send-Result $Request.id $true $null
+    } catch {
+        Send-Result $Request.id $false "Couldn't open the browser: $($_.Exception.Message). Open http://127.0.0.1:$EditorPort/?k=$($script:EditorKey)"
+    }
+}
+
+# The editor page's requests: checked here, then passed on to the tablet, which answers them.
+function Read-Editor {
+    if (-not $script:EditorListener) { return }
+    while ($script:EditorListener.Pending()) {
+        $client = $script:EditorListener.AcceptTcpClient()
+        $request = $null
+        try { $request = [MacropadLink.EditorRequest]::Read($client) } catch { }
+        if ($request) { Use-EditorRequest $client $request } else { $client.Close() }
+    }
+    foreach ($id in @($script:EditorWaiting.Keys)) {
+        $waiting = $script:EditorWaiting[$id]
+        if (((Get-Date) - $waiting.at).TotalSeconds -gt 20) {
+            $script:EditorWaiting.Remove($id)
+            [MacropadLink.EditorRequest]::Reply($waiting.client, 504, $TextType, 'The tablet did not answer. Is the macropad app open on it?')
+        }
+    }
+}
+
+function Use-EditorRequest($Client, $Request) {
+    # Only by this address: a web site can't reach the editor through a name it points here.
+    if ($Request.Host -ne "127.0.0.1:$EditorPort" -and $Request.Host -ne "localhost:$EditorPort") {
+        return [MacropadLink.EditorRequest]::Reply($Client, 403, $TextType, 'Open the editor from the tablet')
+    }
+    $key = $Request.Key
+    if (-not $key -and $Request.Path -match '[?&]k=([0-9a-fA-F]+)') { $key = $Matches[1] }
+    if (-not $script:EditorKey -or $key -cne $script:EditorKey) {
+        return [MacropadLink.EditorRequest]::Reply($Client, 403, $TextType, 'This editor link no longer works. Open the editor again from the tablet (Settings > Edit keys on the computer).')
+    }
+    $path = ($Request.Path -split '\?')[0]
+    if ($Request.Method -eq 'GET' -and $script:EditorCache.ContainsKey($path)) {
+        $kept = $script:EditorCache[$path]
+        return [MacropadLink.EditorRequest]::Reply($Client, 200, $kept.type, $kept.body)
+    }
+    if (-not $script:Link) {
+        return [MacropadLink.EditorRequest]::Reply($Client, 503, $TextType, 'The tablet is not connected')
+    }
+    $script:EditorIds++
+    $id = $script:EditorIds
+    $script:EditorWaiting[$id] = @{ client = $Client; at = Get-Date; path = $path; method = $Request.Method }
+    Send-Tablet ([ordered]@{ t = 'http'; id = $id; method = $Request.Method; path = $Request.Path; key = $key; body = $Request.Body })
+}
+
+# {"t":"http-reply"}: the tablet's answer to editor request id.
+function Complete-EditorRequest($Reply) {
+    $id = [int]$Reply.id
+    $waiting = $script:EditorWaiting[$id]
+    if (-not $waiting) { return }
+    $script:EditorWaiting.Remove($id)
+    $type = [string]$Reply.type
+    $body = [string]$Reply.body
+    if ($Reply.cache -and $waiting.method -eq 'GET') { $script:EditorCache[$waiting.path] = @{ type = $type; body = $body } }
+    [MacropadLink.EditorRequest]::Reply($waiting.client, [int]$Reply.status, $type, $body)
+}
+
+# The tablet went away: requests waiting for it get an answer now.
+function Stop-EditorRequests {
+    foreach ($waiting in @($script:EditorWaiting.Values)) {
+        [MacropadLink.EditorRequest]::Reply($waiting.client, 503, $TextType, 'The tablet disconnected')
+    }
+    $script:EditorWaiting.Clear()
+}
+
+# ------------------------------------------------------------------ notices (Teams messages, mail) for the tablet's cards
+
+# Windows keeps the notifications it shows in a SQLite database; this reads it, read only, with the
+# SQLite that comes with Windows (winsqlite3.dll).
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace MacropadLink {
+    public static class ToastStore {
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.StdCall)] static extern int sqlite3_open_v2(byte[] file, out IntPtr db, int flags, IntPtr vfs);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.StdCall)] static extern int sqlite3_close(IntPtr db);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.StdCall)] static extern int sqlite3_busy_timeout(IntPtr db, int ms);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.StdCall)] static extern int sqlite3_prepare_v2(IntPtr db, byte[] sql, int bytes, out IntPtr stmt, IntPtr tail);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.StdCall)] static extern int sqlite3_bind_int64(IntPtr stmt, int index, long value);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.StdCall)] static extern int sqlite3_step(IntPtr stmt);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.StdCall)] static extern int sqlite3_finalize(IntPtr stmt);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.StdCall)] static extern long sqlite3_column_int64(IntPtr stmt, int column);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.StdCall)] static extern IntPtr sqlite3_column_blob(IntPtr stmt, int column);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.StdCall)] static extern int sqlite3_column_bytes(IntPtr stmt, int column);
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.StdCall)] static extern IntPtr sqlite3_errmsg(IntPtr db);
+
+        public class Toast { public long Id; public string App; public string Xml; }
+
+        static string Column(IntPtr stmt, int column) {
+            IntPtr data = sqlite3_column_blob(stmt, column);
+            int length = sqlite3_column_bytes(stmt, column);
+            if (data == IntPtr.Zero || length <= 0) return "";
+            byte[] bytes = new byte[length];
+            Marshal.Copy(data, bytes, 0, length);
+            return Encoding.UTF8.GetString(bytes);
+        }
+
+        static Exception Failed(IntPtr db) {
+            return new Exception("can't read Windows' notifications: " + Marshal.PtrToStringAnsi(sqlite3_errmsg(db)));
+        }
+
+        // The toasts shown after notification [after], oldest first, and in [newest] the newest
+        // notification's number. With [after] below 0 only [newest]: where to start from.
+        public static List<Toast> Since(string path, long after, out long newest) {
+            newest = after;
+            List<Toast> toasts = new List<Toast>();
+            IntPtr db;
+            if (sqlite3_open_v2(Encoding.UTF8.GetBytes(path + "\0"), out db, 1, IntPtr.Zero) != 0) { // read only
+                Exception error = Failed(db);
+                sqlite3_close(db);
+                throw error;
+            }
+            try {
+                sqlite3_busy_timeout(db, 200); // Windows writes it now and then; don't hold the loop up
+                string sql = after < 0
+                    ? "SELECT IFNULL(MAX(Id), 0), '', '' FROM Notification"
+                    : "SELECT n.Id, h.PrimaryId, n.Payload FROM Notification n JOIN NotificationHandler h ON h.RecordId = n.HandlerId " +
+                      "WHERE n.Type = 'toast' AND n.Id > ?1 ORDER BY n.Id LIMIT 50";
+                IntPtr stmt;
+                if (sqlite3_prepare_v2(db, Encoding.UTF8.GetBytes(sql + "\0"), -1, out stmt, IntPtr.Zero) != 0) throw Failed(db);
+                try {
+                    if (after >= 0) sqlite3_bind_int64(stmt, 1, after);
+                    while (sqlite3_step(stmt) == 100) { // a row
+                        long id = sqlite3_column_int64(stmt, 0);
+                        if (id > newest) newest = id;
+                        if (after >= 0) toasts.Add(new Toast { Id = id, App = Column(stmt, 1), Xml = Column(stmt, 2) });
+                    }
+                } finally {
+                    sqlite3_finalize(stmt);
+                }
+            } finally {
+                sqlite3_close(db);
+            }
+            return toasts;
+        }
+    }
+}
+'@
+
+$NoticeTeams = $false   # the tablet wants Teams messages
+$NoticeMail = $false    # and new mail
+$ToastFile = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Notifications\wpndatabase.db'
+$ToastSeen = -1         # the newest notification already looked at; -1: look where they are now
+$ToastProblem = $false
+$NoticeItems = @{}      # notice handle -> what opening it opens: a mail's EntryID, or 'teams'
+$NoticeNext = 0
+
+# {"t":"notices"}: which notices the tablet shows. Off with -NoNotices.
+function Set-Notices($Request) {
+    $teams = [bool]$Request.teams -and -not $NoNotices
+    if ($teams -and -not $script:NoticeTeams) { $script:ToastSeen = -1 } # only the ones from now on
+    $script:NoticeTeams = $teams
+    $script:NoticeMail = [bool]$Request.mail -and -not $NoNotices -and -not $NoOutlook
+}
+
+function Add-NoticeItem([string]$Target) {
+    $script:NoticeNext++
+    $script:NoticeItems[$script:NoticeNext] = $Target
+    $script:NoticeItems.Remove($script:NoticeNext - 50) # the last 50 can be opened
+    return $script:NoticeNext
+}
+
+# Teams' notifications since the last look, as Windows showed them: who, and what they wrote.
+function Send-TeamsNotices {
+    if (-not $script:NoticeTeams) { return }
+    $newest = [long]0
+    try {
+        $toasts = [MacropadLink.ToastStore]::Since($ToastFile, $script:ToastSeen, [ref]$newest)
+    } catch {
+        if (-not $script:ToastProblem) { Write-Log "Teams notices: $($_.Exception.Message); trying again every 30 s"; $script:ToastProblem = $true }
+        $script:Next.notices = (Get-Date).AddSeconds(30)
+        return
+    }
+    $script:ToastProblem = $false
+    $script:ToastSeen = $newest
+    foreach ($toast in $toasts) {
+        if ($toast.App -notmatch 'Teams') { continue }
+        try { $xml = [xml]$toast.Xml } catch { continue }
+        $texts = @($xml.SelectNodes('//text') | ForEach-Object { $_.InnerText.Trim() } | Where-Object { $_ })
+        if ($texts.Count -eq 0) { continue }
+        $body = if ($texts.Count -gt 1) { $texts[1..($texts.Count - 1)] -join "`n" } else { '' }
+        Send-Tablet ([ordered]@{
+            t = 'notice'; kind = 'teams'; n = (Add-NoticeItem 'teams'); from = $texts[0]; text = $body
+            mention = (($texts -join ' ') -match 'mention|mencion')
+        })
+    }
+}
+
+# A new mail as a notice; the tablet shows the ones from the people on its list.
+function Send-MailNotice($Item) {
+    $address = ''
+    try {
+        $address = if ($Item.SenderEmailType -eq 'EX') { [string]$Item.Sender.GetExchangeUser().PrimarySmtpAddress } else { [string]$Item.SenderEmailAddress }
+    } catch { }
+    Send-Tablet ([ordered]@{
+        t = 'notice'; kind = 'mail'; n = (Add-NoticeItem ([string]$Item.EntryID))
+        from = [string]$Item.SenderName; address = $address; text = [string]$Item.Subject
+    })
+}
+
+# {"t":"notice-open"}: a notice's mail opened in Outlook, or Teams brought to the front.
+function Open-Notice($Request) {
+    $target = $script:NoticeItems[[int]$Request.n]
+    if (-not $target) { return Send-Result $Request.id $false 'That notice is too old to open' }
+    if ($target -eq 'teams') {
+        $exe = if (Find-AppWindow 'teams') { 'teams' } else { 'ms-teams' }
+        return Add-Wait $Request 'focus' $exe
+    }
+    try {
+        $outlook = [Runtime.InteropServices.Marshal]::GetActiveObject('Outlook.Application')
+        Show-OutlookItem ($outlook.Session.GetItemFromID($target))
+        Send-Result $Request.id $true $null
+    } catch {
+        Send-Result $Request.id $false "Couldn't open the mail: $($_.Exception.Message)"
+    }
+}
+
 # ------------------------------------------------------------------ talking to the tablet
 
 function Send-Hello {
@@ -2843,6 +3201,10 @@ function Use-TabletLine([string]$Line) {
         'slides' { Invoke-Slides $request }
         'update' { Invoke-Update $request }
         'typefile' { Invoke-TypeFile $request }
+        'editor' { Start-Editor $request }
+        'http-reply' { Complete-EditorRequest $request }
+        'notices' { Set-Notices $request }
+        'notice-open' { Open-Notice $request }
         default { } # ping, or something newer than this script
     }
 }
@@ -2889,13 +3251,17 @@ if ($TeamsDump) {
 Write-Log "Macropad PC link started (device '$Device'$(if ($Port) { ", port $Port" }))"
 # When each report is next due; requests from the tablet bring some forward.
 $Next = @{}
-foreach ($key in 'app', 'meeting', 'clip', 'windows', 'volume', 'media', 'shell', 'monitors', 'badges', 'slides') { $Next[$key] = Get-Date }
+foreach ($key in 'app', 'meeting', 'clip', 'windows', 'volume', 'media', 'shell', 'monitors', 'badges', 'slides', 'notices') { $Next[$key] = Get-Date }
 try {
     while (-not $Restart) {
         Read-Teams
         if (-not $Link) {
             $Link = Open-Link
-            if (-not $Link) { Start-Sleep -Seconds 10; continue }
+            if (-not $Link) {
+                # The editor's page gets its answer (the tablet isn't there) while this waits.
+                for ($i = 0; $i -lt 50; $i++) { Read-Editor; Start-Sleep -Milliseconds 200 }
+                continue
+            }
             $LastHeard = Get-Date
             try {
                 Send-All
@@ -2911,6 +3277,7 @@ try {
         try {
             Read-Tablet
             if ($Restart) { break } # updated: the result went out; start the new copy
+            Read-Editor
             Test-Waits
             Send-Capture
             $now = Get-Date
@@ -2924,6 +3291,7 @@ try {
             if ($now -ge $Next.shell) { Send-Shell; $Next.shell = $now.AddSeconds(1) }
             if ($now -ge $Next.monitors) { Send-Monitors; $Next.monitors = $now.AddSeconds(5) }
             if ($now -ge $Next.slides) { Send-Slides; $Next.slides = $now.AddMilliseconds(500) }
+            if ($now -ge $Next.notices) { $Next.notices = $now.AddSeconds(2); Send-TeamsNotices }
             Send-SlideImage
             Send-Screen
         } catch {
@@ -2936,6 +3304,7 @@ try {
     }
 } finally {
     Close-Link
+    if ($EditorListener) { $EditorListener.Stop() }
     Disconnect-Teams 'stopped'
     $mutex.ReleaseMutex()
 }

@@ -25,6 +25,8 @@ All under `app/src/main/java/dev/belta/macropad/ui/`:
 - `KeyEditor.kt` — edit a key (label, action, color, icon, toggle, long action); shows `MacroException`s.
 - `Dialogs.kt` — `MacropadHost` interface + the settings menu and all dialogs behind ⚙ (computers,
   timing, PIN, pages, backup, saved values, diagnostics, updates…). `MenuDialog.kt` — menu rows builder.
+- `ui/NoticeCard.kt` — the PC link's notice card at the top of the screen (queue, 7 s, tap = `openNotice`); added
+  to the activity's root frame in `MainActivity.onCreate`.
 - `Recorder.kt`, `RecordingEditor.kt` — macro recording and the steps editor after stopping.
 - `TrackpadView.kt` — pointer, taps, two-finger scroll, drag.
 - PC link pages: `WindowSwitcherView.kt` (also `PcStatusView`, `pcPageMessage`), `MixerView.kt`,

@@ -150,3 +150,8 @@ object Icons {{
 }}
 ''')
 print(len(icons),"icons")
+
+# The same paths for the layout editor's web page (assets/editor/, served through the PC link).
+import json
+os.makedirs(f"{R}/assets/editor", exist_ok=True)
+open(f"{R}/assets/editor/icons.json","w").write(json.dumps(icons, separators=(",",":")))

@@ -61,12 +61,17 @@ import dev.belta.macropad.model.Step
 import dev.belta.macropad.model.TextVariables
 import dev.belta.macropad.net.NetActions
 import dev.belta.macropad.net.Updater
+import dev.belta.macropad.pc.LayoutEditor
 import dev.belta.macropad.pc.LinkScript
+import dev.belta.macropad.pc.NoticeFilter
 import dev.belta.macropad.pc.PcComputer
 import dev.belta.macropad.pc.PcLink
+import dev.belta.macropad.pc.PcMessage
+import dev.belta.macropad.pc.PcNotice
 import dev.belta.macropad.pc.PcStatus
 import dev.belta.macropad.pc.ScreenViewport
 import dev.belta.macropad.ui.AppIcons
+import dev.belta.macropad.ui.NoticeCard
 import dev.belta.macropad.ui.Dialogs
 import dev.belta.macropad.ui.Icons
 import dev.belta.macropad.ui.KeyEditor
@@ -114,6 +119,27 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     override var pageIndex = 0
 
     private lateinit var dialogs: Dialogs
+    private lateinit var noticeCard: NoticeCard
+    /** Notices that came while the tablet was dimmed, shown when it wakes. */
+    private val missedNotices = ArrayList<PcNotice>()
+    /** Whether a computer had the PC link at the last report (to tell it which notices to send once it connects). */
+    private var pcConnected = false
+
+    /** Answers the layout editor's page on the computer (⚙ → Edit on the computer). */
+    private val layoutEditor = LayoutEditor(object : LayoutEditor.Host {
+        override val layout get() = this@MainActivity.layout
+        override fun replaceLayout(layout: Layout) {
+            this@MainActivity.layout = layout
+            selectPage(pageIndex)
+            saveAndRender()
+            ui.toast("Keys updated from the computer")
+        }
+        override fun asset(name: String) = runCatching { assets.open("editor/$name").use { it.readBytes() } }.getOrNull()
+        override val colors get() = Palette.colors.map { Ui.accent(it) }
+        override val appIcons get() = AppIcons.names
+        override val tabletName get() = settings.bluetoothName
+        override val appVersion get() = BuildConfig.VERSION_NAME
+    })
     private lateinit var keyViews: KeyViews
     private lateinit var recorder: Recorder
 
@@ -205,8 +231,10 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         }
 
         idleOverlay = buildIdleOverlay()
+        noticeCard = NoticeCard(ui) { openNotice(it) }
         setContentView(FrameLayout(this).apply {
             addView(buildUi().also { screen = it })
+            addView(noticeCard, NoticeCard.params(ui))
             addView(idleOverlay)
         })
         // Re-hide the status bar if something (e.g. the notification shade) brought it back.
@@ -388,6 +416,10 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         handler.removeCallbacks(clockTick)
         resetIdleTimer()
         updateScreenStream()
+        // What came while dimmed, unless it is old news by now.
+        val recent = missedNotices.filter { System.currentTimeMillis() - it.at < MISSED_NOTICE_MS }
+        missedNotices.clear()
+        recent.forEach { noticeCard.show(it) }
     }
 
     private fun updateIdleClock() {
@@ -547,6 +579,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     private val pcListener = object : PcLink.Listener {
         override fun onPcStatus(status: PcStatus?) {
+            // A computer just took the link: tell it which notices to send.
+            if (status != null && !pcConnected) noticesChanged()
+            pcConnected = status != null
             val app = status?.app
             if (app != null && app != pcApp) followPcApp(app)
             // While recording, an app switch on the computer becomes a pc:focus step (once it stays).
@@ -615,6 +650,13 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         override fun onFileText(id: Int, name: String, text: String) = typeFile(id, name, text)
 
         override fun onPcApproval(computer: PcComputer?) = askPcApproval(computer)
+
+        override fun onHttp(request: PcMessage.Http) {
+            val reply = layoutEditor.handle(request)
+            service?.pc?.httpReply(request.id, reply.status, reply.type, reply.body, reply.cache)
+        }
+
+        override fun onNotice(notice: PcNotice) = showNotice(notice)
 
         override fun onPcResult(id: Int, ok: Boolean, error: String?) {
             val then = pcWaits.remove(id)
@@ -873,6 +915,36 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         if (monitor == streamingMonitor) return
         if (monitor != null) link!!.startScreen(monitor, SCREEN_WIDTH, SCREEN_HEIGHT, screenViewport) else link?.stopScreen()
         streamingMonitor = monitor
+    }
+
+    private fun noticeFilter() = NoticeFilter(settings.teamsNotices, NoticeFilter.parseSenders(settings.noticeSenders))
+
+    override fun noticesChanged() {
+        val filter = noticeFilter()
+        service?.pc?.notices(filter.teams, filter.wantsMail)
+    }
+
+    /** A Teams message or a mail from someone on the list, as a card at the top (kept for later while dimmed). */
+    private fun showNotice(notice: PcNotice) {
+        if (!noticeFilter().shows(notice)) return
+        if (dimmed) missedNotices += notice else noticeCard.show(notice)
+    }
+
+    /** The notice's mail or Teams, on the computer. */
+    private fun openNotice(notice: PcNotice) {
+        val id = service?.pc?.takeIf { it.connected }?.openNotice(notice.handle) ?: return
+        pcRequests[id] = if (notice.kind == "teams") "Teams" else "Mail"
+    }
+
+    override fun openEditor() {
+        val link = pcLinkFor("Editing on the computer") ?: return
+        val script = pcStatus?.scriptVersion
+        if (script == null || Updater.isNewer(EDITOR_SCRIPT, script)) {
+            return ui.toast("Editing on the computer needs PC link script $EDITOR_SCRIPT or newer: ⚙ → Connection → PC link script")
+        }
+        val id = link.editor(layoutEditor.open()) ?: return
+        pcRequests[id] = "Editor on the computer"
+        ui.toast("Opening the editor in the computer's browser…")
     }
 
     /** "✉ Ana Pérez — Budget (+2)" over the dock for a few seconds. */
@@ -2245,6 +2317,10 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         /** PowerPoint's process name: never the demo's app. */
         private const val POWERPOINT = "powerpnt"
         private const val MAIL_SHOWN_MS = 8_000L
+        /** Notices older than this when the tablet wakes are no longer shown. */
+        private const val MISSED_NOTICE_MS = 10 * 60_000L
+        /** The first PC link script that serves the layout editor and sends notices. */
+        private const val EDITOR_SCRIPT = "1.9.0"
         /** The idle clock says "New mail from …" for this long after it came. */
         private const val MAIL_ON_CLOCK_MS = 30 * 60_000L
         /** The mirrored screen is scaled to fit this: sharp enough, and a whole picture is ~200 KB. */

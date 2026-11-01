@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Macropad keys</title>
+<style>
+  :root {
+    --bg: #0e1117; --panel: #161a22; --raised: #1d222c; --line: #2a303c; --text: #eef1f6; --muted: #8c94a6;
+    --accent: #4f8cff; --danger: #ff5c7a; --ok: #2fcb8e; --warn: #ffb547;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 "Segoe UI", system-ui, sans-serif; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line);
+    background: var(--panel); position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .tablet { color: var(--muted); }
+  header .spacer { flex: 1; }
+  #status { color: var(--muted); max-width: 46ch; text-align: right; }
+  #status.error { color: var(--danger); }
+  #status.ok { color: var(--ok); }
+  .btn { background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 7px 14px; cursor: pointer; }
+  .btn:hover { border-color: #3b4352; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn.primary:disabled { opacity: .45; cursor: default; }
+  .btn.danger { color: var(--danger); }
+  .btn.small { padding: 4px 10px; font-size: 13px; }
+  main { display: grid; grid-template-columns: 240px minmax(0, 1fr) 340px; gap: 16px; padding: 16px 20px; align-items: start; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .panel h2 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  .pages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  .pages li { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 9px; cursor: pointer; }
+  .pages li:hover { background: var(--raised); }
+  .pages li.active { background: color-mix(in srgb, var(--accent) 22%, var(--raised)); }
+  .pages li.drop { outline: 2px dashed var(--accent); }
+  .pages .tile { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; font-weight: 700; font-size: 13px;
+    background: #2b3242; flex: none; }
+  .pages .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pages .kind { color: var(--muted); font-size: 11px; }
+  .sep { height: 1px; background: var(--line); margin: 10px 0; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .pageinfo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 14px; }
+  label.field { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; }
+  label.field > input, label.field > select, label.field > textarea { color: var(--text); background: var(--raised); border: 1px solid var(--line);
+    border-radius: 9px; padding: 8px 10px; font-size: 14px; }
+  textarea { resize: vertical; min-height: 64px; font-family: Consolas, "Cascadia Mono", monospace !important; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  label.check { display: flex; gap: 8px; align-items: center; color: var(--text); }
+  .grid { display: grid; gap: 10px; }
+  .key { position: relative; min-height: 104px; border-radius: 14px; padding: 10px 12px; background: var(--raised);
+    border: 1px solid var(--line); cursor: pointer; display: flex; flex-direction: column; gap: 6px; user-select: none; overflow: hidden; }
+  .key::before { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 80% at 50% 0%, var(--c) 0%, transparent 70%);
+    opacity: .18; pointer-events: none; }
+  .key.empty { background: transparent; border-style: dashed; align-items: center; justify-content: center; color: var(--muted); }
+  .key.empty::before { display: none; }
+  .key.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .key.bad { border-color: var(--danger); }
+  .key.dragging { opacity: .4; }
+  .key.drop { outline: 2px dashed var(--accent); }
+  .key .badge { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+    background: color-mix(in srgb, var(--c) 20%, transparent); flex: none; }
+  .key .badge svg { width: 20px; height: 20px; fill: var(--c); }
+  .key .label { font-weight: 650; font-size: 15px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .key .hint { font-size: 11.5px; color: var(--muted); background: #ffffff10; border-radius: 6px; padding: 1px 7px; align-self: flex-start;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .key .hint.err { color: var(--danger); }
+  .key .flags { position: absolute; top: 8px; right: 10px; font-size: 11px; color: var(--muted); }
+  .section-title { display: flex; align-items: baseline; gap: 10px; margin: 18px 0 8px; }
+  .section-title h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .note { color: var(--muted); font-size: 13px; }
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+  .swatch.on { border-color: #fff; }
+  input.search { width: 100%; margin-top: 6px; background: var(--raised); border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; }
+  .icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 6px; max-height: 220px; overflow: auto;
+    padding: 2px; margin-top: 6px; }
+  .icons button { height: 36px; border-radius: 8px; background: var(--raised); border: 1px solid var(--line); display: grid; place-items: center;
+    cursor: pointer; padding: 0; }
+  .icons button.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 25%, var(--raised)); }
+  .icons svg { width: 20px; height: 20px; fill: var(--text); }
+  .result { font-size: 12.5px; margin-top: 4px; min-height: 18px; }
+  .result.ok { color: var(--ok); }
+  .result.err { color: var(--danger); }
+  .stack { display: flex; flex-direction: column; gap: 12px; }
+  .empty-state { color: var(--muted); text-align: center; padding: 40px 10px; }
+  .problems { margin: 0; padding-left: 18px; color: var(--danger); }
+  kbd { background: var(--raised); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; font-size: 12px; }
+  @media (max-width: 1100px) { main { grid-template-columns: 200px minmax(0, 1fr); } #editor { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Macropad keys</h1><span class="tablet" id="tablet"></span>
+  <span class="spacer"></span>
+  <span id="status">Loading…</span>
+  <button class="btn" id="reload" title="Load the keys from the tablet again">Reload</button>
+  <button class="btn primary" id="save" disabled title="Ctrl+S">Save to tablet</button>
+</header>
+<main>
+  <section class="panel">
+    <h2>Pages</h2>
+    <ul class="pages" id="pages"></ul>
+    <div class="row" style="margin-top:10px">
+      <button class="btn small" id="addPage">+ Page</button>
+      <button class="btn small" id="up" title="Move the page up">▲</button>
+      <button class="btn small" id="down" title="Move the page down">▼</button>
+    </div>
+    <div class="sep"></div>
+    <h2>On every page</h2>
+    <ul class="pages" id="shared"></ul>
+    <div class="sep"></div>
+    <h2>Grid</h2>
+    <div class="row">
+      <select id="rows" title="Rows"></select> × <select id="cols" title="Columns"></select>
+    </div>
+    <p class="note">Drag keys to move or swap them; drop one on a page to move it there. <kbd>Del</kbd> deletes,
+      <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>V</kbd> copy and paste keys, <kbd>Ctrl</kbd>+<kbd>S</kbd> saves.</p>
+  </section>
+  <section class="panel" id="center"></section>
+  <section class="panel" id="editor"></section>
+</main>
+<script>
+"use strict";
+const params = new URLSearchParams(location.search);
+const KEY = params.get("k") || sessionStorage.getItem("macropad-key") || "";
+try { sessionStorage.setItem("macropad-key", KEY); } catch (e) {}
+history.replaceState(null, "", "/"); // the key stays out of the address bar and history
+
+let state = null;      // from /api/state: rev, layout, colors, appIcons, limits
+let icons = {};        // name -> SVG path
+let view = { kind: "page", index: 0 };   // or {kind: "dock" | "sidebar" | "hardware"}
+let selected = null;   // slot index in the shown place
+let dirty = false;
+let clipboard = null;
+const hints = new Map(); // action -> {ok, hint, error}
+let pendingChecks = new Set();
+
+const $ = (id) => document.getElementById(id);
+
+function h(tag, props, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === "class") el.className = v;
+    else if (k === "style") el.style.cssText = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (v !== undefined && v !== null && v !== false) el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) el.append(c instanceof Node ? c : String(c));
+  return el;
+}
+
+function svgIcon(name) {
+  const path = icons[name];
+  if (!path) return null;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  p.setAttribute("d", path);
+  svg.append(p);
+  return svg;
+}
+
+async function api(method, path, body) {
+  const response = await fetch(path, {
+    method, headers: { "X-Macropad-Key": KEY, ...(body ? { "Content-Type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await response.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch (e) { data = { error: text }; }
+  return { status: response.status, data };
+}
+
+function setStatus(text, kind) {
+  $("status").textContent = text;
+  $("status").className = kind || "";
+}
+
+function setDirty(value) {
+  dirty = value;
+  $("save").disabled = !dirty;
+  if (dirty) setStatus("Not saved yet");
+}
+
+// ------------------------------------------------------------------ places and slots
+
+function place() {
+  const L = state.layout;
+  if (view.kind === "page") return L.pages[view.index];
+  return L[view.kind];
+}
+
+function slotCount(p) {
+  const L = state.layout, lim = state.limits;
+  if (view.kind === "dock") return lim.dock;
+  if (view.kind === "sidebar") return lim.sidebar;
+  if (view.kind === "hardware") return lim.hardware;
+  if ((p.kind || "KEYS") === "TRACKPAD") return 5;
+  if ((p.kind || "KEYS") !== "KEYS") return 0;
+  return L.rows * L.cols;
+}
+
+function slotName(index) {
+  if (view.kind === "hardware") return ["Volume up button", "Volume down button"][index];
+  return null;
+}
+
+function getButton(p, i) { return p.buttons[i] || null; }
+
+function setButton(p, i, button) {
+  while (p.buttons.length <= i) p.buttons.push(null);
+  p.buttons[i] = button;
+  // Trailing empty slots aren't kept, as on the tablet.
+  while (p.buttons.length && p.buttons[p.buttons.length - 1] === null && p.buttons.length > slotCount(p)) p.buttons.pop();
+}
+
+function colorOf(button) {
+  const v = button.color >>> 0;
+  const known = state.colors.find((c) => (c.value >>> 0) === v);
+  return known ? known.shown : "#" + (v & 0xffffff).toString(16).padStart(6, "0");
+}
+
+function allButtons() {
+  const L = state.layout, out = [];
+  for (const p of [...L.pages, L.dock, L.sidebar, L.hardware]) if (p) for (const b of p.buttons) if (b) out.push(b);
+  return out;
+}
+
+// ------------------------------------------------------------------ checking actions (the tablet parses them)
+
+function queueCheck(action) {
+  if (action == null || hints.has(action)) return;
+  pendingChecks.add(action);
+  clearTimeout(queueCheck.timer);
+  queueCheck.timer = setTimeout(runChecks, 250);
+}
+
+async function runChecks() {
+  const actions = [...pendingChecks];
+  pendingChecks = new Set();
+  if (!actions.length) return;
+  const { status, data } = await api("POST", "/api/check", { actions });
+  if (status !== 200) return;
+  data.results.forEach((r, i) => hints.set(actions[i], r));
+  renderCenter();
+  renderEditor(false);
+}
+
+function checkAll() {
+  for (const b of allButtons()) { queueCheck(b.action); if (b.longAction) queueCheck(b.longAction); }
+}
+
+// ------------------------------------------------------------------ rendering
+
+function render() {
+  renderPages();
+  renderCenter();
+  renderEditor(true);
+}
+
+function pageTile(p) {
+  const letter = (p.name || "?").trim().charAt(0).toUpperCase() || "?";
+  return h("span", { class: "tile" }, letter);
+}
+
+function renderPages() {
+  const L = state.layout;
+  const list = $("pages");
+  list.replaceChildren(...L.pages.map((p, i) => {
+    const li = h("li", {
+      class: view.kind === "page" && view.index === i ? "active" : "",
+      onclick: () => { view = { kind: "page", index: i }; selected = null; render(); },
+    }, pageTile(p), h("span", { class: "name" }, p.name), (p.kind && p.kind !== "KEYS") ? h("span", { class: "kind" }, kindName(p.kind)) : null);
+    // Dropping a key on a page moves it to that page's first free slot.
+    li.addEventListener("dragover", (e) => { if (drag && canHoldKeys(p)) { e.preventDefault(); li.classList.add("drop"); } });
+    li.addEventListener("dragleave", () => li.classList.remove("drop"));
+    li.addEventListener("drop", (e) => { e.preventDefault(); li.classList.remove("drop"); moveToPage(i); });
+    return li;
+  }));
+  const shared = [["sidebar", "Sidebar"], ["dock", "Dock"], ["hardware", "Tablet volume buttons"]];
+  $("shared").replaceChildren(...shared.map(([kind, name]) => h("li", {
+    class: view.kind === kind ? "active" : "",
+    onclick: () => { view = { kind }; selected = null; render(); },
+  }, h("span", { class: "tile" }, name.charAt(0)), h("span", { class: "name" }, name))));
+  for (const id of ["rows", "cols"]) {
+    const select = $(id), max = id === "rows" ? state.limits.maxRows : state.limits.maxCols;
+    select.replaceChildren(...Array.from({ length: max }, (_, i) => h("option", { value: i + 1 }, i + 1)));
+    select.value = L[id];
+  }
+}
+
+function kindName(kind) {
+  return { TRACKPAD: "trackpad", WINDOWS: "switcher", MIXER: "mixer", SCREEN: "screen", HOME: "home", SLIDES: "presenter" }[kind] || kind.toLowerCase();
+}
+
+function canHoldKeys(p) { return state.keyPages.includes(p.kind || "KEYS"); }
+
+function renderCenter() {
+  const center = $("center"), p = place(), L = state.layout;
+  const parts = [];
+  if (view.kind === "page") {
+    parts.push(h("div", { class: "pageinfo" },
+      h("label", { class: "field" }, "Name", h("input", { value: p.name, oninput: (e) => { p.name = e.target.value; setDirty(true); renderPages(); } })),
+      h("label", { class: "field" }, "Tab icon", iconSelect(p)),
+      h("label", { class: "field", title: "Process names, e.g. excel, chrome. The page shows when one of them comes to the front (PC link)." },
+        "Shows for apps", h("input", { value: p.apps ?? "", placeholder: "default for this name",
+          oninput: (e) => { p.apps = e.target.value.trim() ? e.target.value : undefined; setDirty(true); } })),
+      h("div", { class: "row", style: "align-items:end;justify-content:space-between" },
+        h("label", { class: "check" }, h("input", { type: "checkbox", checked: !!p.stay, onchange: (e) => { p.stay = e.target.checked || undefined; setDirty(true); } }),
+          "Stay on this page"),
+        h("button", { class: "btn small danger", onclick: deletePage, disabled: L.pages.length < 2 }, "Delete page"))));
+  } else {
+    const titles = { dock: "Dock — along the bottom of every page", sidebar: "Sidebar — beside every page", hardware: "The tablet's volume buttons" };
+    parts.push(h("div", { class: "section-title" }, h("h3", {}, titles[view.kind])));
+    if (view.kind === "hardware") parts.push(h("p", { class: "note" }, "An empty slot gives the button back to the tablet's own volume."));
+  }
+  const count = slotCount(p);
+  if (!count) {
+    parts.push(h("div", { class: "empty-state" }, `This ${kindName(p.kind)} page has no keys to edit; you can rename it, move it or change its icon.`));
+  } else {
+    const cols = view.kind === "page" && (p.kind || "KEYS") === "KEYS" ? L.cols : view.kind === "sidebar" || view.kind === "hardware" ? 1 : count;
+    const grid = h("div", { class: "grid", style: `grid-template-columns: repeat(${cols}, minmax(0, 1fr));${view.kind === "sidebar" || view.kind === "hardware" ? "max-width:240px" : ""}` });
+    for (let i = 0; i < count; i++) grid.append(keyView(p, i));
+    parts.push(grid);
+    const hidden = p.buttons.slice(count).filter(Boolean).length;
+    if (hidden) parts.push(h("p", { class: "note" }, `${hidden} more key(s) are kept beyond this grid size; a bigger grid shows them.`));
+  }
+  center.replaceChildren(...parts);
+}
+
+function iconSelect(p) {
+  const select = h("select", { onchange: (e) => { p.icon = e.target.value || undefined; setDirty(true); renderPages(); } },
+    h("option", { value: "" }, "From the name"),
+    ...Object.entries(state.appIcons).map(([k, v]) => h("option", { value: k }, v)));
+  select.value = p.icon || "";
+  return select;
+}
+
+let drag = null; // {place, index}
+
+function keyView(p, i) {
+  const b = getButton(p, i);
+  const name = slotName(i);
+  let el;
+  if (!b) {
+    el = h("div", { class: "key empty" + (selected === i ? " selected" : ""), title: "Add a key" }, name ? `${name}: tablet volume` : "+");
+  } else {
+    const main = hints.get(b.action), long = b.longAction ? hints.get(b.longAction) : null;
+    const bad = (main && !main.ok) || (long && !long.ok);
+    let hint = main ? (main.ok ? main.hint : main.error) : "…";
+    if (b.longAction) hint += " · +hold";
+    el = h("div", { class: "key" + (selected === i ? " selected" : "") + (bad ? " bad" : ""), style: `--c:${colorOf(b)}`, draggable: "true", title: b.action },
+      h("div", { class: "badge" }, svgIcon(b.icon) || ""),
+      h("div", { class: "label" }, b.label || "(no label)"),
+      h("div", { class: "hint" + (bad ? " err" : "") }, (b.toggle ? "ON/OFF · " : "") + hint),
+      name ? h("div", { class: "flags" }, name) : null);
+  }
+  el.addEventListener("click", () => { selected = i; renderCenter(); renderEditor(true); });
+  el.addEventListener("dragstart", (e) => { drag = { p, index: i }; el.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; });
+  el.addEventListener("dragend", () => { drag = null; el.classList.remove("dragging"); });
+  el.addEventListener("dragover", (e) => { if (drag) { e.preventDefault(); el.classList.add("drop"); } });
+  el.addEventListener("dragleave", () => el.classList.remove("drop"));
+  el.addEventListener("drop", (e) => {
+    e.preventDefault();
+    if (!drag) return;
+    const from = drag;
+    drag = null;
+    // Swap: the key dropped on moves to where the dragged one was.
+    const a = getButton(from.p, from.index), other = getButton(p, i);
+    setButton(from.p, from.index, other);
+    setButton(p, i, a);
+    selected = i;
+    setDirty(true);
+    renderCenter();
+    renderEditor(true);
+  });
+  return el;
+}
+
+function moveToPage(target) {
+  if (!drag) return;
+  const from = drag, dest = state.layout.pages[target];
+  drag = null;
+  const button = getButton(from.p, from.index);
+  if (!button || dest === from.p) return;
+  const L = state.layout, count = (dest.kind || "KEYS") === "TRACKPAD" ? 5 : L.rows * L.cols;
+  let free = -1;
+  for (let i = 0; i < count; i++) if (!getButton(dest, i)) { free = i; break; }
+  if (free < 0) { setStatus(`“${dest.name}” has no free slot`, "error"); return; }
+  setButton(dest, free, button);
+  setButton(from.p, from.index, null);
+  selected = null;
+  setDirty(true);
+  setStatus(`Moved “${button.label}” to ${dest.name}`);
+  render();
+}
+
+function renderEditor(rebuild) {
+  const panel = $("editor"), p = place();
+  if (selected === null || !slotCount(p)) {
+    panel.replaceChildren(h("h2", {}, "Key"), h("p", { class: "note" }, "Pick a key to edit it, or an empty slot to add one."));
+    return;
+  }
+  const b = getButton(p, selected);
+  if (!b) {
+    panel.replaceChildren(h("h2", {}, "Empty slot"),
+      h("div", { class: "row" },
+        h("button", { class: "btn primary", onclick: () => { setButton(p, selected, { label: "New key", action: "", color: state.colors[0].value, icon: null }); setDirty(true); renderCenter(); renderEditor(true); panel.querySelector("input")?.select(); } }, "Add a key"),
+        clipboard ? h("button", { class: "btn", onclick: paste }, "Paste key") : null));
+    return;
+  }
+  if (!rebuild) { updateResults(b); return; }
+  const result = (id) => h("div", { class: "result", id });
+  const swatches = h("div", { class: "swatches" }, ...state.colors.map((c) => h("button", {
+    class: "swatch" + ((c.value >>> 0) === (b.color >>> 0) ? " on" : ""), style: `background:${c.shown}`, title: c.shown,
+    onclick: () => { b.color = c.value; setDirty(true); renderCenter(); renderEditor(true); },
+  })));
+  const search = h("input", { class: "search", placeholder: "Search icons", oninput: () => fillIcons() });
+  const iconGrid = h("div", { class: "icons" });
+  function fillIcons() {
+    const q = search.value.trim().toLowerCase();
+    iconGrid.replaceChildren(
+      h("button", { class: !b.icon ? "on" : "", title: "No icon", onclick: () => { b.icon = null; setDirty(true); renderCenter(); fillIcons(); } }, "–"),
+      ...Object.keys(icons).filter((n) => !q || n.includes(q)).map((n) => h("button", {
+        class: b.icon === n ? "on" : "", title: n,
+        onclick: () => { b.icon = n; setDirty(true); renderCenter(); fillIcons(); },
+      }, svgIcon(n))));
+  }
+  fillIcons();
+  const edit = (field) => (e) => {
+    const value = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+    if (field === "longAction") b.longAction = value.trim() ? value : undefined;
+    else b[field] = value;
+    if (field === "action" || field === "longAction") queueCheck(value);
+    setDirty(true);
+    renderCenter();
+    updateResults(b);
+  };
+  panel.replaceChildren(
+    h("div", { class: "row", style: "justify-content:space-between;margin-bottom:10px" }, h("h2", { style: "margin:0" }, slotName(selected) || "Key"),
+      h("div", { class: "row" },
+        h("button", { class: "btn small", onclick: copy, title: "Ctrl+C" }, "Copy"),
+        h("button", { class: "btn small danger", onclick: removeKey, title: "Del" }, "Delete"))),
+    h("div", { class: "stack" },
+      h("label", { class: "field" }, "Label", h("input", { value: b.label, oninput: edit("label") })),
+      h("label", { class: "field" }, "Action", h("textarea", { rows: 4, spellcheck: "false", oninput: edit("action") }, b.action), result("actionResult")),
+      h("label", { class: "field" }, "Long press (optional)", h("textarea", { rows: 2, spellcheck: "false", placeholder: "e.g. ctrl+space", oninput: edit("longAction") }, b.longAction || ""), result("longResult")),
+      h("label", { class: "check" }, h("input", { type: "checkbox", checked: !!b.toggle, onchange: edit("toggle") }), "Toggle key — shows ON/OFF"),
+      h("div", {}, h("div", { class: "note", style: "margin-bottom:6px" }, "Color"), swatches),
+      h("div", {}, h("div", { class: "note" }, "Icon"), search, iconGrid),
+      h("p", { class: "note" }, "Actions: one step per line — ctrl+shift+t, text:Hello, delay:300, media:playpause, pc:teams mute… See docs/macro-language.md.")));
+  updateResults(b);
+}
+
+function updateResults(b) {
+  const show = (id, action) => {
+    const el = $(id);
+    if (!el) return;
+    if (!action) { el.textContent = ""; el.className = "result"; return; }
+    const r = hints.get(action);
+    el.textContent = !r ? "Checking…" : r.ok ? "✓ " + r.hint : "✗ " + r.error;
+    el.className = "result" + (!r ? "" : r.ok ? " ok" : " err");
+  };
+  show("actionResult", b.action);
+  show("longResult", b.longAction);
+}
+
+// ------------------------------------------------------------------ editing actions
+
+function copy() {
+  const b = getButton(place(), selected);
+  if (!b) return;
+  clipboard = JSON.parse(JSON.stringify(b));
+  setStatus(`Copied “${b.label}”`);
+}
+
+function paste() {
+  if (!clipboard || selected === null || !slotCount(place())) return;
+  setButton(place(), selected, JSON.parse(JSON.stringify(clipboard)));
+  setDirty(true);
+  renderCenter();
+  renderEditor(true);
+}
+
+function removeKey() {
+  if (selected === null || !getButton(place(), selected)) return;
+  setButton(place(), selected, null);
+  setDirty(true);
+  renderCenter();
+  renderEditor(true);
+}
+
+function deletePage() {
+  const L = state.layout, p = place();
+  if (L.pages.length < 2 || !confirm(`Delete the page “${p.name}” and its keys?`)) return;
+  L.pages.splice(view.index, 1);
+  view = { kind: "page", index: Math.max(0, view.index - 1) };
+  selected = null;
+  setDirty(true);
+  render();
+}
+
+function addPage() {
+  const L = state.layout;
+  let name = "New page", n = 2;
+  while (L.pages.some((p) => p.name === name)) name = `New page ${n++}`;
+  L.pages.push({ name, buttons: [] });
+  view = { kind: "page", index: L.pages.length - 1 };
+  selected = null;
+  setDirty(true);
+  render();
+  $("center").querySelector("input")?.select();
+}
+
+function movePage(delta) {
+  if (view.kind !== "page") return;
+  const L = state.layout, i = view.index, j = i + delta;
+  if (j < 0 || j >= L.pages.length) return;
+  [L.pages[i], L.pages[j]] = [L.pages[j], L.pages[i]];
+  view.index = j;
+  setDirty(true);
+  renderPages();
+}
+
+// ------------------------------------------------------------------ loading and saving
+
+async function load() {
+  setStatus("Loading from the tablet…");
+  const [s, i] = await Promise.all([api("GET", "/api/state"), fetch("/icons.json", { headers: { "X-Macropad-Key": KEY } })]);
+  if (s.status !== 200) { setStatus(s.data.error || `The tablet answered ${s.status}`, "error"); return; }
+  if (i.ok) icons = await i.json();
+  state = s.data;
+  $("tablet").textContent = `· ${state.tablet} · app ${state.app}`;
+  if (view.kind === "page" && view.index >= state.layout.pages.length) view = { kind: "page", index: 0 };
+  setDirty(false);
+  setStatus("Up to date with the tablet", "ok");
+  render();
+  checkAll();
+}
+
+async function save() {
+  if (!dirty) return;
+  $("save").disabled = true;
+  setStatus("Saving…");
+  const { status, data } = await api("PUT", "/api/layout", { rev: state.rev, layout: state.layout });
+  if (status === 200) {
+    state.rev = data.rev;
+    setDirty(false);
+    setStatus("Saved on the tablet", "ok");
+    return;
+  }
+  $("save").disabled = false;
+  if (status === 409) {
+    setStatus(data.error, "error");
+    if (confirm(data.error + "\n\nReload the tablet's keys now?")) load();
+    return;
+  }
+  if (data.keys) {
+    setStatus(data.error, "error");
+    alert(data.error + ":\n\n" + data.keys.map((k) => `${k.page} · ${k.label}: ${k.error}`).join("\n"));
+    return;
+  }
+  setStatus(data.error || `The tablet answered ${status}`, "error");
+}
+
+$("save").addEventListener("click", save);
+$("reload").addEventListener("click", () => { if (!dirty || confirm("Drop your changes and load the tablet's keys?")) load(); });
+$("addPage").addEventListener("click", addPage);
+$("up").addEventListener("click", () => movePage(-1));
+$("down").addEventListener("click", () => movePage(1));
+for (const id of ["rows", "cols"]) $(id).addEventListener("change", (e) => { state.layout[id] = Number(e.target.value); setDirty(true); render(); });
+
+document.addEventListener("keydown", (e) => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); save(); return; }
+  if (typing || !state) return;
+  if (e.key === "Delete") { removeKey(); e.preventDefault(); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") copy();
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") paste();
+});
+window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+if (!KEY) setStatus("Open the editor from the tablet (⚙ → Edit keys on the computer)", "error");
+else load();
+</script>
+</body>
+</html>

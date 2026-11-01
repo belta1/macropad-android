@@ -355,6 +355,46 @@ The first run copies `tools/macropad-commands.example.json` to
 A key with `pc:run lock` runs it. The file is read on every run, so changes apply at once.
 Nothing else can be started from the tablet: a name that isn't in the file is refused.
 
+## Editing keys on the computer
+
+⚙ → **Edit keys on the computer** opens an editor in the computer's browser: every page as a grid,
+with the sidebar, the dock and the tablet's volume buttons. Click a key to change its label, action
+(checked by the tablet as you type), long press, colour and icon; drag keys to move or swap them,
+or onto a page in the list to move them there; <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>V</kbd> copy and
+paste keys, <kbd>Del</kbd> deletes. Pages can be added, renamed, reordered and deleted, and get
+their tab icon, the apps that show them and *Stay on this page*. **Save to tablet**
+(<kbd>Ctrl</kbd>+<kbd>S</kbd>) replaces the tablet's keys at once.
+
+- The page is served by the script **on this computer only** (`http://127.0.0.1:8771`;
+  `-EditorPort` changes the port) and talks to the tablet over the PC link: no network is needed,
+  and nothing is reachable from other computers.
+- Each time it is opened from the tablet it gets a **new key** (part of the address the script
+  opens); older editor tabs, and other programs or web sites, are refused.
+- Saving checks that the tablet's keys didn't change since the editor loaded them (edited on the
+  tablet meanwhile): then it asks you to reload instead of overwriting them. Keys whose action the
+  tablet can't run are named and nothing is saved.
+- Saved values (`{secret:…}`) never reach the editor; actions show only their names.
+
+## Notices from the computer
+
+⚙ → Connection → **Notices from the computer** shows, as a card at the top of the tablet for a few
+seconds:
+
+- **Teams messages and mentions** (off until you turn them on): what Windows showed as Teams'
+  notification — who, and the message (`@` before the name for a mention). Teams must be allowed
+  to show notifications; ones Windows keeps quiet (*Do not disturb*) usually still reach the tablet.
+- **Mail from people you choose**: names (part of the sender's name is enough, accents don't
+  matter) or whole addresses, separated by commas. Needs classic Outlook, like the mail banner.
+
+Tap the card to open it on the computer: the mail in Outlook, or Teams brought to the front; ✕ puts
+it away. While the tablet is dimmed the cards wait, and show when it wakes (for 10 minutes).
+`-NoNotices` keeps the script from sending any.
+
+Teams messages come from the list of notifications Windows keeps
+(`%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db`), read only and only while the
+tablet asks for them; if Windows keeps it locked, `link.log` says so and the script tries again
+every 30 s.
+
 ## Updating the script
 
 The app carries the script. When the computer runs an older copy (a lower `$ScriptVersion`, or
@@ -429,6 +469,12 @@ they don't know, so the app and the script can be updated separately.
 | PC → tablet | `{"t":"slide-image","file":"Clase.pptx","n":7,"v":2,"jpg":"<base64>"}`: a slide's picture, once per `v` (a new show or presentation starts a new one) |
 | tablet → PC | `{"t":"slides","do":"next","id":16}`: `next`, `prev`, `goto` (`"n"`), `black` / `white` (on and off), `start`, `end`, `thumbs` (every slide's picture); `{"t":"slides","do":"point","x":0.5,"y":0.3}` / `point-end`: the laser pointer, unanswered |
 | PC → tablet | `{"t":"badges","counts":{"outlook":3}}`: counts for the tabs of those apps |
+| tablet → PC | `{"t":"editor","key":"…","id":19}`: serve the layout editor on 127.0.0.1 and open it in the browser with this key |
+| PC → tablet | `{"t":"http","id":3,"method":"PUT","path":"/api/layout","key":"…","body":"…"}`: a request of the editor page (with its key) |
+| tablet → PC | `{"t":"http-reply","id":3,"status":200,"type":"application/json","body":"…","cache":false}`: its answer; `cache` lets the script keep it for this editor (the page, its icons) |
+| tablet → PC | `{"t":"notices","teams":true,"mail":true}`: which notices to send (after the port opens and when changed) |
+| PC → tablet | `{"t":"notice","kind":"teams","n":12,"from":"Ana Pérez","text":"…","mention":false}`; `"kind":"mail"` with `"address"` and the subject as `text` |
+| tablet → PC | `{"t":"notice-open","n":12,"id":20}`: open notice 12 (the mail, or Teams) |
 | PC → tablet | `{"t":"frame","seq":4,"view":3,"w":1600,"h":900,"tiles":[[0,64,"<base64 JPEG>"]]}`: changed parts of the picture, drawn at x, y, for request `view`; a picture can take several lines, the last with `"end":true` and the pointer `"cx","cy"` (0–1 of the part shown, or -1 when outside it) |
 
 The serial port is the standard Serial Port Profile (UUID `00001101-0000-1000-8000-00805F9B34FB`),

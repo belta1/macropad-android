@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+With the PC link; update `tools/macropad-link.ps1` on the computer too (the tablet offers it).
+
+- **Edit keys on the computer** (⚙ → Edit keys on the computer): an editor in the computer's
+  browser with every page, the sidebar, the dock and the volume buttons. Change labels, actions
+  (checked as you type), long presses, colours and icons with the keyboard and mouse; drag keys to
+  move or swap them, also onto another page; copy and paste keys; add, rename, reorder and delete
+  pages. *Save to tablet* replaces the keys at once, and won't overwrite changes made on the tablet
+  meanwhile. Served on that computer only (127.0.0.1), with a new key each time it is opened.
+- **Notices from the computer** (⚙ → Connection): Teams messages and mentions, and mail from the
+  people you list, as a card at the top of the tablet for a few seconds; tap it to open the chat or
+  the mail on the computer. Cards that come while the tablet is dimmed show when it wakes.
+
 ## 1.8.0
 
 - **Themes** (⚙ → Theme), each with its own keycaps, colors and scenery behind the keys:

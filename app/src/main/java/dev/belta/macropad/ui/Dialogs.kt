@@ -48,6 +48,7 @@ import dev.belta.macropad.model.PageKind
 import dev.belta.macropad.model.PageUsage
 import dev.belta.macropad.model.SecretStore
 import dev.belta.macropad.model.TextVariables
+import dev.belta.macropad.pc.NoticeFilter
 import dev.belta.macropad.net.Updater
 import dev.belta.macropad.pc.PcComputer
 import dev.belta.macropad.ui.Ui.Companion.GREEN
@@ -90,6 +91,10 @@ interface MacropadHost {
     fun pcScriptState(): String?
     /** Offers to send the app's PC link script to the computer. */
     fun updatePcScript()
+    /** Opens the layout editor in the computer's browser (PC link). */
+    fun openEditor()
+    /** [AppSettings.teamsNotices] or [AppSettings.noticeSenders] changed: tells the computer. */
+    fun noticesChanged()
 }
 
 /** Settings menu and the dialogs behind it. */
@@ -101,6 +106,7 @@ class Dialogs(private val host: MacropadHost) {
         val items = listOfNotNull(
             if (host.toggledKeys > 0) "Reset ON/OFF keys (${host.toggledKeys} on)" to host::resetToggles else null,
             "Theme: ${Ui.theme.name}…" to ::themes,
+            "Edit keys on the computer…" to host::openEditor,
             "Grid size (${host.layout.rows} × ${host.layout.cols})" to ::gridSize,
             "Sidebar: ${if (host.settings.sidebarLeft) "left" else "right"}" to {
                 host.settings.sidebarLeft = !host.settings.sidebarLeft
@@ -209,6 +215,7 @@ class Dialogs(private val host: MacropadHost) {
                 ui.toast(if (settings.followCalls) "A Teams call brings up the Teams page (PC link)"
                     else "Calls no longer switch pages")
             },
+            "Notices from the computer…" to ::notices,
             "New mail on the tablet: ${if (settings.mailNotices) "on" else "off"}" to {
                 settings.mailNotices = !settings.mailNotices
                 ui.toast(if (settings.mailNotices) "New mail in classic Outlook shows on the tablet (PC link)"
@@ -227,6 +234,34 @@ class Dialogs(private val host: MacropadHost) {
     }
 
     /** Computers allowed or refused the PC link; tap one to change it. */
+    /** Teams messages and mail from chosen people, as a card at the top of the tablet (PC link). */
+    private fun notices() {
+        val settings = host.settings
+        val senders = NoticeFilter.parseSenders(settings.noticeSenders)
+        val items = listOf(
+            "Teams messages and mentions: ${if (settings.teamsNotices) "on" else "off"}" to {
+                settings.teamsNotices = !settings.teamsNotices
+                host.noticesChanged()
+                notices()
+            },
+            "Mail from: ${if (senders.isEmpty()) "nobody" else senders.joinToString(", ")}…" to {
+                promptText("Mail from", senders.joinToString(", "), allowEmpty = true,
+                    hint = "Names or addresses, separated by commas") { text ->
+                    settings.noticeSenders = NoticeFilter.parseSenders(text).joinToString("\n")
+                    host.noticesChanged()
+                    notices()
+                }
+            },
+        )
+        ui.dialog()
+            .setTitle("Notices from the computer")
+            .setMessage("Shown as a card at the top for a few seconds; tap it to open the chat or mail on the " +
+                "computer. Needs the PC link; Teams messages come from Windows' notifications, so Teams must show them.")
+            .setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }
+            .setNegativeButton("Back") { _, _ -> connection() }
+            .show()
+    }
+
     private fun pcComputers() {
         val service = host.service ?: return
         val computers = service.pcComputers.all()

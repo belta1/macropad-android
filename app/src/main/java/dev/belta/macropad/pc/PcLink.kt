@@ -50,6 +50,10 @@ class PcLink(
         fun onFileText(id: Int, name: String, text: String) {}
         /** A computer not asked about yet opened the port and waits ([decide]); null once it no longer does. */
         fun onPcApproval(computer: PcComputer?) {}
+        /** A request from the layout editor's page on the computer; answer with [httpReply]. */
+        fun onHttp(request: PcMessage.Http) {}
+        /** A Teams message or new mail on the computer ([notices] says which ones to send). */
+        fun onNotice(notice: PcNotice) {}
     }
 
     /** The computer waiting to be allowed or refused, if any. */
@@ -257,6 +261,22 @@ class PcLink(
     /** Opens the next meeting's online meeting on the computer; null when no computer is connected. */
     fun join(): Int? = send { PcProtocol.join(it) }
 
+    /** Opens the layout editor in the computer's browser, with [key]; null when no computer is connected. */
+    fun editor(key: String): Int? = send { PcProtocol.editor(key, it) }
+
+    /** Answers the editor's request [id] ([Listener.onHttp]). */
+    fun httpReply(id: Int, status: Int, type: String, body: String, cache: Boolean = false) {
+        if (socket != null) write(PcProtocol.httpReply(id, status, type, body, cache))
+    }
+
+    /** Tells the computer which notifications to send. */
+    fun notices(teams: Boolean, mail: Boolean) {
+        if (socket != null) write(PcProtocol.notices(teams, mail))
+    }
+
+    /** Opens notification [handle] (its mail, or Teams) on the computer; null when no computer is connected. */
+    fun openNotice(handle: Int): Int? = send { PcProtocol.openNotice(handle, it) }
+
     fun stopScreen() {
         if (socket != null) write(PcProtocol.screenStop())
     }
@@ -360,6 +380,12 @@ class PcLink(
                     is PcMessage.Icon -> BitmapFactory.decodeByteArray(message.png, 0, message.png.size)?.let { icons[message.exe] = it }
                     is PcMessage.Recorded -> main.post { listener?.onRecorded(message.step) }
                     is PcMessage.FileText -> main.post { listener?.onFileText(message.id, message.name, message.text) }
+                    is PcMessage.Http -> main.post {
+                        // No screen to answer from (the app is closed): say so instead of leaving the page waiting.
+                        listener?.onHttp(message) ?: httpReply(message.id, 503, "text/plain; charset=utf-8",
+                            "Open the macropad app on the tablet")
+                    }
+                    is PcMessage.Notice -> main.post { listener?.onNotice(message.notice) }
                     is PcMessage.SlideImage -> {
                         slidesFor(message.file, message.version)
                         BitmapFactory.decodeByteArray(message.jpeg, 0, message.jpeg.size)?.let {

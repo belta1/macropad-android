@@ -48,7 +48,8 @@ Windows laptops/desktops.
   work without focusing Teams, pages follow the app in front, the idle clock shows the next Outlook
   meeting, and `pc:run` keys start commands you list. It also brings the computer's clipboard,
   open windows, real volume (per app too), what's playing and the terminal's Python venv to the
-  tablet. See [docs/pc-link.md](docs/pc-link.md).
+  tablet, shows Teams messages and mail from chosen people as cards, and lets you **edit the keys in
+  the computer's browser**. See [docs/pc-link.md](docs/pc-link.md).
 - **Text variables** in typed text: `{date}`, `{time}`, custom date formats, `{clipboard}` and the
   computer's `{pcclipboard}`; **live labels** show what the computer reports (`{venv}`, `{media}`…).
 - `page:` actions to change page from a key or the tablet's volume buttons.
