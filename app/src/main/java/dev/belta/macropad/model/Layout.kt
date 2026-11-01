@@ -50,6 +50,7 @@ class Page(
 class Layout(
     var rows: Int, var cols: Int, val pages: MutableList<Page>, val dock: Page, val hardware: Page,
     val sidebar: Page = DefaultLayout.sidebar(),
+    val gestures: Page = DefaultLayout.gestures(),
 ) {
     val cells get() = rows * cols
 
@@ -67,6 +68,52 @@ class Layout(
         const val DOCK_SIZE = 8
         const val SIDEBAR_SIZE = 4
     }
+}
+
+/**
+ * Camera gestures, in slot order of [Layout.gestures]: [all] first, then a left-hand slot for each
+ * pose ([leftSlot]; empty = same as the right hand). [id] is the MediaPipe or [dev.belta.macropad.gesture.HandShapes]
+ * pose name, a swipe, [DRAG] (a slider) or [AWAY] / [BACK] for the person leaving and coming back.
+ */
+object Gestures {
+    class Gesture(val id: String, val label: String, val pose: Boolean = true)
+
+    const val DRAG = "Pinch_Drag"
+    const val AWAY = "away"
+    const val BACK = "back"
+
+    val all = listOf(
+        Gesture("Open_Palm", "Open palm ✋"),
+        Gesture("Closed_Fist", "Fist ✊"),
+        Gesture("Thumb_Up", "Thumb up 👍"),
+        Gesture("Thumb_Down", "Thumb down 👎"),
+        Gesture("Pointing_Up", "One finger ☝"),
+        Gesture("Victory", "Two fingers ✌"),
+        Gesture("Three", "Three fingers"),
+        Gesture("Four", "Four fingers"),
+        Gesture("OK", "OK 👌"),
+        Gesture("Rock", "Rock 🤘"),
+        Gesture("Call_Me", "Call me 🤙"),
+        Gesture("ILoveYou", "I love you 🤟"),
+        Gesture("Point_Left", "Point left 👈"),
+        Gesture("Point_Right", "Point right 👉"),
+        Gesture("Swipe_Left", "Swipe left", pose = false),
+        Gesture("Swipe_Right", "Swipe right", pose = false),
+        Gesture("Swipe_Up", "Swipe up", pose = false),
+        Gesture("Swipe_Down", "Swipe down", pose = false),
+        Gesture(DRAG, "Pinch and drag 🤏", pose = false),
+        Gesture(AWAY, "You leave", pose = false),
+        Gesture(BACK, "You come back", pose = false),
+    )
+
+    val poses = all.filter { it.pose }
+
+    /** Slots in [Layout.gestures]: one per gesture plus the left-hand poses. */
+    val slots = all.size + poses.size
+
+    fun slot(id: String) = all.indexOfFirst { it.id == id }.takeIf { it >= 0 }
+
+    fun leftSlot(id: String) = poses.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let { all.size + it }
 }
 
 object Palette {
@@ -92,6 +139,7 @@ object LayoutJson {
         put("dock", pageToJson(layout.dock))
         put("hardware", pageToJson(layout.hardware))
         put("sidebar", pageToJson(layout.sidebar))
+        put("gestures", pageToJson(layout.gestures))
     }
 
     /** Throws [org.json.JSONException] / [IllegalArgumentException] on malformed input. */
@@ -108,6 +156,9 @@ object LayoutJson {
             json.optJSONObject("dock")?.let { pageFromJson(it) } ?: DefaultLayout.dock(),
             json.optJSONObject("hardware")?.let { pageFromJson(it) } ?: DefaultLayout.hardware(),
             json.optJSONObject("sidebar")?.let { pageFromJson(it) } ?: DefaultLayout.sidebar(),
+            // A gesture list from before this set of gestures had its slots in another order.
+            json.optJSONObject("gestures")?.let { pageFromJson(it) }?.takeIf { it.buttons.size == Gestures.slots }
+                ?: DefaultLayout.gestures(),
         )
     }
 

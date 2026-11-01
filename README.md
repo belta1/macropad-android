@@ -56,6 +56,8 @@ Windows laptops/desktops.
 - **Idle clock**: dims to a clock when not used; the waking touch never presses a key. The
   **Away** key locks the PC and dims the tablet (hold: also mutes the Teams call).
 - **PIN lock** for editing and settings.
+- **Camera gestures**: hold a hand pose in front of the tablet to run a key, and lock the PC when
+  you walk away — on-device, off by default. See [docs/gestures.md](docs/gestures.md).
 - **Tablet volume buttons** act as macropad keys (PC volume by default; assignable to any action).
 - **Edit mode** (✏️): tap any key to change its label, action, accent color, icon (96 icons) and
   toggle behaviour.

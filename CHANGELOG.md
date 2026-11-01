@@ -17,6 +17,11 @@ With the PC link; update `tools/macropad-link.ps1` on the computer too (the tabl
   buttons are pressed in the page without bringing the browser to the front.
 - **Music pauses during Teams calls** and plays on when you hang up (⚙ → Connection; on).
 - New steps: `pc:media play|pause|skip <seconds>`, `pc:ytmusic like|dislike|shuffle|repeat|search|open`.
+- **Camera gestures** (⚙ → Camera gestures, off by default): 14 hand poses (palm, thumbs, fist,
+  one to four fingers, OK, rock, call me, pointing left / right, …) with separate left-hand
+  actions, swipes with an open hand, pinch and drag as a slider, and Away when you leave the desk.
+  Runs on the tablet; frames are never stored. See [docs/gestures.md](docs/gestures.md). The APK
+  grows to ~29 MB (the recognition models and their native library).
 - **Notices from the computer** (⚙ → Connection): Teams messages and mentions, and mail from the
   people you list, as a card at the top of the tablet for a few seconds; tap it to open the chat or
   the mail on the computer. Cards that come while the tablet is dimmed show when it wakes.

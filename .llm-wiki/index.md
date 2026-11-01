@@ -41,6 +41,7 @@ volume, screen mirror, PowerPoint…). **Read this first, then open the files it
 | Layout & persistence | `…/model/Layout.kt` `DefaultLayout.kt` `MacroStore.kt` `AppSettings.kt` `ComputerProfiles.kt` `SecretStore.kt` `PageUsage.kt` | pages/keys model, defaults, JSON store + one-shot upgrades, settings, secrets | [layout-and-storage](modules/layout-and-storage.md) |
 | UI views | `…/ui/` | key grid, editor, dialogs, trackpad, sliders, PC pages (Switcher, Mixer, Screen, Presenter), Home, themes | [ui](modules/ui.md) |
 | PC link (app side) | `…/pc/PcLink.kt` `PcProtocol.kt` `LinkScript.kt` | SPP server, protocol parse/build, script self-update | [pc-link](modules/pc-link.md) |
+| Camera gestures | `…/gesture/` (`GestureEngine.kt` camera2 + MediaPipe, `HandTracker.kt` pure pose/swipe/drag logic), `model/Layout.kt` `Gestures` (slots in `Layout.gestures`) | hand poses, swipes, pinch-drag, away/back → actions; ⚙ → Camera gestures | `docs/gestures.md` |
 | Network | `…/net/` (`NetActions.kt`, `HomeAssistant.kt`, `HaSocket.kt`, `Updater.kt`) | `http:`/`wol:`/`ha:` steps, Home page, calendar, GitHub updates | [net](modules/net.md) |
 | User docs | `docs/macro-language.md` `docs/pc-link.md` `docs/bluetooth-troubleshooting.md` `docs/devices.md` `docs/citrix.md` | end-user reference; keep in sync with features | [conventions](conventions.md#docs--changelog) |
 | Layout backup | `backup/macropad-layout.json` | the owner's current layout (pulled from tablet) | [layout-and-storage](modules/layout-and-storage.md) |

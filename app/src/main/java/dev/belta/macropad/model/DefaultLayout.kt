@@ -170,6 +170,23 @@ object DefaultLayout {
     private fun shell(command: String) = "text:$command\\n"
 
     /**
+     * Camera gestures (slots of [Gestures]): media on the clearest poses, page changes on sideways
+     * swipes, volume on pinch and drag, Away when you leave. The rest start empty.
+     */
+    fun gestures(): Page {
+        val defaults = mapOf(
+            "Open_Palm" to b("Play / Pause", "media:playpause", GRAY, "play_pause"),
+            "Thumb_Up" to b("Volume +", "media:volup", GRAY, "volume_up"),
+            "Thumb_Down" to b("Volume −", "media:voldown", GRAY, "volume_down"),
+            "Swipe_Left" to b("Next page", "page:next", GRAY, null),
+            "Swipe_Right" to b("Previous page", "page:prev", GRAY, null),
+            Gestures.DRAG to b("Volume", "slide:volume", GRAY, "volume_up"),
+            Gestures.AWAY to MacroButton("Away", AWAY, RED, "lock"),
+        )
+        return Page("Gestures", MutableList(Gestures.slots) { slot -> Gestures.all.getOrNull(slot)?.let { defaults[it.id] } })
+    }
+
+    /**
      * Below every page, the whole width: virtual-desktop navigation, the volume slider and the
      * media card; the rest is free.
      */

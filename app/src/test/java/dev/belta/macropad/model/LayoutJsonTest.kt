@@ -150,4 +150,23 @@ class LayoutJsonTest {
     fun `rejects other files`() {
         LayoutJson.fromJson(JSONObject("""{"format":"something-else","rows":1,"cols":1,"pages":[]}"""))
     }
+
+    @Test
+    fun `keeps gesture actions and fills them in for older files`() {
+        val layout = DefaultLayout.layout()
+        layout.setButton(layout.gestures, Gestures.slot("Victory")!!, MacroButton("Mute", "win+alt+k", 1, null))
+        val copy = LayoutJson.fromJson(LayoutJson.toJson(layout))
+        assertEquals("win+alt+k", copy.button(copy.gestures, Gestures.slot("Victory")!!)!!.action)
+
+        val old = LayoutJson.toJson(DefaultLayout.layout()).apply { remove("gestures") }
+        val upgraded = LayoutJson.fromJson(old)
+        assertEquals(Gestures.slots, upgraded.gestures.buttons.size)
+        assertEquals("media:playpause", upgraded.button(upgraded.gestures, Gestures.slot("Open_Palm")!!)!!.action)
+        assertNull(upgraded.button(upgraded.gestures, Gestures.slot("Closed_Fist")!!))
+    }
+
+    @Test
+    fun `every default gesture action parses`() {
+        for (button in DefaultLayout.gestures().buttons.filterNotNull()) Macro.parse(button.action)
+    }
 }

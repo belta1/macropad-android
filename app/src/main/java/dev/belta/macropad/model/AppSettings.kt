@@ -53,6 +53,16 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit().putBoolean("open_on_charge", value).apply()
 
     /** Sidebar on the left of the keys instead of the right. */
+    /** Watch the front camera for hand gestures and for the person leaving / coming back. */
+    var gesturesEnabled: Boolean
+        get() = prefs.getBoolean("gestures", false)
+        set(value) = prefs.edit().putBoolean("gestures", value).apply()
+
+    /** Minutes without a face in view before the "You leave" gesture runs. */
+    var awayMinutes: Int
+        get() = prefs.getInt("away_minutes", 3)
+        set(value) = prefs.edit().putInt("away_minutes", value).apply()
+
     /** Teams messages and mentions on the computer show as a card on the tablet (PC link). */
     var teamsNotices: Boolean
         get() = prefs.getBoolean("teams_notices", false)

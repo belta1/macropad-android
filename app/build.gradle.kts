@@ -21,7 +21,14 @@ android {
         targetSdk = 34
         versionCode = 9
         versionName = "1.8.0"
+        // Gesture recognition ships native code; tablets are ARM (the Fire's is 32-bit).
+        ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
     }
+
+    // MediaPipe maps its models straight from the APK.
+    androidResources { noCompress += listOf("task", "tflite") }
+    // Compress the native libraries in the APK (~20 MB smaller download; Android unpacks them on install).
+    packaging { jniLibs { useLegacyPackaging = true } }
 
     buildFeatures {
         buildConfig = true
@@ -66,6 +73,8 @@ val copyLinkScript by tasks.registering(Copy::class) {
 tasks.named("preBuild") { dependsOn(copyLinkScript) }
 
 dependencies {
+    // On-device hand gesture and face detection (camera gestures). 0.10.14 still ships 32-bit ARM.
+    implementation("com.google.mediapipe:tasks-vision:0.10.14")
     testImplementation("junit:junit:4.13.2")
     // org.json is part of Android but only stubbed in local unit tests.
     testImplementation("org.json:json:20240303")

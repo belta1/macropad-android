@@ -40,6 +40,7 @@ import dev.belta.macropad.hid.KeyboardLayout
 import dev.belta.macropad.model.AppSettings
 import dev.belta.macropad.model.ComputerProfile
 import dev.belta.macropad.model.DefaultLayout
+import dev.belta.macropad.model.Gestures
 import dev.belta.macropad.model.Layout
 import dev.belta.macropad.model.Macro
 import dev.belta.macropad.model.MacroStore
@@ -91,6 +92,10 @@ interface MacropadHost {
     fun pcScriptState(): String?
     /** Offers to send the app's PC link script to the computer. */
     fun updatePcScript()
+    /** Turns camera gestures on (asking for the camera first) or off. */
+    fun setGestures(enabled: Boolean)
+    /** What the camera is doing ("watching · 8.5 frames/s …", "off", or why it stopped). */
+    val gestureStatus: String
     /** Opens the layout editor in the computer's browser (PC link). */
     fun openEditor()
     /** [AppSettings.teamsNotices] or [AppSettings.noticeSenders] changed: tells the computer. */
@@ -117,6 +122,7 @@ class Dialogs(private val host: MacropadHost) {
             "Computers…" to ::computers,
             "Connection…" to ::connection,
             "Tablet volume buttons…" to ::tabletButtons,
+            "Camera gestures: ${if (host.settings.gesturesEnabled) "on" else "off"}…" to ::gestures,
             "Saved values for logins…" to ::savedValues,
             "Pages…" to ::pages,
             "Backup and restore…" to ::backup,
@@ -239,6 +245,53 @@ class Dialogs(private val host: MacropadHost) {
     }
 
     /** Computers allowed or refused the PC link; tap one to change it. */
+    fun gestures() {
+        val enabled = host.settings.gesturesEnabled
+        val rows = listOf<Pair<String, () -> Unit>>(
+            (if (enabled) "Turn off" else "Turn on") to { host.setGestures(!enabled); gestures() },
+            "Leave after: ${host.settings.awayMinutes} min without a face" to ::awayMinutes,
+            "Left hand…" to ::leftHandGestures,
+        ) + Gestures.all.mapIndexed { i, g -> gestureRow(i, g.label, "nothing") }
+        ui.dialog()
+            .setTitle("Camera gestures")
+            .setMessage("Hold a hand pose still for half a second, swipe with an open hand, or pinch and " +
+                "move up or down. Frames stay on the tablet and are never stored. Now: ${host.gestureStatus}")
+            .setItems(rows.map { it.first }.toTypedArray()) { _, which -> rows[which].second() }
+            .setPositiveButton("Close", null)
+            .show()
+    }
+
+    /** Poses made with the left hand; an empty one does what the right hand's does. */
+    private fun leftHandGestures() {
+        val rows = Gestures.poses.map { g -> gestureRow(Gestures.leftSlot(g.id)!!, g.label, "same as right hand") }
+        ui.dialog()
+            .setTitle("Left hand")
+            .setItems(rows.map { it.first }.toTypedArray()) { _, which -> rows[which].second() }
+            .setPositiveButton("Close", null)
+            .show()
+    }
+
+    private fun gestureRow(slot: Int, label: String, empty: String): Pair<String, () -> Unit> {
+        val layout = host.layout
+        val action = layout.button(layout.gestures, slot)?.let { "${it.label} (${Macro.describe(it.action)})" } ?: empty
+        return "$label  →  $action" to { host.editKey(layout.gestures, slot, label) }
+    }
+
+    private fun awayMinutes() {
+        val options = listOf(1, 2, 3, 5, 10, 15)
+        ui.dialog()
+            .setTitle("Run \"You leave\" after")
+            .setSingleChoiceItems(options.map { "$it min without a face" }.toTypedArray(),
+                options.indexOf(host.settings.awayMinutes)) { d, i ->
+                host.settings.awayMinutes = options[i]
+                host.setGestures(host.settings.gesturesEnabled)
+                d.dismiss()
+                gestures()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     /** Teams messages and mail from chosen people, as a card at the top of the tablet (PC link). */
     private fun notices() {
         val settings = host.settings

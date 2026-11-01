@@ -23,7 +23,8 @@ status: current
 - **Lint / format:** none configured; follow `kotlin.code.style=official` and surrounding style
   (long lines ~130 chars are normal here).
 - **Secrets:** `keystore.properties`, `*.jks`, `local.properties` are git-ignored; CI uses repo secrets.
-- **Dependencies:** deliberately none at runtime. Test-only: JUnit 4.13 and `org.json` (Android's
+- **Dependencies:** deliberately few at runtime: only MediaPipe `tasks-vision` (camera gestures, `gesture/`;
+  models in `app/src/main/assets/`, ARM ABIs only). Test-only: JUnit 4.13 and `org.json` (Android's
   `org.json` is stubbed in local unit tests). Think hard before adding a library.
 
 ## Comment & text style

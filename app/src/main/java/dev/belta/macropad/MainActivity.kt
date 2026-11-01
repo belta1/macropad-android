@@ -43,9 +43,11 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import dev.belta.macropad.hid.HidKeys
 import dev.belta.macropad.hid.DeviceQuirks
+import dev.belta.macropad.gesture.GestureEngine
 import dev.belta.macropad.hid.HidPeripheral
 import dev.belta.macropad.model.AppSettings
 import dev.belta.macropad.model.DefaultLayout
+import dev.belta.macropad.model.Gestures
 import dev.belta.macropad.model.Layout
 import dev.belta.macropad.model.PageUsage
 import dev.belta.macropad.model.LiveLabels
@@ -302,6 +304,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         handler.postDelayed(liveTick, 30_000)
         handler.postDelayed(usageTick, 60_000)
         service?.pc?.pending?.let { askPcApproval(it) }
+        startGestures()
     }
 
     override fun onPause() {
@@ -311,7 +314,76 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         handler.removeCallbacks(usageTick)
         resumed = false
         updateScreenStream()
+        gestureEngine?.stop()
         super.onPause()
+    }
+
+    // ---------------------------------------------------------------- camera gestures
+
+    private var gestureEngine: GestureEngine? = null
+
+    override val gestureStatus: String get() = gestureEngine?.status ?: "off"
+
+    override fun setGestures(enabled: Boolean) {
+        settings.gesturesEnabled = enabled
+        gestureEngine?.stop()
+        if (enabled && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.CAMERA), REQUEST_CAMERA)
+            return
+        }
+        startGestures()
+    }
+
+    /** The camera runs only while the macropad is on screen (dimmed to its clock included). */
+    private fun startGestures() {
+        if (!settings.gesturesEnabled || checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return
+        if (gestureEngine?.running == true) return
+        // A stopped engine can't restart (its camera may still be closing), so each start gets a new one.
+        val engine = GestureEngine(applicationContext, object : GestureEngine.Listener {
+            override fun onGesture(id: String, left: Boolean) = runOnUiThread { handleGesture(id, left) }
+            override fun onDrag(up: Boolean) = runOnUiThread { handleDrag(up) }
+            override fun onError(message: String) = runOnUiThread { ui.toast("Camera gestures: $message") }
+        }).also { gestureEngine = it }
+        engine.awayMs = settings.awayMinutes * 60_000L
+        @Suppress("DEPRECATION")
+        engine.displayRotation = when (windowManager.defaultDisplay.rotation) {
+            android.view.Surface.ROTATION_90 -> 90
+            android.view.Surface.ROTATION_180 -> 180
+            android.view.Surface.ROTATION_270 -> 270
+            else -> 0
+        }
+        engine.start()
+    }
+
+    /**
+     * A held hand pose, or the person leaving / coming back. Like a touch, a hand pose on the dimmed
+     * clock only wakes it; leaving runs its action even then (e.g. lock the PC).
+     */
+    private fun handleGesture(id: String, left: Boolean) {
+        // A left-hand pose uses its own action when it has one, else the right hand's.
+        val slot = (if (left) Gestures.leftSlot(id)?.takeIf { layout.button(layout.gestures, it) != null } else null)
+            ?: Gestures.slot(id) ?: return
+        val button = layout.button(layout.gestures, slot)
+        if (id == Gestures.AWAY) {
+            button?.let { runAction("gesture", layout.gestures, slot, it, it.action, null, hold = false) }
+            return
+        }
+        if (dimmed) return wake()
+        resetIdleTimer()
+        button ?: return
+        val name = Gestures.all.first { it.id == id }.label + if (left) " (left hand)" else ""
+        ui.toast("$name  ${button.label}")
+        runAction("gesture", layout.gestures, slot, button, button.action, null, hold = false)
+    }
+
+    /** One step of pinch and drag: the up or down step of the slider set for it. */
+    private fun handleDrag(up: Boolean) {
+        if (dimmed) return wake()
+        resetIdleTimer()
+        val slot = Gestures.slot(Gestures.DRAG) ?: return
+        val button = layout.button(layout.gestures, slot) ?: return
+        if (Macro.slider(button.action) == null) return ui.toast("Pinch and drag needs a slider action, e.g. slide:volume")
+        onSlide(layout.gestures, slot, button, up)
     }
 
     override fun onStop() {
@@ -1041,6 +1113,10 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         if (requestCode == REQUEST_PERMISSIONS && MacropadService.hasBluetoothPermissions(this)) hid?.start()
+        if (requestCode == REQUEST_CAMERA) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startGestures()
+            else { settings.gesturesEnabled = false; ui.toast("Camera gestures need the camera") }
+        }
         if (requestCode == REQUEST_MIC) {
             if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) openDictation()
             else ui.toast("Dictation needs the microphone")
@@ -2347,6 +2423,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         private const val EVENT_REFRESH_MS = 5 * 60_000L
         private const val REQUEST_PERMISSIONS = 1
         private const val REQUEST_MIC = 2
+        private const val REQUEST_CAMERA = 4
         private const val REQUEST_EXPORT = 2
         private const val REQUEST_IMPORT = 3
         private const val TRACKPAD_KEYS = 5
