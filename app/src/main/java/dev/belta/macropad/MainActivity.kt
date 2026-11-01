@@ -67,6 +67,7 @@ import dev.belta.macropad.pc.LayoutEditor
 import dev.belta.macropad.pc.LinkScript
 import dev.belta.macropad.pc.NoticeFilter
 import dev.belta.macropad.pc.PcComputer
+import dev.belta.macropad.pc.PcCheck
 import dev.belta.macropad.pc.PcLink
 import dev.belta.macropad.pc.PcMessage
 import dev.belta.macropad.pc.PcNotice
@@ -400,6 +401,12 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private lateinit var idleStatus: TextView
     private lateinit var idleEvent: TextView
     private lateinit var idleMail: TextView
+    /** What's playing on the computer, on the clock: its picture, title and artist; a tap plays / pauses. */
+    private lateinit var idleMusic: LinearLayout
+    private lateinit var idleArt: ImageView
+    private lateinit var idleSong: TextView
+    /** The touch on the dimmed clock started on [idleMusic]: it plays / pauses instead of waking. */
+    private var musicTouch = false
     /** The Home Assistant calendar's next event (⚙ → Saved values → ha_calendar), refreshed while dimmed. */
     @Volatile private var nextEvent: NetActions.CalendarEvent? = null
     private var eventFetchedAt = 0L
@@ -451,7 +458,28 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             setPadding(0, ui.dp(10), 0, 0)
             visibility = View.GONE
         }
-        for (line in listOf(idleTime, idleDate, idleEvent, idleMail, idleStatus)) {
+        idleArt = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = ui.roundRect(Color.BLACK, ui.dpf(10f))
+            clipToOutline = true
+            alpha = 0.55f
+        }
+        idleSong = TextView(context).apply {
+            typeface = ui.fontLabel
+            setTextColor(withAlpha(FAINT, 0.8f))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            maxLines = 2
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        idleMusic = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(ui.dp(12), ui.dp(10), ui.dp(16), ui.dp(10))
+            visibility = View.GONE
+            addView(idleArt, LinearLayout.LayoutParams(ui.dp(64), ui.dp(64)).apply { marginEnd = ui.dp(16) })
+            addView(idleSong, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        for (line in listOf(idleTime, idleDate, idleEvent, idleMusic, idleMail, idleStatus)) {
             idleClock.addView(line, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
@@ -507,10 +535,38 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         val mail = shownMail?.takeIf { settings.mailNotices && now.time - it.at < MAIL_ON_CLOCK_MS }
         idleMail.text = mail?.let { "New mail from ${it.from}" + if (it.count > 1) " (+${it.count - 1})" else "" }
         idleMail.visibility = if (mail == null) View.GONE else View.VISIBLE
+        updateIdleMusic()
         refreshNextEvent()
         // Drift a little so nothing stays lit on the same pixels.
         idleClock.translationX = ((Math.random() - 0.5) * ui.dp(160)).toFloat()
         idleClock.translationY = ((Math.random() - 0.5) * ui.dp(120)).toFloat()
+    }
+
+    /** "⏸ Song · Artist" with the song's picture on the clock, while the computer plays something (PC link). */
+    private fun updateIdleMusic() {
+        val media = pcStatus?.media
+        idleMusic.visibility = if (media == null) View.GONE else View.VISIBLE
+        media ?: return
+        idleSong.text = (if (media.playing) "▶  " else "⏸  ") + media.title + (media.artist?.let { "\n$it" } ?: "")
+        val art = service?.pc?.mediaArt?.takeIf { it.first == media.key }?.second
+        idleArt.setImageBitmap(art)
+        idleArt.visibility = if (art == null) View.GONE else View.VISIBLE
+        idleMusic.contentDescription = "${media.title}. Tap to ${if (media.playing) "pause" else "play"}"
+    }
+
+    /** A tap on the clock's song: play / pause on the computer, leaving the tablet dimmed. */
+    private fun toggleMusicFromClock() {
+        val playing = pcStatus?.media?.playing == true
+        val link = service?.pc?.takeIf { it.connected }
+        val id = link?.media(if (playing) "pause" else "play")
+        if (id != null) pcRequests[id] = "Music"
+        else if (connected) hid?.run(Macro.parse("media:playpause"))
+        idleMusic.animate().alpha(0.4f).setDuration(120).withEndAction { idleMusic.animate().alpha(1f).setDuration(200).start() }.start()
+    }
+
+    private fun touches(view: View, ev: MotionEvent): Boolean {
+        val box = android.graphics.Rect()
+        return view.isShown && view.getGlobalVisibleRect(box) && box.contains(ev.rawX.toInt(), ev.rawY.toInt())
     }
 
     /** Fetches the next calendar event every few minutes; the clock shows it on its next tick. */
@@ -549,8 +605,14 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            // A tap on the song on the dimmed clock plays / pauses it and leaves the clock as it is.
+            musicTouch = dimmed && touches(idleMusic, ev)
             swallowGesture = dimmed
-            if (dimmed) wake()
+            if (dimmed && !musicTouch) wake()
+        }
+        if (musicTouch) {
+            if (ev.actionMasked == MotionEvent.ACTION_UP && touches(idleMusic, ev)) toggleMusicFromClock()
+            return true
         }
         if (swallowGesture) return true // the touch that wakes the screen never presses a key
         resetIdleTimer()
@@ -731,7 +793,19 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
         override fun onNotice(notice: PcNotice) = showNotice(notice)
 
-        override fun onMediaArt() = refreshLiveKeys()
+        override fun onMediaArt() {
+            refreshLiveKeys()
+            if (dimmed) updateIdleMusic()
+        }
+
+        override fun onSelfTest(checks: List<PcCheck>) {
+            selfTestAsked = false
+            val text = checks.joinToString("\n\n") { c ->
+                (when (c.ok) { true -> "✓ "; false -> "✗ "; null -> "– " }) + c.name + "\n" + c.detail
+            }
+            ui.dialog().setTitle("PC link on ${pcStatus?.host ?: "the computer"}").setMessage(text)
+                .setPositiveButton("OK", null).show()
+        }
 
         override fun onPcResult(id: Int, ok: Boolean, error: String?) {
             val then = pcWaits.remove(id)
@@ -1025,6 +1099,21 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private fun openNotice(notice: PcNotice) {
         val id = service?.pc?.takeIf { it.connected }?.openNotice(notice.handle) ?: return
         pcRequests[id] = if (notice.kind == "teams") "Teams" else "Mail"
+    }
+
+    /** A self-test asked for and not answered yet (scripts before 1.9.2 never answer). */
+    private var selfTestAsked = false
+
+    override fun checkPcLink() {
+        val link = pcLinkFor("Checking the PC link") ?: return
+        val script = pcStatus?.scriptVersion
+        if (script == null || Updater.isNewer(SELF_TEST_SCRIPT, script)) {
+            return ui.toast("Checking needs PC link script $SELF_TEST_SCRIPT or newer: ⚙ → Connection → PC link script")
+        }
+        link.selfTest() ?: return
+        selfTestAsked = true
+        ui.toast("Checking what the computer can reach…")
+        handler.postDelayed({ if (selfTestAsked) { selfTestAsked = false; ui.toast("The computer didn't answer the check") } }, 30_000)
     }
 
     override fun openEditor() {
@@ -2446,6 +2535,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         private const val MISSED_NOTICE_MS = 10 * 60_000L
         /** The first PC link script that serves the layout editor and sends notices. */
         private const val EDITOR_SCRIPT = "1.9.0"
+        /** The first PC link script that runs the self-test for the tablet. */
+        private const val SELF_TEST_SCRIPT = "1.9.2"
         /** The idle clock says "New mail from …" for this long after it came. */
         private const val MAIL_ON_CLOCK_MS = 30 * 60_000L
         /** The mirrored screen is scaled to fit this: sharp enough, and a whole picture is ~200 KB. */

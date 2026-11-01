@@ -96,6 +96,8 @@ interface MacropadHost {
     fun setGestures(enabled: Boolean)
     /** What the camera is doing ("watching · 8.5 frames/s …", "off", or why it stopped). */
     val gestureStatus: String
+    /** Asks the computer's script what it can reach and shows it (PC link). */
+    fun checkPcLink()
     /** Opens the layout editor in the computer's browser (PC link). */
     fun openEditor()
     /** [AppSettings.teamsNotices] or [AppSettings.noticeSenders] changed: tells the computer. */
@@ -221,6 +223,7 @@ class Dialogs(private val host: MacropadHost) {
                 ui.toast(if (settings.followCalls) "A Teams call brings up the Teams page (PC link)"
                     else "Calls no longer switch pages")
             },
+            "Check the PC link…" to host::checkPcLink,
             "Notices from the computer…" to ::notices,
             "Pause music during Teams calls: ${if (settings.pauseMusicInCalls) "on" else "off"}" to {
                 settings.pauseMusicInCalls = !settings.pauseMusicInCalls

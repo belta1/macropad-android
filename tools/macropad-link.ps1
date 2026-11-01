@@ -57,6 +57,12 @@
 .PARAMETER Uninstall
     Remove that shortcut, then exit.
 
+.PARAMETER SelfTest
+    Check what the script can reach on this computer (the tablet's COM port, Outlook, Teams,
+    Windows' notifications, what's playing, YouTube Music's buttons, the editor's port), print it,
+    then exit. It runs next to a running copy. The tablet can ask for the same check (settings >
+    Connection > Check the PC link).
+
 .PARAMETER TeamsDump
     List the buttons of Teams' windows (automation id | name), then exit. For adjusting the UI
     Automation fallback when Teams' third-party API is off.
@@ -79,14 +85,15 @@ param(
     [switch]$InstallShellHook,
     [switch]$UninstallShellHook,
     [int]$EditorPort = 8771,
-    [switch]$NoNotices
+    [switch]$NoNotices,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = 'Stop'
 $ProtocolVersion = 1
 # The tablet offers this script's update when the app carries a higher version, or the same one
 # with other contents.
-$ScriptVersion = '1.9.1'
+$ScriptVersion = '1.9.2'
 $StartOptions = @{} + $PSBoundParameters # for starting again after an update
 $ConfigDir = Join-Path $env:APPDATA 'Macropad'
 $CommandsFile = Join-Path $ConfigDir 'commands.json'
@@ -183,7 +190,7 @@ if ($UninstallShellHook) {
 
 # One copy at a time (the Startup shortcut and a manual run would fight over the port).
 $mutex = New-Object System.Threading.Mutex($false, 'Local\MacropadPcLink')
-if (-not $TeamsDump -and -not $mutex.WaitOne(0)) {
+if (-not $TeamsDump -and -not $SelfTest -and -not $mutex.WaitOne(0)) {
     Write-Host 'The PC link is already running (see the Startup shortcut or Task Manager).'
     return
 }
@@ -1582,10 +1589,10 @@ namespace MacropadLink {
             }
         }
 
-        // Presses the button of window [window] named one of [names] (or starting with one and a
-        // space: "Repeat off"), the lowest on the screen when there are several (the player bar's,
-        // not a list's). False when there is none.
-        public static bool Press(long window, string[] names) {
+        // The button of window [window] named one of [names] (or starting with one and a space:
+        // "Repeat off"), the lowest on the screen when there are several (the player bar's, not a
+        // list's); null when there is none.
+        static UIA.AutomationElement Button(long window, string[] names) {
             var root = UIA.AutomationElement.FromHandle(new IntPtr(window));
             var buttons = new UIA.OrCondition(
                 new UIA.PropertyCondition(UIA.AutomationElement.ControlTypeProperty, UIA.ControlType.Button),
@@ -1603,6 +1610,18 @@ namespace MacropadLink {
                 lowest = r.Y;
                 best = e;
             }
+            return best;
+        }
+
+        // The name of that button as the page gives it, or null (for the self-test).
+        public static string Find(long window, string[] names) {
+            var button = Button(window, names);
+            return button == null ? null : button.Current.Name;
+        }
+
+        // Presses that button; false when there is none.
+        public static bool Press(long window, string[] names) {
+            var best = Button(window, names);
             if (best == null) return false;
             object pattern;
             if (best.TryGetCurrentPattern(UIA.InvokePattern.Pattern, out pattern)) { ((UIA.InvokePattern)pattern).Invoke(); return true; }
@@ -3391,6 +3410,7 @@ function Use-TabletLine([string]$Line) {
         'notice-open' { Open-Notice $request }
         'media' { Invoke-MediaControl $request }
         'ytmusic' { Invoke-YtMusic $request }
+        'selftest' { Send-SelfTest $request }
         default { } # ping, or something newer than this script
     }
 }
@@ -3408,6 +3428,125 @@ function Read-Tablet {
     }
     # The tablet pings every 30 s; silence means the link is gone even if Windows hasn't noticed.
     if (((Get-Date) - $script:LastHeard).TotalSeconds -gt 90) { throw 'no word from the tablet for 90 s' }
+}
+
+# ------------------------------------------------------------------ self-test (-SelfTest, or the tablet's "Check the PC link")
+
+# What the script can reach here, as checks: ok $true (works), $false (doesn't), $null (not in use
+# now, e.g. Outlook closed). Nothing is pressed, sent or changed.
+function Get-SelfTest {
+    $checks = New-Object System.Collections.ArrayList
+    function Add-Check($Ok, [string]$Name, [string]$Detail) { [void]$checks.Add([ordered]@{ ok = $Ok; name = $Name; detail = $Detail }) }
+
+    Add-Check $true 'Script' "$ScriptVersion on PowerShell $($PSVersionTable.PSVersion), $env:COMPUTERNAME"
+
+    if ($script:Link) { Add-Check $true 'Tablet' "connected on $($script:Link.PortName)" }
+    else {
+        $name = if ($Port) { $Port } else { Find-Port }
+        if ($name) { Add-Check $true 'Tablet' "outgoing port $name (the running copy has it, or the tablet is away)" }
+        else { Add-Check $false 'Tablet' "no outgoing Bluetooth COM port for '$Device': pair again, or More Bluetooth settings > COM Ports > Add > Outgoing" }
+    }
+
+    if ($NoOutlook) { Add-Check $null 'Outlook' 'off (-NoOutlook)' }
+    else {
+        try {
+            $outlook = [Runtime.InteropServices.Marshal]::GetActiveObject('Outlook.Application')
+            $unread = [int]$outlook.GetNamespace('MAPI').GetDefaultFolder(6).UnReadItemCount
+            $meeting = $null
+            try { $meeting = Get-NextMeeting } catch { }
+            Add-Check $true 'Outlook' ("classic Outlook, $unread unread" + $(if ($meeting) { "; next: $($meeting.title) at $($meeting.start.Substring(11, 5))" } else { '; no meeting today or tomorrow' }))
+        } catch {
+            Add-Check $null 'Outlook' 'classic Outlook is not open (it is never started for this)'
+        }
+    }
+
+    if ($NoTeams) { Add-Check $null 'Teams' 'off (-NoTeams)' }
+    elseif (-not (Get-Process -Name 'ms-teams', 'Teams' -ErrorAction SilentlyContinue)) { Add-Check $null 'Teams' 'not running' }
+    elseif ((Test-Path $TokenFile) -and (Get-Content $TokenFile -Raw).Trim()) { Add-Check $true 'Teams' 'running; the third-party app API was allowed (token saved)' }
+    else { Add-Check $null 'Teams' 'running; API not allowed yet (Teams > Settings > Privacy > Third-party app API, then press Mute in a call)' }
+
+    if ($NoNotices) { Add-Check $null 'Teams notices' 'off (-NoNotices)' }
+    else {
+        try {
+            $newest = [long]0
+            [void][MacropadLink.ToastStore]::Since($ToastFile, -1, [ref]$newest)
+            $recent = [MacropadLink.ToastStore]::Since($ToastFile, [Math]::Max(0, $newest - 300), [ref]$newest)
+            $teams = @($recent | Where-Object { $_.App -match 'Teams' }).Count
+            if ($teams -gt 0) { Add-Check $true 'Teams notices' "Windows' notifications readable; $teams from Teams among the last $(@($recent).Count) toasts" }
+            else { Add-Check $null 'Teams notices' "Windows' notifications readable, but none from Teams among the last $(@($recent).Count): does Teams show Windows notifications?" }
+        } catch {
+            Add-Check $false 'Teams notices' $_.Exception.Message
+        }
+    }
+
+    if ($null -eq $script:Media) { Initialize-Media }
+    $session = $null
+    if (-not $script:Media) { Add-Check $false 'Media' "Windows' media controls aren't available" }
+    else {
+        try {
+            $session = $script:Media.GetCurrentSession()
+            if (-not $session) { Add-Check $null 'Media' 'nothing is playing' }
+            else {
+                $properties = Wait-WinRt ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties, Windows.Media.Control, ContentType = WindowsRuntime])
+                $timeline = $session.GetTimelineProperties()
+                $length = ($timeline.EndTime - $timeline.StartTime).TotalSeconds
+                Add-Check $true 'Media' ("$($properties.Title) - $($properties.Artist) in $($session.SourceAppUserModelId)" + $(if ($length -gt 0) { ", $([int]$length) s long (seeking works)" } else { ' (no timeline: no seeking)' }))
+                if ($properties.Thumbnail) {
+                    $stream = Wait-WinRt ($properties.Thumbnail.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage.Streams, ContentType = WindowsRuntime])
+                    $net = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($stream)
+                    try { $jpg = [MacropadLink.Music]::SquareJpeg($net, 160) } finally { $net.Dispose() }
+                    Add-Check $true 'Song picture' "$([int]($jpg.Length / 1024)) KB"
+                } else {
+                    Add-Check $null 'Song picture' 'the player gives none'
+                }
+            }
+        } catch {
+            Add-Check $false 'Media' $_.Exception.Message
+        }
+    }
+
+    $window = Find-YtMusicWindow
+    if (-not $window) { Add-Check $null 'YouTube Music' 'no window whose title ends in "YouTube Music" (its tab must be the one showing)' }
+    else {
+        Add-Check $true 'YouTube Music' $window.Title
+        $found = foreach ($action in 'like', 'dislike', 'shuffle', 'repeat') {
+            $name = $null
+            try {
+                $name = [MacropadLink.Music]::Find($window.Id, $script:YtMusicButtons[$action])
+                if (-not $name) { Start-Sleep -Milliseconds 600; $name = [MacropadLink.Music]::Find($window.Id, $script:YtMusicButtons[$action]) }
+            } catch { }
+            "$action=$(if ($name) { "'$name'" } else { 'missing' })"
+        }
+        Add-Check (-not ($found -match 'missing')) 'YouTube Music buttons' ($found -join ', ')
+    }
+
+    if ($script:EditorListener) { Add-Check $true 'Editor' "serving http://127.0.0.1:$EditorPort/" }
+    else {
+        try {
+            $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $EditorPort)
+            $listener.Start()
+            $listener.Stop()
+            Add-Check $true 'Editor' "port $EditorPort is free"
+        } catch {
+            Add-Check $false 'Editor' "port $EditorPort is taken; start the script with -EditorPort 8772"
+        }
+    }
+    return $checks
+}
+
+# {"t":"selftest"}: the same checks, for the tablet to show.
+function Send-SelfTest($Request) {
+    $checks = @(Get-SelfTest)
+    Send-Tablet ([ordered]@{ t = 'selftest'; id = $Request.id; checks = $checks })
+}
+
+if ($SelfTest) {
+    foreach ($check in Get-SelfTest) {
+        $mark, $color = if ($check.ok -eq $true) { '[ OK ]', 'Green' } elseif ($check.ok -eq $false) { '[FAIL]', 'Red' } else { '[ -- ]', 'DarkGray' }
+        Write-Host "$mark " -ForegroundColor $color -NoNewline
+        Write-Host "$($check.name): $($check.detail)"
+    }
+    return
 }
 
 # ------------------------------------------------------------------ -TeamsDump

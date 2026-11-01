@@ -39,7 +39,8 @@ errors are caught and logged; **write errors end the link** (reconnect).
 
 Switches: `-Port`, `-Device`, `-Install/-Uninstall` (Startup shortcut), `-NoTeams`, `-NoOutlook`,
 `-NoClipboard`, `-AllowRecording`, `-NoUpdate`, `-TeamsDump`, `-InstallShellHook/-UninstallShellHook`,
-`-EditorPort` (default 8771), `-NoNotices`.
+`-EditorPort` (default 8771), `-NoNotices`, `-SelfTest` (`Get-SelfTest`: prints checks and exits; skips the
+single-instance mutex, like `-TeamsDump`).
 
 ## Gotchas & constraints
 

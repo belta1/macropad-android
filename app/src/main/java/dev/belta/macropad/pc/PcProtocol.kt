@@ -162,11 +162,16 @@ sealed class PcMessage {
      * as the page sent it.
      */
     data class Http(val id: Int, val method: String, val path: String, val key: String?, val body: String) : PcMessage()
+    /** The computer's self-test, answering [PcProtocol.selfTest] request [id]. */
+    data class SelfTest(val id: Int, val checks: List<PcCheck>) : PcMessage()
     /** The picture of the song [key] ([PcMedia.key]) as a square JPEG; null when it has none. */
     class MediaArt(val key: String, val jpeg: ByteArray?) : PcMessage()
     /** Something the computer showed that the tablet may tell: a Teams message, a new mail ([PcNotice]). */
     data class Notice(val notice: PcNotice) : PcMessage()
 }
+
+/** One line of the computer's self-test: [ok] true (works), false (doesn't) or null (not in use now). */
+data class PcCheck(val ok: Boolean?, val name: String, val detail: String)
 
 /**
  * A notification from the computer: [kind] "teams" (a chat message or a mention, [mention]) or
@@ -269,6 +274,9 @@ object PcProtocol {
                 Base64.getDecoder().decode(json.getString("jpg")))
             "http" -> PcMessage.Http(json.getInt("id"), json.text("method") ?: "GET", json.text("path") ?: "/",
                 json.text("key"), json.optString("body"))
+            "selftest" -> PcMessage.SelfTest(json.optInt("id"), json.optJSONArray("checks").objects().map {
+                PcCheck(if (it.isNull("ok") || !it.has("ok")) null else it.optBoolean("ok"), it.text("name").orEmpty(), it.text("detail").orEmpty())
+            })
             "media-art" -> PcMessage.MediaArt("${json.text("title").orEmpty()}\n${json.text("artist").orEmpty()}",
                 json.text("jpg")?.let { Base64.getDecoder().decode(it) })
             "notice" -> PcMessage.Notice(PcNotice(
@@ -308,7 +316,7 @@ object PcProtocol {
         is PcMessage.Badges -> status.copy(badges = message.counts)
         is PcMessage.Slides -> status.copy(slides = message.slides)
         is PcMessage.Result, is PcMessage.Icon, is PcMessage.Frame, is PcMessage.Recorded, is PcMessage.SlideImage,
-        is PcMessage.FileText, is PcMessage.Http, is PcMessage.Notice, is PcMessage.MediaArt -> status
+        is PcMessage.FileText, is PcMessage.Http, is PcMessage.Notice, is PcMessage.MediaArt, is PcMessage.SelfTest -> status
     }
 
     fun hello(appVersion: String) = line(JSONObject().put("t", "hello").put("v", VERSION).put("app", appVersion))
@@ -423,6 +431,9 @@ object PcProtocol {
             position?.let { put("position", it) }
             by?.let { put("by", it) }
         })
+
+    /** Asks the computer what it can reach (Outlook, Teams, notifications, media…); a `selftest` message answers. */
+    fun selfTest(id: Int) = line(JSONObject().put("t", "selftest").put("id", id))
 
     /** Presses a button of YouTube Music in the browser (like, dislike, shuffle, repeat), or search / open. */
     fun ytMusic(action: String, id: Int) = line(JSONObject().put("t", "ytmusic").put("do", action).put("id", id))

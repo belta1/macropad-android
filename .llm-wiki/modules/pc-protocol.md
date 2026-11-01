@@ -45,6 +45,7 @@ description: `docs/pc-link.md`. **A change here usually lands on both sides in t
 | `result` | `id, ok, error` | completes `pc:` steps |
 | `http` | `id, method, path, key, body` | layout editor request → `LayoutEditor.handle`, answered with `http-reply` |
 | `notice` | `kind` (`teams`/`mail`), `n` (handle), `from, text, address?, mention` | `NoticeFilter` → `ui/NoticeCard.kt` |
+| `selftest` | `id, checks[{ok (true/false/null), name, detail}]` | answer to the tablet's `selftest`; dialog in `MainActivity.onSelfTest` |
 | `media-art` | `title, artist, jpg?` (160 px square) | `PcLink.mediaArt` (keyed by `PcMedia.key`) → media card picture |
 
 ## Tablet → script

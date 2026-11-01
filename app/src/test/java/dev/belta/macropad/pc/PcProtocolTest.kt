@@ -326,4 +326,14 @@ class PcProtocolTest {
         assertEquals(-10, JSONObject(PcProtocol.media("skip", 4, by = -10)).getInt("by"))
         assertEquals("like", JSONObject(PcProtocol.ytMusic("like", 5)).getString("do"))
     }
+
+    @Test
+    fun `parses the computer's self-test`() {
+        val message = PcProtocol.parse("""{"t":"selftest","id":9,"checks":[{"ok":true,"name":"Script","detail":"1.9.2"},""" +
+            """{"ok":null,"name":"Outlook","detail":"not open"},{"ok":false,"name":"Editor","detail":"port taken"}]}""") as PcMessage.SelfTest
+        assertEquals(9, message.id)
+        assertEquals(listOf(true, null, false), message.checks.map { it.ok })
+        assertEquals("port taken", message.checks[2].detail)
+        assertEquals("selftest", JSONObject(PcProtocol.selfTest(9)).getString("t"))
+    }
 }

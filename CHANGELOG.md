@@ -1,8 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.9.0
 
 With the PC link; update `tools/macropad-link.ps1` on the computer too (the tablet offers it).
+
+- **Check the PC link** (⚙ → Connection, or `macropad-link.ps1 -SelfTest` on the computer): what the
+  script can reach — the tablet's port, Outlook, Teams, Windows' notifications, what's playing and
+  its picture, YouTube Music's buttons, the editor's port — with what to do when something fails.
+- **Now playing on the dimmed clock**: the song and its picture; tap it to pause or play without
+  waking the tablet.
 
 - **Edit keys on the computer** (⚙ → Edit keys on the computer): an editor in the computer's
   browser with every page, the sidebar, the dock and the volume buttons. Change labels, actions

@@ -370,6 +370,9 @@ English or Spanish), without bringing the browser to the front; *Search* does br
 front, in its search box. If a button isn't found, the key says so: YouTube Music's tab must be
 the one showing in its window.
 
+**On the dimmed clock** the song shows with its picture; tapping it plays or pauses the music
+without waking the tablet.
+
 **Music pauses during Teams calls** and plays on when you hang up (⚙ → Connection → *Pause music
 during Teams calls*; on by default). Only music that was playing when the call started comes
 back.
@@ -428,6 +431,19 @@ Scripts from before 1.8 can't update themselves: copy `tools/macropad-link.ps1` 
 once more.
 
 ## Troubleshooting
+
+**Check what the script can reach**: ⚙ → Connection → *Check the PC link* on the tablet, or on the
+computer (next to a running copy):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File macropad-link.ps1 -SelfTest
+```
+
+It lists, without pressing or sending anything: the tablet's COM port, classic Outlook (unread,
+next meeting), Teams and its API, Windows' notifications (and how many recent ones came from
+Teams), what's playing (and whether it can be sought and has a picture), YouTube Music's window and
+the names of its Like / Dislike / Shuffle / Repeat buttons, and the editor's port. `[ OK ]` works,
+`[FAIL]` doesn't (with what to do), `[ -- ]` isn't in use right now (e.g. Outlook closed).
 
 - The script's log is in `%APPDATA%\Macropad\link.log`; use `-Verbose` to log every message too.
 - *"No outgoing Bluetooth COM port"*: see steps 1–2. The script looks for a paired Bluetooth
@@ -495,6 +511,7 @@ they don't know, so the app and the script can be updated separately.
 | PC → tablet | `{"t":"notice","kind":"teams","n":12,"from":"Ana Pérez","text":"…","mention":false}`; `"kind":"mail"` with `"address"` and the subject as `text` |
 | tablet → PC | `{"t":"notice-open","n":12,"id":20}`: open notice 12 (the mail, or Teams) |
 | tablet → PC | `{"t":"media","do":"seek","position":95.5,"id":21}`: what's playing: `play`, `pause`, `seek` (seconds), `skip` (`"by"`, seconds, negative = back) |
+| tablet → PC | `{"t":"selftest","id":23}`: answered with `{"t":"selftest","id":23,"checks":[{"ok":true,"name":"Outlook","detail":"…"}]}` (`ok` null: not in use now) |
 | tablet → PC | `{"t":"ytmusic","do":"like","id":22}`: YouTube Music's `like`, `dislike`, `shuffle`, `repeat` buttons; `search`, `open` |
 | PC → tablet | `{"t":"media-art","title":"…","artist":"…","jpg":"<base64>"}`: the song's picture (a 160 px square), once per song; no `jpg` when it has none. `media` carries `"ytmusic":true` when YouTube Music plays it |
 | PC → tablet | `{"t":"frame","seq":4,"view":3,"w":1600,"h":900,"tiles":[[0,64,"<base64 JPEG>"]]}`: changed parts of the picture, drawn at x, y, for request `view`; a picture can take several lines, the last with `"end":true` and the pointer `"cx","cy"` (0–1 of the part shown, or -1 when outside it) |

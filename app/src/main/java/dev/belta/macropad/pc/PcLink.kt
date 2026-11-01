@@ -56,6 +56,8 @@ class PcLink(
         fun onNotice(notice: PcNotice) {}
         /** The picture of what's playing arrived in [mediaArt]. */
         fun onMediaArt() {}
+        /** The computer's answer to [selfTest]. */
+        fun onSelfTest(checks: List<PcCheck>) {}
     }
 
     /** The computer waiting to be allowed or refused, if any. */
@@ -279,6 +281,9 @@ class PcLink(
     /** What's playing: play, pause, seek or skip ([PcProtocol.media]); null when no computer is connected. */
     fun media(action: String, position: Double? = null, by: Int? = null): Int? = send { PcProtocol.media(action, it, position, by) }
 
+    /** Asks the computer for its self-test ([Listener.onSelfTest]); null when no computer is connected. */
+    fun selfTest(): Int? = send { PcProtocol.selfTest(it) }
+
     /** A YouTube Music button ([PcProtocol.ytMusic]); null when no computer is connected. */
     fun ytMusic(action: String): Int? = send { PcProtocol.ytMusic(action, it) }
 
@@ -398,6 +403,7 @@ class PcLink(
                             "Open the macropad app on the tablet")
                     }
                     is PcMessage.Notice -> main.post { listener?.onNotice(message.notice) }
+                    is PcMessage.SelfTest -> main.post { listener?.onSelfTest(message.checks) }
                     is PcMessage.MediaArt -> {
                         mediaArt = message.key to message.jpeg?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
                         main.post { listener?.onMediaArt() }
