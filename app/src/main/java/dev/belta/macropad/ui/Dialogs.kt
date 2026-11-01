@@ -216,6 +216,11 @@ class Dialogs(private val host: MacropadHost) {
                     else "Calls no longer switch pages")
             },
             "Notices from the computer…" to ::notices,
+            "Pause music during Teams calls: ${if (settings.pauseMusicInCalls) "on" else "off"}" to {
+                settings.pauseMusicInCalls = !settings.pauseMusicInCalls
+                ui.toast(if (settings.pauseMusicInCalls) "Music on the computer pauses during calls and plays on after them (PC link)"
+                    else "Music keeps playing during calls")
+            },
             "New mail on the tablet: ${if (settings.mailNotices) "on" else "off"}" to {
                 settings.mailNotices = !settings.mailNotices
                 ui.toast(if (settings.mailNotices) "New mail in classic Outlook shows on the tablet (PC link)"

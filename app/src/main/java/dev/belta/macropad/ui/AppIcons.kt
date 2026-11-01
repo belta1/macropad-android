@@ -32,6 +32,7 @@ object AppIcons {
         "mixer" to Spec.Tile(0xFF7A52CC.toInt(), glyph = "tune"),
         "clipboard" to Spec.Tile(0xFF23947F.toInt(), glyph = "paste"),
         "home" to Spec.Tile(0xFF1A8FC9.toInt(), glyph = "home"),
+        "ytmusic" to Spec.Tile(0xFFFF0033.toInt(), glyph = "play", round = true),
         "vscode" to Spec.Tile(0xFF0A7ACC.toInt(), glyph = "code"),
         "python" to Spec.Tile(0xFF3776AB.toInt(), glyph = "terminal"),
         "chrome" to Spec.Chrome,
@@ -52,7 +53,7 @@ object AppIcons {
     val names = mapOf(
         "windows" to "Windows", "monitors" to "Monitors / windows", "switcher" to "Window switcher", "screen" to "Screen mirror",
         "vscode" to "VS Code", "python" to "Python", "chrome" to "Chrome", "mixer" to "Volume mixer",
-        "clipboard" to "PC clipboard", "home" to "Home Assistant",
+        "clipboard" to "PC clipboard", "home" to "Home Assistant", "ytmusic" to "YouTube Music",
         "edge" to "Edge", "excel" to "Excel", "word" to "Word", "powerpoint" to "PowerPoint", "outlook" to "Outlook", "teams" to "Teams",
         "citrix" to "Citrix / remote desktop", "phrases" to "Phrases", "numpad" to "Numpad",
         "trackpad" to "Trackpad", "custom" to "Star",

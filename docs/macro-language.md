@@ -167,6 +167,9 @@ the keyboard, Classic Bluetooth tablets only) instead of being typed:
 | `pc:teams mute` (Windows 11 call mute) | `win+alt+k` |
 | `pc:teams camera` / `hand` / `blur` / `leave` | Focus Teams (Win+8), its shortcut, Alt+Tab back |
 | `pc:teams react like` (`love`, `applause`, `laugh`, `wow`) | — (a message says it needs the link) |
+| `pc:media play` / `pause` (what's playing, through Windows' media controls) | `media:playpause` |
+| `pc:media skip -10` (seconds back; `skip 10` forward) | — |
+| `pc:ytmusic like` / `dislike` / `shuffle` / `repeat` (YouTube Music's buttons, pressed without bringing it to the front), `search`, `open` ([details](pc-link.md#music-youtube-music)) | — |
 | `pc:run <name>` | — |
 | `pc:click outlook 412,88` | — (needs the link) |
 | `pc:typefile` (types the file selected in File Explorer, after asking; [details](pc-link.md#typing-a-file-pctypefile)) | — |

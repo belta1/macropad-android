@@ -3,16 +3,24 @@ package dev.belta.macropad.ui
 import android.annotation.SuppressLint
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
 import dev.belta.macropad.pc.PcMedia
 import dev.belta.macropad.ui.Ui.Companion.HAIRLINE_STRONG
 
 /**
  * The media card's progress: a thin bar of how far the song or video has played, and "1:23 / 3:45"
- * after it. It moves on by itself while playing (the computer only says when it jumps).
+ * after it. It moves on by itself while playing (the computer only says when it jumps). Tapping
+ * the bar goes to that point of the song ([onSeek], in seconds).
  */
 @SuppressLint("ViewConstructor")
-class MediaProgressView(private val ui: Ui, private val media: PcMedia, private val fill: Int, private val textColor: Int) : View(ui.context) {
+class MediaProgressView(
+    private val ui: Ui, private val media: PcMedia, private val fill: Int, private val textColor: Int,
+    private val onSeek: ((Double) -> Unit)? = null,
+) : View(ui.context) {
+    /** Where the bar ends (the time follows it), as last drawn. */
+    private var barEnd = 0f
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = ui.fontHint
@@ -51,6 +59,7 @@ class MediaProgressView(private val ui: Ui, private val media: PcMedia, private 
         val bar = ui.dpf(3f)
         val y = height / 2f
         val end = width - textWidth - ui.dpf(8f)
+        barEnd = end
         if (end > 0) {
             paint.strokeCap = Paint.Cap.ROUND
             paint.strokeWidth = bar
@@ -62,6 +71,18 @@ class MediaProgressView(private val ui: Ui, private val media: PcMedia, private 
         }
         paint.color = textColor
         canvas.drawText(text, width - textWidth, y - (paint.descent() + paint.ascent()) / 2, paint)
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        val timeline = media.timeline
+        if (onSeek == null || timeline == null || barEnd <= 0f) return false
+        // Taken here, so a tap on the bar doesn't also play / pause (the card's tap).
+        if (event.actionMasked == MotionEvent.ACTION_UP && event.x <= barEnd) {
+            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            onSeek.invoke(timeline.length * (event.x / barEnd).coerceIn(0f, 1f))
+        }
+        return true
     }
 
     private companion object {

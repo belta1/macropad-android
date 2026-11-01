@@ -86,7 +86,7 @@ $ErrorActionPreference = 'Stop'
 $ProtocolVersion = 1
 # The tablet offers this script's update when the app carries a higher version, or the same one
 # with other contents.
-$ScriptVersion = '1.9.0'
+$ScriptVersion = '1.9.1'
 $StartOptions = @{} + $PSBoundParameters # for starting again after an update
 $ConfigDir = Join-Path $env:APPDATA 'Macropad'
 $CommandsFile = Join-Path $ConfigDir 'commands.json'
@@ -1544,6 +1544,97 @@ function Initialize-Media {
 }
 
 $MediaSent = $null   # @{ json; position; at; playing } as last sent: the position moves on by itself while playing
+$MediaSource = $null # the app playing it (its media session's id), for pc:media
+$MediaArtKey = $null # the song whose picture the tablet has
+$YtMusicWindow = $null
+
+# Pictures of the song and the YouTube Music buttons, pressed as a screen reader would.
+Add-Type -ReferencedAssemblies System.Drawing, UIAutomationClient, UIAutomationTypes, WindowsBase -TypeDefinition @'
+using System;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.IO;
+using System.Linq;
+using UIA = System.Windows.Automation;
+
+namespace MacropadLink {
+    public static class Music {
+        // The middle square of the picture in [source], [size] pixels across, as a JPEG.
+        public static byte[] SquareJpeg(Stream source, int size) {
+            using (var image = Image.FromStream(source)) {
+                int side = Math.Min(image.Width, image.Height);
+                var crop = new Rectangle((image.Width - side) / 2, (image.Height - side) / 2, side, side);
+                using (var square = new Bitmap(size, size, PixelFormat.Format24bppRgb)) {
+                    using (var g = Graphics.FromImage(square)) {
+                        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                        g.DrawImage(image, new Rectangle(0, 0, size, size), crop, GraphicsUnit.Pixel);
+                    }
+                    var codec = ImageCodecInfo.GetImageEncoders().First(e => e.FormatID == ImageFormat.Jpeg.Guid);
+                    var parameters = new EncoderParameters(1);
+                    parameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 85L);
+                    using (var output = new MemoryStream()) {
+                        square.Save(output, codec, parameters);
+                        return output.ToArray();
+                    }
+                }
+            }
+        }
+
+        // Presses the button of window [window] named one of [names] (or starting with one and a
+        // space: "Repeat off"), the lowest on the screen when there are several (the player bar's,
+        // not a list's). False when there is none.
+        public static bool Press(long window, string[] names) {
+            var root = UIA.AutomationElement.FromHandle(new IntPtr(window));
+            var buttons = new UIA.OrCondition(
+                new UIA.PropertyCondition(UIA.AutomationElement.ControlTypeProperty, UIA.ControlType.Button),
+                new UIA.PropertyCondition(UIA.AutomationElement.ControlTypeProperty, UIA.ControlType.CheckBox));
+            UIA.AutomationElement best = null;
+            double lowest = double.MinValue;
+            foreach (UIA.AutomationElement e in root.FindAll(UIA.TreeScope.Descendants, buttons)) {
+                var current = e.Current;
+                if (current.IsOffscreen) continue;
+                string name = (current.Name ?? "").Trim();
+                if (!names.Any(n => name.Equals(n, StringComparison.OrdinalIgnoreCase) ||
+                    name.StartsWith(n + " ", StringComparison.OrdinalIgnoreCase))) continue;
+                var r = current.BoundingRectangle;
+                if (r.IsEmpty || r.Y <= lowest) continue;
+                lowest = r.Y;
+                best = e;
+            }
+            if (best == null) return false;
+            object pattern;
+            if (best.TryGetCurrentPattern(UIA.InvokePattern.Pattern, out pattern)) { ((UIA.InvokePattern)pattern).Invoke(); return true; }
+            if (best.TryGetCurrentPattern(UIA.TogglePattern.Pattern, out pattern)) { ((UIA.TogglePattern)pattern).Toggle(); return true; }
+            return false;
+        }
+    }
+}
+'@
+
+# A browser window (or the installed app) showing YouTube Music: its tab's title ends in "YouTube Music".
+function Find-YtMusicWindow {
+    foreach ($w in [MacropadLink.Windows]::List()) {
+        if ($w.Title -match 'YouTube Music\s*$') { return $w }
+    }
+    return $null
+}
+
+# The song's picture, once per song: {"t":"media-art","title":…,"artist":…,"jpg":…} (no jpg: none).
+function Send-MediaArt($Properties, [string]$Title, [string]$Artist) {
+    $message = [ordered]@{ t = 'media-art'; title = $Title; artist = $Artist }
+    try {
+        if ($Properties.Thumbnail) {
+            $stream = Wait-WinRt ($Properties.Thumbnail.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage.Streams, ContentType = WindowsRuntime])
+            $net = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($stream)
+            try { $message.jpg = [Convert]::ToBase64String([MacropadLink.Music]::SquareJpeg($net, 160)) } finally { $net.Dispose() }
+        }
+    } catch {
+        Write-Traffic "Song picture: $($_.Exception.Message)"
+    }
+    Send-Tablet $message
+}
 
 function Send-Media([switch]$Always) {
     if ($null -eq $script:Media) { Initialize-Media }
@@ -1557,6 +1648,17 @@ function Send-Media([switch]$Always) {
             if ($properties.Title) {
                 $message.title = $properties.Title
                 if ($properties.Artist) { $message.artist = $properties.Artist }
+                $script:MediaSource = [string]$session.SourceAppUserModelId
+                # YouTube Music in a browser (or installed from one): the tablet offers its buttons.
+                if ($script:MediaSource -match 'chrome|msedge|brave|_crx_') {
+                    $script:YtMusicWindow = Find-YtMusicWindow
+                    if ($script:YtMusicWindow) { $message.ytmusic = $true }
+                }
+                $artKey = "$($properties.Title)`n$($properties.Artist)"
+                if ($Always -or $artKey -ne $script:MediaArtKey) {
+                    $script:MediaArtKey = $artKey
+                    Send-MediaArt $properties ([string]$properties.Title) ([string]$properties.Artist)
+                }
                 $message.playing = [string]$session.GetPlaybackInfo().PlaybackStatus -eq 'Playing'
                 # How far it has played, when the app says (a live stream doesn't). Apps report the
                 # position now and then; while playing it has moved on since.
@@ -1587,6 +1689,88 @@ function Send-Media([switch]$Always) {
     if ($null -ne $position) { $message.position = [Math]::Round($position, 1) }
     $script:MediaSent = @{ json = $json; position = $(if ($null -ne $position) { $position } else { 0 }); at = $now; playing = [bool]$message.playing }
     Send-Tablet $message
+}
+
+# The media session of the app last reported as playing (another may have come up since: a call).
+function Get-MediaSession {
+    if ($null -eq $script:Media) { Initialize-Media }
+    if (-not $script:Media) { return $null }
+    if ($script:MediaSource) {
+        foreach ($session in $script:Media.GetSessions()) { if ($session.SourceAppUserModelId -eq $script:MediaSource) { return $session } }
+    }
+    return $script:Media.GetCurrentSession()
+}
+
+# {"t":"media","do":…}: play, pause, seek (to "position" s), skip ("by" s) what's playing, through
+# Windows' media controls (whatever window is in front).
+function Invoke-MediaControl($Request) {
+    $session = Get-MediaSession
+    if (-not $session) { return Send-Result $Request.id $false 'Nothing is playing' }
+    try {
+        $bool = [bool]
+        $ok = switch ([string]$Request.do) {
+            'play' { Wait-WinRt ($session.TryPlayAsync()) $bool }
+            'pause' { Wait-WinRt ($session.TryPauseAsync()) $bool }
+            { $_ -in 'seek', 'skip' } {
+                $timeline = $session.GetTimelineProperties()
+                $length = ($timeline.EndTime - $timeline.StartTime).TotalSeconds
+                if ($length -le 0) { $false; break }
+                $target = if ($Request.do -eq 'seek') { [double]$Request.position } else {
+                    $now = ($timeline.Position - $timeline.StartTime).TotalSeconds
+                    if ([string]$session.GetPlaybackInfo().PlaybackStatus -eq 'Playing' -and $timeline.LastUpdatedTime.Year -gt 2000) {
+                        $now += ([DateTimeOffset]::UtcNow - $timeline.LastUpdatedTime).TotalSeconds
+                    }
+                    $now + [double]$Request.by
+                }
+                $target = [Math]::Max(0, [Math]::Min($length - 1, $target))
+                Wait-WinRt ($session.TryChangePlaybackPositionAsync([long](($timeline.StartTime.TotalSeconds + $target) * 10000000))) $bool
+            }
+            default { $false }
+        }
+    } catch {
+        $ok = $false
+    }
+    $script:Next.media = Get-Date # tell the tablet at once
+    if ($ok) { Send-Result $Request.id $true $null } else { Send-Result $Request.id $false "The player didn't do it (not every app lets Windows $([string]$Request.do))" }
+}
+
+# YouTube Music's buttons by the names a screen reader hears, in English and Spanish.
+$YtMusicButtons = @{
+    like = @('Like', 'Me gusta')
+    dislike = @('Dislike', 'No me gusta')
+    shuffle = @('Shuffle', 'Aleatorio', "Reproducci$([char]0xF3)n aleatoria", 'Modo aleatorio') # ó: this file is read as ANSI
+    repeat = @('Repeat', 'Repetir', "Repetici$([char]0xF3)n")
+}
+
+# {"t":"ytmusic","do":…}: like, dislike, shuffle, repeat (its buttons, without bringing it to the
+# front), search (brought to the front, its search box), open (to the front, or opened).
+function Invoke-YtMusic($Request) {
+    $action = [string]$Request.do
+    $window = Find-YtMusicWindow
+    if ($action -eq 'open' -and -not $window) {
+        Start-Process 'https://music.youtube.com/'
+        return Send-Result $Request.id $true $null
+    }
+    if (-not $window) { return Send-Result $Request.id $false 'YouTube Music is not open (or not the tab in front in its window)' }
+    try {
+        if ($action -in 'open', 'search') {
+            if (-not [MacropadLink.Windows]::Focus($window.Id)) { return Send-Result $Request.id $false "Couldn't bring YouTube Music to the front" }
+            if ($action -eq 'search') {
+                Start-Sleep -Milliseconds 250
+                [System.Windows.Forms.SendKeys]::SendWait('/') # its search box
+            }
+            return Send-Result $Request.id $true $null
+        }
+        $names = $script:YtMusicButtons[$action]
+        if (-not $names) { return Send-Result $Request.id $false "YouTube Music can't $action" }
+        # Chrome builds its page's accessibility tree when first asked: ask again once.
+        $done = [MacropadLink.Music]::Press($window.Id, $names)
+        if (-not $done) { Start-Sleep -Milliseconds 600; $done = [MacropadLink.Music]::Press($window.Id, $names) }
+        if ($done) { Send-Result $Request.id $true $null }
+        else { Send-Result $Request.id $false "No $action button in YouTube Music (is a song playing there?)" }
+    } catch {
+        Send-Result $Request.id $false "YouTube Music: $($_.Exception.Message)"
+    }
 }
 
 # ------------------------------------------------------------------ the terminal (shell hook)
@@ -3205,6 +3389,8 @@ function Use-TabletLine([string]$Line) {
         'http-reply' { Complete-EditorRequest $request }
         'notices' { Set-Notices $request }
         'notice-open' { Open-Notice $request }
+        'media' { Invoke-MediaControl $request }
+        'ytmusic' { Invoke-YtMusic $request }
         default { } # ping, or something newer than this script
     }
 }

@@ -323,4 +323,24 @@ class MacroTest {
         assertEquals("Wake on LAN", Macro.describe("wol:AA:BB:CC:DD:EE:FF"))
         assertEquals("Web request", Macro.describe("http:https://example.com"))
     }
+
+    @Test
+    fun `parses YouTube Music and media steps`() {
+        assertEquals(listOf(Step.Pc("ytmusic", "like")), Macro.parse("pc:ytmusic like"))
+        assertEquals(listOf(Step.Pc("media", "skip", "-10")), Macro.parse("pc:media skip -10"))
+        assertEquals(listOf(Step.Pc("media", "skip", "10")), Macro.parse("pc:media skip +10"))
+        assertEquals(listOf(Step.Pc("media", "pause")), Macro.parse("pc:media pause"))
+        assertEquals("YouTube Music · Shuffle", Macro.describe("pc:ytmusic shuffle"))
+        assertEquals("Back 10 s", Macro.describe("pc:media skip -10"))
+        for (bad in listOf("pc:ytmusic", "pc:ytmusic play", "pc:media skip", "pc:media skip 0", "pc:media stop")) {
+            assertThrows(bad)
+        }
+    }
+
+    @Test
+    fun `the YouTube Music page's keys all parse`() {
+        val page = DefaultLayout.layout().pages.first { it.name == DefaultLayout.YTMUSIC_PAGE }
+        assertEquals(15, page.buttons.size)
+        for (button in page.buttons.filterNotNull()) Macro.parse(button.action)
+    }
 }

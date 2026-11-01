@@ -355,6 +355,25 @@ The first run copies `tools/macropad-commands.example.json` to
 A key with `pc:run lock` runs it. The file is read on every run, so changes apply at once.
 Nothing else can be started from the tablet: a name that isn't in the file is refused.
 
+## Music (YouTube Music)
+
+The dock's media card shows what's playing (from Windows' media controls, so any player):
+
+- **The song's picture** next to the title.
+- **Tap the progress bar** to go to that point of the song.
+- With **YouTube Music** in a browser (its tab in front in its window, or installed as an app),
+  a **👍** likes the song; **hold** it for Dislike, Shuffle, Repeat, ±10 s, Search and Open.
+
+The **YouTube Music** page (added once) has those and Previous / Play / Next, the volume and the
+Mixer. Its buttons are pressed in the page the way a screen reader would (by their names, in
+English or Spanish), without bringing the browser to the front; *Search* does bring it to the
+front, in its search box. If a button isn't found, the key says so: YouTube Music's tab must be
+the one showing in its window.
+
+**Music pauses during Teams calls** and plays on when you hang up (⚙ → Connection → *Pause music
+during Teams calls*; on by default). Only music that was playing when the call started comes
+back.
+
 ## Editing keys on the computer
 
 ⚙ → **Edit keys on the computer** opens an editor in the computer's browser: every page as a grid,
@@ -475,6 +494,9 @@ they don't know, so the app and the script can be updated separately.
 | tablet → PC | `{"t":"notices","teams":true,"mail":true}`: which notices to send (after the port opens and when changed) |
 | PC → tablet | `{"t":"notice","kind":"teams","n":12,"from":"Ana Pérez","text":"…","mention":false}`; `"kind":"mail"` with `"address"` and the subject as `text` |
 | tablet → PC | `{"t":"notice-open","n":12,"id":20}`: open notice 12 (the mail, or Teams) |
+| tablet → PC | `{"t":"media","do":"seek","position":95.5,"id":21}`: what's playing: `play`, `pause`, `seek` (seconds), `skip` (`"by"`, seconds, negative = back) |
+| tablet → PC | `{"t":"ytmusic","do":"like","id":22}`: YouTube Music's `like`, `dislike`, `shuffle`, `repeat` buttons; `search`, `open` |
+| PC → tablet | `{"t":"media-art","title":"…","artist":"…","jpg":"<base64>"}`: the song's picture (a 160 px square), once per song; no `jpg` when it has none. `media` carries `"ytmusic":true` when YouTube Music plays it |
 | PC → tablet | `{"t":"frame","seq":4,"view":3,"w":1600,"h":900,"tiles":[[0,64,"<base64 JPEG>"]]}`: changed parts of the picture, drawn at x, y, for request `view`; a picture can take several lines, the last with `"end":true` and the pointer `"cx","cy"` (0–1 of the part shown, or -1 when outside it) |
 
 The serial port is the standard Serial Port Profile (UUID `00001101-0000-1000-8000-00805F9B34FB`),

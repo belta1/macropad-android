@@ -54,6 +54,8 @@ class PcLink(
         fun onHttp(request: PcMessage.Http) {}
         /** A Teams message or new mail on the computer ([notices] says which ones to send). */
         fun onNotice(notice: PcNotice) {}
+        /** The picture of what's playing arrived in [mediaArt]. */
+        fun onMediaArt() {}
     }
 
     /** The computer waiting to be allowed or refused, if any. */
@@ -274,6 +276,16 @@ class PcLink(
         if (socket != null) write(PcProtocol.notices(teams, mail))
     }
 
+    /** What's playing: play, pause, seek or skip ([PcProtocol.media]); null when no computer is connected. */
+    fun media(action: String, position: Double? = null, by: Int? = null): Int? = send { PcProtocol.media(action, it, position, by) }
+
+    /** A YouTube Music button ([PcProtocol.ytMusic]); null when no computer is connected. */
+    fun ytMusic(action: String): Int? = send { PcProtocol.ytMusic(action, it) }
+
+    /** The picture of the song [PcMedia.key] names, as the computer sent it; null bitmap: it has none. */
+    @Volatile var mediaArt: Pair<String, Bitmap?>? = null
+        private set
+
     /** Opens notification [handle] (its mail, or Teams) on the computer; null when no computer is connected. */
     fun openNotice(handle: Int): Int? = send { PcProtocol.openNotice(handle, it) }
 
@@ -386,6 +398,10 @@ class PcLink(
                             "Open the macropad app on the tablet")
                     }
                     is PcMessage.Notice -> main.post { listener?.onNotice(message.notice) }
+                    is PcMessage.MediaArt -> {
+                        mediaArt = message.key to message.jpeg?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                        main.post { listener?.onMediaArt() }
+                    }
                     is PcMessage.SlideImage -> {
                         slidesFor(message.file, message.version)
                         BitmapFactory.decodeByteArray(message.jpeg, 0, message.jpeg.size)?.let {

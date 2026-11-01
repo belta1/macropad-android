@@ -45,16 +45,17 @@ description: `docs/pc-link.md`. **A change here usually lands on both sides in t
 | `result` | `id, ok, error` | completes `pc:` steps |
 | `http` | `id, method, path, key, body` | layout editor request → `LayoutEditor.handle`, answered with `http-reply` |
 | `notice` | `kind` (`teams`/`mail`), `n` (handle), `from, text, address?, mention` | `NoticeFilter` → `ui/NoticeCard.kt` |
+| `media-art` | `title, artist, jpg?` (160 px square) | `PcLink.mediaArt` (keyed by `PcMedia.key`) → media card picture |
 
 ## Tablet → script
 
 Builders are the functions in `PcProtocol` (`teams`, `outlook`, `run`, `focus`, `volume`, `screen`,
 `activate`, `waitFor`, `click`, `capture`, `join`, `slides`, `typeFile`, `update`, `pointer`, `editor`,
-`httpReply`, `notices`, `openNotice`, …).
+`httpReply`, `notices`, `openNotice`, `media` (play/pause/seek/skip via SMTC), `ytMusic`, …).
 The script dispatches them in the `switch ([string]$request.t)` near the end of
 `tools/macropad-link.ps1` (`'teams'`, `'outlook'`, `'join'`, `'run'`, `'focus'`, `'capture'`,
 `'activate'`, `'wait'`, `'click'`, `'volume'`, `'screen'`, `'screen-ack'`, `'pointer'`, `'slides'`,
-`'update'`, `'typefile'`, `'editor'`, `'http-reply'`, `'notices'`, `'notice-open'`; `default` ignores `ping` and anything newer).
+`'update'`, `'typefile'`, `'editor'`, `'http-reply'`, `'notices'`, `'notice-open'`, `'media'`, `'ytmusic'`; `default` ignores `ping` and anything newer).
 
 ## Script self-update
 

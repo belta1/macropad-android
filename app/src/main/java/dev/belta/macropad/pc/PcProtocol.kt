@@ -88,7 +88,14 @@ data class PcVolume(val level: Int, val muted: Boolean, val apps: List<PcAudioAp
 
 data class PcAudioApp(val exe: String, val app: String, val level: Int, val muted: Boolean)
 
-data class PcMedia(val title: String, val artist: String?, val playing: Boolean, val timeline: PcTimeline? = null)
+/** [ytmusic]: it plays in YouTube Music in a browser, whose buttons `pc:ytmusic` presses. */
+data class PcMedia(
+    val title: String, val artist: String?, val playing: Boolean, val timeline: PcTimeline? = null,
+    val ytmusic: Boolean = false,
+) {
+    /** Names the song, to match its picture ([PcMessage.MediaArt]). */
+    val key get() = "$title\n${artist.orEmpty()}"
+}
 
 /**
  * How far the song or video has played, when its app says: [position] of [length] seconds, as of
@@ -155,6 +162,8 @@ sealed class PcMessage {
      * as the page sent it.
      */
     data class Http(val id: Int, val method: String, val path: String, val key: String?, val body: String) : PcMessage()
+    /** The picture of the song [key] ([PcMedia.key]) as a square JPEG; null when it has none. */
+    class MediaArt(val key: String, val jpeg: ByteArray?) : PcMessage()
     /** Something the computer showed that the tablet may tell: a Teams message, a new mail ([PcNotice]). */
     data class Notice(val notice: PcNotice) : PcMessage()
 }
@@ -229,7 +238,7 @@ object PcProtocol {
                 val timeline = json.optDouble("length", 0.0).takeIf { it > 0 }?.let { length ->
                     PcTimeline(length, json.optDouble("position", 0.0).coerceIn(0.0, length), System.currentTimeMillis())
                 }
-                PcMedia(title, json.text("artist"), json.optBoolean("playing"), timeline)
+                PcMedia(title, json.text("artist"), json.optBoolean("playing"), timeline, json.optBoolean("ytmusic"))
             })
             "shell" -> PcMessage.Shell(json.text("cwd")?.let { PcShell(it, json.text("venv"), json.text("python")) })
             "monitors" -> PcMessage.Monitors(json.optJSONArray("list").objects().map {
@@ -260,6 +269,8 @@ object PcProtocol {
                 Base64.getDecoder().decode(json.getString("jpg")))
             "http" -> PcMessage.Http(json.getInt("id"), json.text("method") ?: "GET", json.text("path") ?: "/",
                 json.text("key"), json.optString("body"))
+            "media-art" -> PcMessage.MediaArt("${json.text("title").orEmpty()}\n${json.text("artist").orEmpty()}",
+                json.text("jpg")?.let { Base64.getDecoder().decode(it) })
             "notice" -> PcMessage.Notice(PcNotice(
                 json.text("kind") ?: return null, json.optInt("n"),
                 json.text("from").orEmpty(), json.text("text").orEmpty().replace("\r\n", "\n").replace('\r', '\n').trim(),
@@ -297,7 +308,7 @@ object PcProtocol {
         is PcMessage.Badges -> status.copy(badges = message.counts)
         is PcMessage.Slides -> status.copy(slides = message.slides)
         is PcMessage.Result, is PcMessage.Icon, is PcMessage.Frame, is PcMessage.Recorded, is PcMessage.SlideImage,
-        is PcMessage.FileText, is PcMessage.Http, is PcMessage.Notice -> status
+        is PcMessage.FileText, is PcMessage.Http, is PcMessage.Notice, is PcMessage.MediaArt -> status
     }
 
     fun hello(appVersion: String) = line(JSONObject().put("t", "hello").put("v", VERSION).put("app", appVersion))
@@ -402,6 +413,19 @@ object PcProtocol {
     fun httpReply(id: Int, status: Int, type: String, body: String, cache: Boolean = false) = line(JSONObject()
         .put("t", "http-reply").put("id", id).put("status", status).put("type", type).put("body", body)
         .apply { if (cache) put("cache", true) })
+
+    /**
+     * Controls what's playing through Windows' media controls: [action] "play", "pause", "seek"
+     * (to [position] seconds) or "skip" ([by] seconds, negative = back).
+     */
+    fun media(action: String, id: Int, position: Double? = null, by: Int? = null) = line(JSONObject()
+        .put("t", "media").put("do", action).put("id", id).apply {
+            position?.let { put("position", it) }
+            by?.let { put("by", it) }
+        })
+
+    /** Presses a button of YouTube Music in the browser (like, dislike, shuffle, repeat), or search / open. */
+    fun ytMusic(action: String, id: Int) = line(JSONObject().put("t", "ytmusic").put("do", action).put("id", id))
 
     /** Which notifications the tablet wants: Teams messages and mentions, new mail in Outlook. */
     fun notices(teams: Boolean, mail: Boolean) = line(JSONObject().put("t", "notices").put("teams", teams).put("mail", mail))

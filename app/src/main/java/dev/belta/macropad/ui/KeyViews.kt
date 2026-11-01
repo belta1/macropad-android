@@ -1,6 +1,7 @@
 package dev.belta.macropad.ui
 
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.DashPathEffect
 import android.graphics.Paint
@@ -15,6 +16,7 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import dev.belta.macropad.model.LiveLabels
@@ -47,8 +49,12 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
         fun onSlideTap(page: Page, index: Int, button: MacroButton)
         /** An absolute slider (one given a `sliderLevel`) was moved to [level]; [done] once the finger lifts. */
         fun onSlideLevel(page: Page, index: Int, button: MacroButton, level: Int, done: Boolean)
-        /** One of the media card's ⏮ ⏯ ⏭ was tapped: [action] is its media key. */
+        /** One of the media card's buttons was tapped: [action] is its step (a media key, `pc:ytmusic like`). */
         fun onCardButton(action: String) {}
+        /** The media card's progress bar was tapped at [seconds] into the song. */
+        fun onCardSeek(seconds: Double) {}
+        /** The media card's like button (YouTube Music) was held: its other buttons. */
+        fun onCardMenu() {}
     }
 
     companion object {
@@ -61,7 +67,7 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
      * [stateful] keys (toggles, and lock keys showing the computer's Caps / Num Lock) get the
      * indicator light; [toggledOn] lights it and fills the cap. A slider with a [sliderLevel]
      * (0–100) is absolute and shows that level ([SliderView]). The media card shows how far
-     * [media] has played, when its app says.
+     * [media] has played, when its app says, and its [mediaArt] (the song's picture).
      */
     @SuppressLint("ClickableViewAccessibility")
     fun build(
@@ -69,7 +75,7 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
         compact: Boolean, editing: Boolean, toggledOn: Boolean = false, emphasize: Boolean = false,
         iconOnly: Boolean = false, showHint: Boolean = true, small: Boolean = false,
         stateful: Boolean = button?.toggle == true, sliderLevel: Int? = null, sliderMuted: Boolean = false,
-        card: Boolean = false, media: PcMedia? = null,
+        card: Boolean = false, media: PcMedia? = null, mediaArt: Bitmap? = null,
     ): View {
         // Sliders are dragged; in edit mode they show as a normal key so a tap opens the editor.
         if (button != null && !editing && Macro.slider(button.action) != null) {
@@ -121,6 +127,13 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
                     key.gravity = Gravity.CENTER_VERTICAL or Gravity.START
                     if (iconRes != null && !transport) key.addView(ui.legendIcon(button.icon!!, iconTint, halo),
                         LinearLayout.LayoutParams(ui.sdp(24), ui.sdp(24)).apply { marginEnd = ui.dp(12) })
+                    if (transport && mediaArt != null) key.addView(ImageView(ui.context).apply {
+                        setImageBitmap(mediaArt)
+                        scaleType = ImageView.ScaleType.CENTER_CROP
+                        background = ui.roundRect(PLATE, ui.dpf(8f))
+                        clipToOutline = true
+                        contentDescription = "Song picture"
+                    }, LinearLayout.LayoutParams(ui.sdp(48), ui.sdp(48)).apply { marginEnd = ui.dp(12) })
                     val lines = button.label.split('\n', limit = 2)
                     key.addView(LinearLayout(ui.context).apply {
                         orientation = LinearLayout.VERTICAL
@@ -137,11 +150,28 @@ class KeyViews(private val ui: Ui, private val listener: Listener) {
                                 if (i == 0) ui.glow(this, halo)
                             })
                         }
-                        if (transport && media?.timeline != null) addView(MediaProgressView(ui, media, iconTint, hintColor),
+                        if (transport && media?.timeline != null) addView(MediaProgressView(ui, media, iconTint, hintColor) { seconds ->
+                            listener.onCardSeek(seconds)
+                        },
                             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                                 topMargin = ui.dp(1)
                             })
                     }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    if (transport && media?.ytmusic == true) {
+                        // YouTube Music: 👍 likes the song; held, its other buttons.
+                        key.addView(ui.legendIcon("thumb_up", iconTint, halo).apply {
+                            val pad = ui.dp(12)
+                            setPadding(pad, pad, pad, pad)
+                            background = ui.pressable(Color.TRANSPARENT, ui.dpf(24f))
+                            contentDescription = "Like in YouTube Music; hold for more"
+                            isHapticFeedbackEnabled = true
+                            setOnClickListener {
+                                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                listener.onCardButton("pc:ytmusic like")
+                            }
+                            setOnLongClickListener { listener.onCardMenu(); true }
+                        }, LinearLayout.LayoutParams(ui.sdp(52), ui.sdp(52)).apply { marginStart = ui.dp(4) })
+                    }
                     if (transport) {
                         val buttons = listOf(
                             Triple("prev", "media:prev", "Previous"),

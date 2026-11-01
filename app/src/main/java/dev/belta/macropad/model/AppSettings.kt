@@ -73,6 +73,11 @@ class AppSettings(context: Context) {
         get() = prefs.getString("page_usage", null)
         set(value) = prefs.edit().putString("page_usage", value).apply()
 
+    /** Music playing on the computer pauses during a Teams call and plays on after it (PC link). */
+    var pauseMusicInCalls: Boolean
+        get() = prefs.getBoolean("pause_music_in_calls", true)
+        set(value) = prefs.edit().putBoolean("pause_music_in_calls", value).apply()
+
     /** A Teams call brings up the Teams page (and the page before comes back after it). */
     var followCalls: Boolean
         get() = prefs.getBoolean("follow_calls", true)

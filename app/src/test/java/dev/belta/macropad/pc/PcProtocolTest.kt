@@ -305,4 +305,25 @@ class PcProtocolTest {
         assertEquals(4, JSONObject(PcProtocol.openNotice(4, 9)).getInt("n"))
         assertEquals("k1", JSONObject(PcProtocol.editor("k1", 2)).getString("key"))
     }
+
+    @Test
+    fun `parses YouTube Music media and the song's picture`() {
+        val media = (PcProtocol.parse("""{"t":"media","title":"Song","artist":"Band","playing":true,"ytmusic":true}""") as PcMessage.Media).media!!
+        assertTrue(media.ytmusic)
+        assertEquals("Song\nBand", media.key)
+        val art = PcProtocol.parse("""{"t":"media-art","title":"Song","artist":"Band","jpg":"AAEC"}""") as PcMessage.MediaArt
+        assertEquals(media.key, art.key)
+        assertEquals(3, art.jpeg!!.size)
+        assertNull((PcProtocol.parse("""{"t":"media-art","title":"Song"}""") as PcMessage.MediaArt).jpeg)
+    }
+
+    @Test
+    fun `builds media and YouTube Music requests`() {
+        val seek = JSONObject(PcProtocol.media("seek", 3, position = 95.5))
+        assertEquals("media", seek.getString("t"))
+        assertEquals(95.5, seek.getDouble("position"), 0.0)
+        assertFalse(seek.has("by"))
+        assertEquals(-10, JSONObject(PcProtocol.media("skip", 4, by = -10)).getInt("by"))
+        assertEquals("like", JSONObject(PcProtocol.ytMusic("like", 5)).getString("do"))
+    }
 }

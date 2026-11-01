@@ -19,7 +19,9 @@ User docs: `docs/pc-link.md`. Contract: [pc-protocol](pc-protocol.md).
   clipboard · volume · media (WinRT) · shell hook · Screen page · lock/keyboard · Outlook (COM) ·
   Outlook commands · Teams (third-party API) · Teams without API (UI Automation) · layout editor (`Start-Editor`, `Read-Editor`, C# `EditorRequest`: a
   127.0.0.1 TcpListener proxying the page's requests to the tablet as `http`) · notices (`Send-TeamsNotices` reads
-  `wpndatabase.db` read-only via C# `ToastStore` over winsqlite3.dll; `Send-MailNotice`; `Open-Notice`) · named commands
+  `wpndatabase.db` read-only via C# `ToastStore` over winsqlite3.dll; `Send-MailNotice`; `Open-Notice`) · music (`Send-MediaArt`, `Invoke-MediaControl` via SMTC on the session last reported, `Invoke-YtMusic`: C#
+  `Music.Press` presses YouTube Music's buttons by UIA name, EN/ES; non-ASCII names built with `[char]` since the file is
+  read as ANSI) · named commands
   (`pc:run`) · typing a file · PowerPoint · HTML slide decks (`Update-Deck`, `Get-DeckSlides`,
   `Send-Deck`, `Invoke-DeckCommand`) · talking to the tablet (`Send-Hello`) · updates
   (`Invoke-Update`, `Send-All`, dispatch `switch`, `Read-Tablet`) · `-TeamsDump` · **main loop**.

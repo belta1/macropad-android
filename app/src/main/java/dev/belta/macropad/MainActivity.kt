@@ -621,6 +621,7 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             if (call != inCall) {
                 inCall = call
                 followCall(call)
+                pauseMusicForCall(call, status)
                 handler.removeCallbacks(callTick)
                 if (call) handler.post(callTick)
             }
@@ -657,6 +658,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         }
 
         override fun onNotice(notice: PcNotice) = showNotice(notice)
+
+        override fun onMediaArt() = refreshLiveKeys()
 
         override fun onPcResult(id: Int, ok: Boolean, error: String?) {
             val then = pcWaits.remove(id)
@@ -808,6 +811,20 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
     private var inCall = false
     /** The page shown before the call, to go back to after it. */
     private var pageBeforeCall: String? = null
+    /** The music was playing when the call started, and was paused for it. */
+    private var musicPausedForCall = false
+
+    /** Pauses what's playing on the computer when a Teams call starts, and plays it on after the call. */
+    private fun pauseMusicForCall(call: Boolean, status: PcStatus?) {
+        val link = service?.pc?.takeIf { it.connected } ?: return
+        if (call && settings.pauseMusicInCalls && status?.media?.playing == true) {
+            link.media("pause")?.let { pcRequests[it] = "Pausing the music" }
+            musicPausedForCall = true
+        } else if (!call && musicPausedForCall) {
+            musicPausedForCall = false
+            link.media("play")?.let { pcRequests[it] = "Playing the music again" }
+        }
+    }
 
     /** The Teams page (the one shown for Teams), not hidden; -1 if none. */
     private fun callPage(): Int {
@@ -861,6 +878,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             "teams" -> link.teams(step.name, step.param)
             "outlook" -> link.outlook(step.name)
             "join" -> link.join()
+            "media" -> link.media(step.name, by = step.param?.toIntOrNull())
+            "ytmusic" -> link.ytMusic(step.name)
             "typefile" -> link.typeFile()?.also { fileRequests += it }
             else -> link.run(step.name)
         }
@@ -994,6 +1013,8 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
         val shortcut = when (step.command) {
             "teams" -> Macro.TEAMS_FALLBACK[step.name]
             "outlook" -> Macro.OUTLOOK_FALLBACK[step.name]
+            // Play and pause both become the Play / Pause key.
+            "media" -> "media:playpause".takeIf { step.name != "skip" }
             else -> null
         }
         if (shortcut == null) {
@@ -1670,6 +1691,9 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
             sliderLevel = volume?.level, sliderMuted = volume?.muted == true,
             card = small && live,
             media = pcStatus?.media?.takeIf { live && KeyViews.isMediaCard(stored) },
+            mediaArt = pcStatus?.media?.takeIf { live && KeyViews.isMediaCard(stored) }?.let { playing ->
+                service?.pc?.mediaArt?.takeIf { it.first == playing.key }?.second
+            },
         ).apply {
             if (lock != null || isTeamsKey(stored) || live || isVolumeSlider(stored)) tag = LiveKey(page, index, compact)
         }
@@ -1776,9 +1800,33 @@ class MainActivity : Activity(), MacropadHost, KeyViews.Listener {
 
     /** The volume slider, absolute over the PC link, was dragged. */
     override fun onCardButton(action: String) {
+        val step = Macro.parse(action).singleOrNull()
+        if (step is Step.Pc) {
+            val link = pcLinkFor("YouTube Music") ?: return
+            return sendPc(Macro.describe(action), link, step)
+        }
         val hid = hid
         if (hid == null || !connected) return flashOfflineBanner()
         hid.run(Macro.parse(action))
+    }
+
+    /** The media card's bar was tapped: that point of the song. */
+    override fun onCardSeek(seconds: Double) {
+        val id = pcLinkFor("Going to a point of the song")?.media("seek", position = seconds) ?: return
+        pcRequests[id] = "Song"
+    }
+
+    /** The media card's like button was held: YouTube Music's other buttons. */
+    override fun onCardMenu() {
+        val items = listOf(
+            "Like" to "pc:ytmusic like", "Dislike" to "pc:ytmusic dislike", "Shuffle" to "pc:ytmusic shuffle",
+            "Repeat" to "pc:ytmusic repeat", "Back 10 s" to "pc:media skip -10", "Forward 10 s" to "pc:media skip 10",
+            "Search in YouTube Music" to "pc:ytmusic search", "Open YouTube Music" to "pc:ytmusic open",
+        )
+        ui.dialog()
+            .setTitle("YouTube Music")
+            .setItems(items.map { it.first }.toTypedArray()) { _, which -> onCardButton(items[which].second) }
+            .show()
     }
 
     override fun onSlideLevel(page: Page, index: Int, button: MacroButton, level: Int, done: Boolean) =

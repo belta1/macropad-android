@@ -109,6 +109,13 @@ object Icons {
         "power" to R.drawable.ic_k_power,
         "fan" to R.drawable.ic_k_fan,
         "blinds" to R.drawable.ic_k_blinds,
+        "thumb_up" to R.drawable.ic_k_thumb_up,
+        "thumb_down" to R.drawable.ic_k_thumb_down,
+        "shuffle" to R.drawable.ic_k_shuffle,
+        "repeat" to R.drawable.ic_k_repeat,
+        "rewind" to R.drawable.ic_k_rewind,
+        "fast_forward" to R.drawable.ic_k_fast_forward,
+        "music" to R.drawable.ic_k_music,
         "thermostat" to R.drawable.ic_k_thermostat,
     )
 

@@ -69,8 +69,9 @@ sealed class Step {
     data class Ha(val domain: String, val service: String, val entity: String?) : Step()
     /**
      * Sent over the PC link: [command] "teams" with [name] a Teams action ([param] = the reaction
-     * for "react"), "outlook" with [name] an Outlook command, or "run" with [name] a command from
-     * the computer's commands.json.
+     * for "react"), "outlook" with [name] an Outlook command, "media" with [name] play / pause /
+     * skip ([param] = seconds, negative = back), "ytmusic" with [name] a [YTMUSIC_ACTIONS] action, or
+     * "run" with [name] a command from the computer's commands.json.
      */
     data class Pc(val command: String, val name: String, val param: String? = null, val point: PcPoint? = null) : Step() {
         /** `pc:focus` / `pc:wait` / the pointer steps: the macro waits for it to be done before going on. */
@@ -192,6 +193,11 @@ object Macro {
                 when (pc.command) {
                     "teams" -> "Teams · " + (TEAMS_ACTIONS[pc.name] ?: pc.name) + (pc.param?.let { " $it" } ?: "")
                     "outlook" -> "Outlook · " + (OUTLOOK_ACTIONS[pc.name] ?: pc.name)
+                    "ytmusic" -> "YouTube Music · " + (YTMUSIC_ACTIONS[pc.name] ?: pc.name)
+                    "media" -> when (pc.name) {
+                        "skip" -> pc.param!!.toInt().let { if (it < 0) "Back ${-it} s" else "Forward $it s" }
+                        else -> pc.name.replaceFirstChar { it.uppercase() }
+                    }
                     "join" -> "Joins the next meeting"
                     "focus" -> "Brings ${pc.name} to the front"
                     "wait" -> "Waits for ${pc.name}"
@@ -290,6 +296,12 @@ object Macro {
     }
 
     /** Teams actions of `pc:teams`, with their names. */
+    /** `pc:ytmusic` actions: its buttons (pressed in place), its search box, opening it. */
+    val YTMUSIC_ACTIONS = linkedMapOf(
+        "like" to "Like", "dislike" to "Dislike", "shuffle" to "Shuffle", "repeat" to "Repeat",
+        "search" to "Search", "open" to "Open",
+    )
+
     val TEAMS_ACTIONS = linkedMapOf(
         "mute" to "Mute", "camera" to "Camera", "hand" to "Hand", "blur" to "Blur", "leave" to "Leave", "react" to "React",
     )
@@ -402,6 +414,22 @@ object Macro {
                     Step.Pc("teams", action!!)
                 }
             }
+            "media" -> {
+                val action = parts.getOrNull(1)
+                when {
+                    action == "skip" && parts.size == 3 && parts[2].toIntOrNull()?.takeIf { it != 0 } != null ->
+                        Step.Pc("media", "skip", parts[2].removePrefix("+"))
+                    action in listOf("play", "pause") && parts.size == 2 -> Step.Pc("media", action!!)
+                    else -> throw MacroException("Media step: pc:media play, pc:media pause or pc:media skip <seconds>, e.g. pc:media skip -10")
+                }
+            }
+            "ytmusic" -> {
+                val action = parts.getOrNull(1)
+                if (action !in YTMUSIC_ACTIONS || parts.size > 2) {
+                    throw MacroException("YouTube Music step: pc:ytmusic ${YTMUSIC_ACTIONS.keys.joinToString("|")}")
+                }
+                Step.Pc("ytmusic", action!!)
+            }
             "typefile" -> {
                 if (parts.size > 1) throw MacroException("pc:typefile takes nothing after it")
                 Step.Pc("typefile", "selected")
@@ -409,7 +437,8 @@ object Macro {
             "run" -> Step.Pc("run", parts.drop(1).joinToString(" ").ifEmpty {
                 throw MacroException("pc:run needs a command name from the computer's commands.json")
             })
-            else -> throw MacroException("PC step: pc:teams, pc:outlook, pc:join, pc:focus, pc:wait, pc:click, pc:drag, pc:scroll, pc:typefile or pc:run")
+            else -> throw MacroException("PC step: pc:teams, pc:outlook, pc:join, pc:focus, pc:wait, pc:click, pc:drag, pc:scroll, " +
+                "pc:media, pc:ytmusic, pc:typefile or pc:run")
         }
     }
 

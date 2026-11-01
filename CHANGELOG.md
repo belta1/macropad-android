@@ -10,6 +10,13 @@ With the PC link; update `tools/macropad-link.ps1` on the computer too (the tabl
   move or swap them, also onto another page; copy and paste keys; add, rename, reorder and delete
   pages. *Save to tablet* replaces the keys at once, and won't overwrite changes made on the tablet
   meanwhile. Served on that computer only (127.0.0.1), with a new key each time it is opened.
+- **Music, YouTube Music above all**: the dock's media card shows the **song's picture**, and
+  tapping its progress bar goes to that point of the song. With YouTube Music in the browser it gets
+  a **👍** (like); hold it for dislike, shuffle, repeat, ±10 s, search and open. A **YouTube Music**
+  page (added once) has all of them with previous / play / next, the volume and the mixer; its
+  buttons are pressed in the page without bringing the browser to the front.
+- **Music pauses during Teams calls** and plays on when you hang up (⚙ → Connection; on).
+- New steps: `pc:media play|pause|skip <seconds>`, `pc:ytmusic like|dislike|shuffle|repeat|search|open`.
 - **Notices from the computer** (⚙ → Connection): Teams messages and mentions, and mail from the
   people you list, as a card at the top of the tablet for a few seconds; tap it to open the chat or
   the mail on the computer. Cards that come while the tablet is dimmed show when it wakes.

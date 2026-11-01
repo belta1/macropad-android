@@ -17,14 +17,16 @@ object DefaultLayout {
     const val SCREEN_PAGE = "Screen"
     const val HOME_PAGE = "Home"
     const val PRESENTER_PAGE = "Presenter"
+    const val YTMUSIC_PAGE = "YouTube Music"
 
     /** Pages added in later versions; inserted once into existing layouts at their default position. */
     val ADDED_PAGES = listOf("Desktop", NUMPAD_PAGE, TEAMS_PAGE, CITRIX_PAGE, TRACKPAD_PAGE,
-        MONITORS_PAGE, OUTLOOK_PAGE, PHRASES_PAGE, PYTHON_PAGE, SWITCHER_PAGE, MIXER_PAGE, CLIPBOARD_PAGE, SCREEN_PAGE, HOME_PAGE, PRESENTER_PAGE)
+        MONITORS_PAGE, OUTLOOK_PAGE, PHRASES_PAGE, PYTHON_PAGE, SWITCHER_PAGE, MIXER_PAGE, CLIPBOARD_PAGE, SCREEN_PAGE, HOME_PAGE, PRESENTER_PAGE,
+        YTMUSIC_PAGE)
 
     /** Tab icons (drawn by ui.AppIcons), in the order the page menu offers them. */
     val APP_ICONS = listOf("windows", "monitors", "switcher", "screen", "vscode", "python", "chrome", "edge", "excel",
-        "word", "powerpoint", "outlook", "teams", "citrix", "mixer", "phrases", "clipboard", "home", "numpad", "trackpad", "custom")
+        "word", "powerpoint", "outlook", "teams", "citrix", "mixer", "phrases", "clipboard", "home", "ytmusic", "numpad", "trackpad", "custom")
 
     /** Icon for a page that has none stored (layouts from before 1.3, renamed or new pages). */
     fun iconFor(name: String): String? = when (name.lowercase()) {
@@ -33,6 +35,7 @@ object DefaultLayout {
         "switcher", "open windows", "alt+tab" -> "switcher"
         "screen", "pantalla", "mirror", "espejo" -> "screen"
         "mixer", "volume", "volumen", "mezclador" -> "mixer"
+        "youtube music", "yt music", "music", "música", "musica" -> "ytmusic"
         "pc clipboard", "clipboard", "portapapeles" -> "clipboard"
         "home", "home assistant", "casa", "hogar" -> "home"
         "vs code", "vscode", "code" -> "vscode"
@@ -324,7 +327,7 @@ object DefaultLayout {
      * them, as they were. Sort tabs by use (pages menu) orders them by real use instead.
      */
     val TAB_ORDER = listOf("Desktop", CITRIX_PAGE, TEAMS_PAGE, OUTLOOK_PAGE, SWITCHER_PAGE, CLIPBOARD_PAGE, PYTHON_PAGE,
-        PRESENTER_PAGE, "VS Code", PHRASES_PAGE, SCREEN_PAGE, MONITORS_PAGE, HOME_PAGE, MIXER_PAGE, "Chrome", NUMPAD_PAGE,
+        PRESENTER_PAGE, "VS Code", PHRASES_PAGE, SCREEN_PAGE, MONITORS_PAGE, HOME_PAGE, MIXER_PAGE, YTMUSIC_PAGE, "Chrome", NUMPAD_PAGE,
         TRACKPAD_PAGE, CUSTOM_PAGE)
 
     /** 1.8: pages no longer offered: their shortcuts are the apps' own, worth no tab. */
@@ -572,6 +575,25 @@ object DefaultLayout {
         )),
         // The computer's volume and each app playing sound (PC link), like Windows' volume mixer.
         Page(MIXER_PAGE, mutableListOf(), PageKind.MIXER),
+        // YouTube Music in the browser (PC link): its buttons pressed without bringing it to the
+        // front, and Windows' own media controls for skipping within a song.
+        Page(YTMUSIC_PAGE, mutableListOf(
+            b("Like", "pc:ytmusic like", GREEN, "thumb_up"),
+            b("Dislike", "pc:ytmusic dislike", GRAY, "thumb_down"),
+            b("Shuffle", "pc:ytmusic shuffle", PURPLE, "shuffle"),
+            b("Repeat", "pc:ytmusic repeat", PURPLE, "repeat"),
+            b("YouTube Music", "pc:ytmusic open", RED, "music"),
+            b("Previous", "media:prev", GRAY, "prev"),
+            b("Back 10 s", "pc:media skip -10", TEAL, "rewind"),
+            b("Play / Pause", "media:playpause", BLUE, "play_pause"),
+            b("Forward 10 s", "pc:media skip +10", TEAL, "fast_forward"),
+            b("Next", "media:next", GRAY, "next"),
+            b("Search", "pc:ytmusic search", TEAL, "search"),
+            b("Volume −", "media:voldown", GRAY, "volume_down"),
+            b("Volume +", "media:volup", GRAY, "volume_up"),
+            b("Mute", "media:mute", RED, "volume_off"),
+            b("Mixer", "page:$MIXER_PAGE", ORANGE, "tune"),
+        )),
         // Text typed with the computer's layout, so it also works inside Citrix. No trailing Enter:
         // in Teams chat it would send the message. Edit them to taste.
         Page(PHRASES_PAGE, mutableListOf(
