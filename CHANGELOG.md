@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.9.1
 
 - **Two keyboard-matched themes** (⚙ → Theme): *Akko Neon* (indigo caps, cyan legends, coral
   accents) and *Coast Twilight* (NuPhy grey and charcoal caps, yellow accents).

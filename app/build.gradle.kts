@@ -19,8 +19,8 @@ android {
         applicationId = "dev.belta.macropad"
         minSdk = 28
         targetSdk = 34
-        versionCode = 10
-        versionName = "1.9.0"
+        versionCode = 11
+        versionName = "1.9.1"
         // Gesture recognition ships native code; tablets are ARM (the Fire's is 32-bit).
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
     }
