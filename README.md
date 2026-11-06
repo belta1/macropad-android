@@ -31,8 +31,9 @@ Windows laptops/desktops.
   Citrix — a login filled in from encrypted **saved values**, see ⚙ → Saved values).
 - **App icons on the tabs** (long-press a tab to rename it or change its icon).
 - **Themes** (⚙ → Theme): *Graphite*, *Synthwave* (glowing neon keys over a sunset grid),
-  *Phosphor* (green-screen terminal), *Arctic*, *Ember* and *Sakura*. A theme restyles the keycaps,
-  colors, fonts and the backdrop behind the keys; your layout doesn't change.
+  *Phosphor* (green-screen terminal), *Arctic*, *Ember*, *Sakura*, and two that match keycap sets:
+  *Akko Neon* and *Coast Twilight* (NuPhy). A theme restyles the keycaps, colors, fonts and the
+  backdrop behind the keys; your layout doesn't change.
 - **Dock** along the whole bottom, on every page: virtual-desktop switching (Prev desktop · Task
   view · Next desktop), a volume slider (its speaker mutes), the media card: what's playing on
   the computer (PC link) and how far it has played, with ⏮ ⏯ ⏭, and **Dictate**: speak, check the text, type it on the

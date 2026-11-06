@@ -14,3 +14,4 @@ Format: `## [YYYY-MM-DD] <init|update|lint> | <short summary>`
 ## [2026-11-01] update | music: song picture (media-art), tap-to-seek, YouTube Music like/dislike/shuffle/repeat via UIA (pc:ytmusic), pc:media play/pause/skip, YouTube Music page (added once), music paused during Teams calls; script 1.9.1; pc-protocol, link-script updated
 ## [2026-11-01] update | camera gestures restored from a stash and finished: gesture/ (GestureEngine, HandTracker), Gestures slots in Layout/LayoutJson, MediaPipe tasks-vision dependency + models in assets, ⚙ → Camera gestures; debug frame dump removed; index, conventions updated
 ## [2026-11-01] update | self-test (script -SelfTest / Get-SelfTest, tablet ⚙ → Connection → Check the PC link, `selftest` message), now playing on the idle clock (tap = play/pause without waking); script 1.9.2; app 1.9.0
+## [2026-11-06] update | themes Akko Neon and Coast Twilight (ui/Theme.kt), matched to the user's keycap sets; ui updated

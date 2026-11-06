@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Two keyboard-matched themes** (⚙ → Theme): *Akko Neon* (indigo caps, cyan legends, coral
+  accents) and *Coast Twilight* (NuPhy grey and charcoal caps, yellow accents).
+
 ## 1.9.0
 
 With the PC link; update `tools/macropad-link.ps1` on the computer too (the tablet offers it).

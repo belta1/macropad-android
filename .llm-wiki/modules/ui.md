@@ -15,7 +15,7 @@ All under `app/src/main/java/dev/belta/macropad/ui/`:
 - `Ui.kt` — colour tokens (`CASE`, `TEXT`, `BLUE`… — getters on `Ui.theme`), fonts, `dp/sdp`
   scaling, `dialog()`, `toast`, drawable helpers, `accent()`, `legendIcon()`/`glow()`. Start here.
 - `Theme.kt` — `Theme` (colours, 8 `accents`, `Caps` style, `glow`, `Backdrop`, `mono` font) and
-  `Themes` (Graphite default, Synthwave, Phosphor, Arctic, Ember, Sakura; `byId`).
+  `Themes` (Graphite default, Synthwave, Phosphor, Arctic, Ember, Sakura, Akko Neon, Coast Twilight — the last two match the user's keycap sets; `byId`).
 - `ThemeDrawables.kt` — `GlowIcon` (blurred halo behind an icon), `ThemeBackdrop` (scenery on the
   case behind the keys), `ThemeSample` (picker preview in any theme).
 - `KeyViews.kt` + `KeyCap.kt` — key grid cells and the keycap drawing (sculpted / neon / terminal

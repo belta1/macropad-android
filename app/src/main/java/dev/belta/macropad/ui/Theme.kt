@@ -122,7 +122,31 @@ object Themes {
         backdrop = Backdrop.BLOSSOM,
     )
 
-    val all = listOf(GRAPHITE, SYNTHWAVE, PHOSPHOR, ARCTIC, EMBER, SAKURA)
+    /** Matches the Akko Neon keycaps: indigo alphas with cyan legends, coral-red accents. */
+    val NEON_CAPS = Theme(
+        "akko-neon", "Akko Neon", "Indigo caps, cyan legends, coral accents",
+        case = 0xFF161233.toInt(), plate = 0xFF0F0C26.toInt(), capSkirt = 0xFF2C2478.toInt(), capTop = 0xFF4A3DB8.toInt(),
+        raised = 0xFF241D5C.toInt(), dialog = 0xFF1D1748.toInt(), hairline = 0x1F5ED8FF, hairlineStrong = 0x3D5ED8FF,
+        text = 0xFF8FE6FF.toInt(), muted = 0xFF9C93D9.toInt(), faint = 0xFF6359A8.toInt(), ink = 0xFF120E2C.toInt(),
+        accents = intArrayOf(
+            0xFF5A72FF.toInt(), 0xFF2BE0B0.toInt(), 0xFFFF9A5C.toInt(), 0xFFF8506F.toInt(),
+            0xFF8B6BFF.toInt(), 0xFF3FD0F5.toInt(), 0xFFFFD75E.toInt(), 0xFF8A84B8.toInt(),
+        ),
+    )
+
+    /** Matches the NuPhy Coast Twilight keycaps: grey and charcoal caps, yellow accents. */
+    val COAST_TWILIGHT = Theme(
+        "coast-twilight", "Coast Twilight", "Grey and charcoal caps, yellow accents",
+        case = 0xFF232427.toInt(), plate = 0xFF1A1B1D.toInt(), capSkirt = 0xFF35383C.toInt(), capTop = 0xFF5A5E64.toInt(),
+        raised = 0xFF2D2F33.toInt(), dialog = 0xFF28292D.toInt(), hairline = 0x17FFFFFF, hairlineStrong = 0x30FFFFFF,
+        text = 0xFFF3F1EC.toInt(), muted = 0xFFB0AFAA.toInt(), faint = 0xFF77777A.toInt(), ink = 0xFF1B1C1E.toInt(),
+        accents = intArrayOf(
+            0xFF6E9BE8.toInt(), 0xFF74C98F.toInt(), 0xFFF0843C.toInt(), 0xFFF2B630.toInt(),
+            0xFFA88BE0.toInt(), 0xFF5FC2CF.toInt(), 0xFFF7C52B.toInt(), 0xFF9A9CA1.toInt(),
+        ),
+    )
+
+    val all = listOf(GRAPHITE, SYNTHWAVE, PHOSPHOR, ARCTIC, EMBER, SAKURA, NEON_CAPS, COAST_TWILIGHT)
 
     /** The theme saved as [id]; Graphite for none or one this version doesn't have. */
     fun byId(id: String?) = all.firstOrNull { it.id == id } ?: GRAPHITE
